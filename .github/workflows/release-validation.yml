@@ -2,6 +2,20 @@ name: Release validation
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'web/**'
+      - 'extension/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'requirements.txt'
+      - 'package*.json'
+      - 'playwright.config.mjs'
+      - 'Dockerfile'
+      - 'compose*.yml'
+      - '.github/workflows/release-validation.yml'
 
 permissions:
   contents: read
