@@ -1,6 +1,6 @@
 # Mac setup and final live acceptance
 
-The complete automated matrix passed for commit `7d24aa81cf8a5940397bd61985ef71a578962d76`. It includes native Apple Silicon and Intel Mac installation/recovery, authenticated browser flows, real local-model inference, and the packaged Chrome extension against synthetic source pages. The [verification record](verification.md) contains the evidence.
+All 12 jobs in [Release validation run 43397490019](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019) passed for commit `52adf28a5ac1f9a2baecf89442deb8e59577197c`. The matrix includes native Apple Silicon and Intel Mac installation/recovery, authenticated browser flows, real local-model inference, the packaged Chrome extension against synthetic source pages, and a real Compose update/rollback/retained-data removal rehearsal. The [verification record](verification.md) and [six retained reports](evidence/52adf28a/README.md) contain the exact scope and provenance.
 
 The remaining check connects the actual source accounts, Chrome's permissions, and a private instance on the operator's Mac. A synthetic fixture cannot establish that a currently logged-in platform exposes the same saved-content layout.
 
@@ -11,7 +11,7 @@ Have Docker Desktop running and Python 3 available. From Terminal, use a **new c
 ```sh
 git clone https://github.com/abdulmalikaltararwa-oss/little-archive.git
 cd little-archive
-git switch --detach 7d24aa81cf8a5940397bd61985ef71a578962d76
+git switch --detach 52adf28a5ac1f9a2baecf89442deb8e59577197c
 python3 scripts/setup.py
 docker compose up -d --build
 open -a "Google Chrome" http://localhost:8787
@@ -52,7 +52,7 @@ Save a note, upload a small local preview, and download a backup through Setting
 docker compose restart archive
 ```
 
-Reload the app and confirm the content and preview remain. The automated native and container suites already test full offline restore, new-instance identity, asset integrity, and invalidation of old credentials. Use [backup and restore](backup-restore.md) for a separate local recovery rehearsal; restore never overwrites the current library.
+Reload the app and confirm the content and preview remain. The automated native and container suites already test full offline restore, new-instance identity, asset integrity, and invalidation of old credentials. The [Linux Compose lifecycle gate](upgrade-verification.md#observed-candidate-result) also passed actual old-to-current replacement, data retention after `compose down`, and previous-image restoration of a pre-update backup into a separate volume. These completed lifecycle checks are separate from observing Docker Desktop and the application on this physical Mac. Use [backup and restore](backup-restore.md) for the local recovery entry points; restore never overwrites the current library.
 
 Record the Mac and Docker Desktop versions, architecture, browser version, tested view type, expected/imported unique counts, preserved memberships, repeat-import behavior, and any sanitized error. Keep account handles, captions, private URLs, credentials, and screenshots of personal records outside public evidence. Public reports can use counts and synthetic reproductions.
 

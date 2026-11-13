@@ -41,7 +41,7 @@ jobs:
           expected = {
               'index.html', 'demo.js', 'demo-store.js', 'demo-data.js',
               'app.js', 'utils.js', 'styles.css', 'icon.svg',
-              '.nojekyll', '.little-archive-demo-build',
+              '.nojekyll', '.little-archive-demo-build', 'LICENSE',
           }
           paths = list(root.rglob('*'))
           actual = {str(path.relative_to(root)) for path in paths}

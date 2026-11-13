@@ -14,7 +14,7 @@ Run one private instance on your Mac, Linux machine, or server. There is no proj
 
 The public demo uses synthetic content and temporary page memory. Your private library runs in your own instance.
 
-The complete automated acceptance matrix passed on [`7d24aa81`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266): authenticated browser workflows, packaged extension scenarios, native Mac/Linux recovery, both container architectures, and real local-model inference. Live account imports and the final Mac operator check remain required before a stable release. See the verification record for the exact scope and evidence.
+All 12 automated acceptance jobs passed on [`52adf28a`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019): authenticated browser workflows, packaged extension scenarios, native Mac/Linux recovery, both container architectures, real local-model inference, and a two-revision Compose update with retained-data removal and separate backup rollback. Live account imports and the final Mac operator check remain required before a stable release. See the verification record for the exact scope and evidence.
 
 ![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery-current.jpg)
 

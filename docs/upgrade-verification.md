@@ -2,9 +2,20 @@
 
 The [upgrade harness](../scripts/upgrade_smoke.py) exercises a real Docker Compose lifecycle between two distinct application revisions. It complements the [container](container-verification.md) and [native](native-verification.md) recovery harnesses, which establish restart and recovery behavior within one revision.
 
-The initial required baseline is published source commit `85d50bf51504d047ab95fd48992d2e8589318616`. The candidate is a separately built image of the source revision under acceptance. Both revisions currently report application version `0.1.0`, so a successful health response or version string alone cannot prove an upgrade. This harness requires different full Git source refs, different inspected image IDs, and different fingerprints of the packaged `server` and `web` files. It also checks the actual running container image before accepting each phase.
+The recorded upgrade path starts at published source commit `85d50bf51504d047ab95fd48992d2e8589318616` and replaces it with candidate `52adf28a5ac1f9a2baecf89442deb8e59577197c`. Both revisions report application version `0.1.0`, so a successful health response or version string alone cannot prove an upgrade. This harness requires different full Git source refs, different inspected image IDs, and different fingerprints of the packaged `server` and `web` files. It also checks the actual running container image before accepting each phase.
 
-**Execution evidence must be recorded after the CI job runs.** Adding this script does not mark the lifecycle gate passed. Existing verification records are unchanged until the new result identifies its exact previous/candidate refs and image IDs.
+## Observed candidate result
+
+**All 8 lifecycle checks and cleanup passed on 2026-11-13** in [job 131791895491](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895491), part of the successful 12-job [Release validation run 43397490019](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019). The real execution used Linux AMD64 on `ubuntu-24.04`, Docker Engine `28.0.4`, and Docker Compose `2.38.2`. The [retained lifecycle report](evidence/52adf28a/upgrade.json) and [provenance index](evidence/52adf28a/README.md) identify both source revisions and the exact builds.
+
+| Build | Full source revision | Inspected image ID |
+| --- | --- | --- |
+| Previous | `85d50bf51504d047ab95fd48992d2e8589318616` | `sha256:380ec91b2b032d37d6d337ee27c50da8c244aaa682e9de9f86be0825d7381152` |
+| Candidate | `52adf28a5ac1f9a2baecf89442deb8e59577197c` | `sha256:88d146a9bcfa7bc784afd344e077ceeede40a6077b0027622e0edab075c49c71` |
+
+The packaged `server`/`web` source fingerprints also differ: previous `3d2b026b88b2a03db41b583aac4007560aa986d32d325dad30f459dbce7eb7a7`, candidate `de090c35a9f015f8debe3311f950f873085d8aa8f40622a007047943eca89b80`. The same source-project volume name and hashed actual mount source remained unchanged through replacement and `compose down`/startup. Five runtime probes passed with UID/GID `10001`, zero effective capabilities, no-new-privileges, read-only root, and `x86_64` architecture.
+
+The report confirms that the old owner cookie and CSRF token and the import token worked before any fresh login. Records, edit flags, source/local memberships, empty collections, colors, and thumbnail bytes survived. The rollback used the earlier backup and previous image on a separate volume with fresh authentication, excluded the candidate-only sentinel, and left the upgraded original container and data unchanged. This closes the update/rollback and retain-data removal gates for this revision pair and Linux environment. The physical Mac operator, native Chrome permission, and live-account checks remain separate.
 
 ## What is exercised
 

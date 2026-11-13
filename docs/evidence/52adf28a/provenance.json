@@ -1,0 +1,197 @@
+{
+  "format": "little-archive-verification-provenance",
+  "candidate_commit": "52adf28a5ac1f9a2baecf89442deb8e59577197c",
+  "workflow_name": "Release validation",
+  "workflow_run_id": 43397490019,
+  "workflow_run_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019",
+  "workflow_conclusion": "success",
+  "observed_date_utc": "2026-11-13",
+  "workflow_jobs": [
+    {
+      "id": 131791895058,
+      "name": "Browser (chromium)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895058"
+    },
+    {
+      "id": 131791895371,
+      "name": "Browser (webkit)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895371"
+    },
+    {
+      "id": 131791895387,
+      "name": "Native install (macos-15-intel)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895387"
+    },
+    {
+      "id": 131791895395,
+      "name": "Browser (firefox)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895395"
+    },
+    {
+      "id": 131791895405,
+      "name": "Container (amd64)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895405"
+    },
+    {
+      "id": 131791895412,
+      "name": "Real local model",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895412"
+    },
+    {
+      "id": 131791895474,
+      "name": "Packaged Chrome extension",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895474"
+    },
+    {
+      "id": 131791895477,
+      "name": "Native install (ubuntu-24.04)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895477"
+    },
+    {
+      "id": 131791895491,
+      "name": "Upgrade, rollback, and retained-data removal",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895491"
+    },
+    {
+      "id": 131791895506,
+      "name": "Native install (macos-15)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895506"
+    },
+    {
+      "id": 131791895563,
+      "name": "regression",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895563"
+    },
+    {
+      "id": 131791895583,
+      "name": "Container (arm64)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895583"
+    }
+  ],
+  "report_files": [
+    {
+      "file": "container-amd64.json",
+      "sha256": "f59730ea909dfde082eb4a61cbde81a997b28f6c31c6571170ab337ad92e8b13",
+      "job_id": 131791895405,
+      "job_name": "Container (amd64)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895405",
+      "runner_label": "ubuntu-24.04",
+      "artifact_id": 14023288399,
+      "artifact_name": "container-amd64-52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "image_id": "sha256:1752ba71066d24d2225a0f60970875a744e90812d861c212e9d0714210e0d5b9",
+      "image_platform": "linux/amd64",
+      "source_binding": "GitHub workflow/artifact head SHA, job checkout log, and Buildx vcs:revision; source SHA is not present inside this container report."
+    },
+    {
+      "file": "container-arm64.json",
+      "sha256": "7dbc8504cfb4756c6424697ab640200289c528d06b7b4b3e4d6b5e8994584883",
+      "job_id": 131791895583,
+      "job_name": "Container (arm64)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895583",
+      "runner_label": "ubuntu-24.04-arm",
+      "artifact_id": 14023448019,
+      "artifact_name": "container-arm64-52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "image_id": "sha256:7c785a73d5960b7bb23d676a3f98b1e832c6437218db6bd56f25e7bf0284443a",
+      "image_platform": "linux/arm64",
+      "source_binding": "GitHub workflow/artifact head SHA, job checkout log, and Buildx vcs:revision; source SHA is not present inside this container report."
+    },
+    {
+      "file": "native-ubuntu-24.04.json",
+      "sha256": "a61592f5210da870228e77709754606b5e3a4562076a25303634323d8cb694ae",
+      "job_id": 131791895477,
+      "job_name": "Native install (ubuntu-24.04)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895477",
+      "runner_label": "ubuntu-24.04",
+      "artifact_id": 14024040316,
+      "artifact_name": "native-ubuntu-24.04-52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "source_binding": "Report source_commit and clean-worktree flag, corroborated by workflow/artifact head SHA and job checkout log."
+    },
+    {
+      "file": "native-macos-arm64.json",
+      "sha256": "948b052bc9baa4d990a3b1b86a523b50a5a2b01be1825fecca4a847ecb5d2714",
+      "job_id": 131791895506,
+      "job_name": "Native install (macos-15)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895506",
+      "runner_label": "macos-15",
+      "artifact_id": 14022903975,
+      "artifact_name": "native-macos-15-52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "source_binding": "Report source_commit and clean-worktree flag, corroborated by workflow/artifact head SHA and job checkout log."
+    },
+    {
+      "file": "native-macos-intel.json",
+      "sha256": "3e4e433b30be655a84130efb1105ed3593ad9f3c28aee305ba76f851d0a0b863",
+      "job_id": 131791895387,
+      "job_name": "Native install (macos-15-intel)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895387",
+      "runner_label": "macos-15-intel",
+      "artifact_id": 14023726071,
+      "artifact_name": "native-macos-15-intel-52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "source_binding": "Report source_commit and clean-worktree flag, corroborated by workflow/artifact head SHA and job checkout log."
+    },
+    {
+      "file": "upgrade.json",
+      "sha256": "a54d003b6b32909af8d66afa60efa3e2358df563134c9fe7ad9c0745d784470e",
+      "job_id": 131791895491,
+      "job_name": "Upgrade, rollback, and retained-data removal",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895491",
+      "runner_label": "ubuntu-24.04",
+      "artifact_id": 14023172638,
+      "artifact_name": "upgrade-52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "checks_passed": 8,
+      "cleanup": "passed",
+      "previous_ref": "85d50bf51504d047ab95fd48992d2e8589318616",
+      "candidate_ref": "52adf28a5ac1f9a2baecf89442deb8e59577197c",
+      "images": {
+        "previous": {
+          "source_ref": "85d50bf51504d047ab95fd48992d2e8589318616",
+          "image_id": "sha256:380ec91b2b032d37d6d337ee27c50da8c244aaa682e9de9f86be0825d7381152",
+          "image_platform": "linux/amd64",
+          "packaged_source_sha256": "3d2b026b88b2a03db41b583aac4007560aa986d32d325dad30f459dbce7eb7a7"
+        },
+        "candidate": {
+          "source_ref": "52adf28a5ac1f9a2baecf89442deb8e59577197c",
+          "image_id": "sha256:88d146a9bcfa7bc784afd344e077ceeede40a6077b0027622e0edab075c49c71",
+          "image_platform": "linux/amd64",
+          "packaged_source_sha256": "de090c35a9f015f8debe3311f950f873085d8aa8f40622a007047943eca89b80"
+        }
+      },
+      "source_binding": "Report full previous/candidate refs and inspected OCI revision labels, distinct actual image IDs and packaged-source hashes; corroborated by the git archive/build commands and workflow/artifact metadata."
+    }
+  ],
+  "scope": "Five installation/recovery jobs with seven checks each; one real Compose lifecycle job with eight checks. All reports include successful cleanup. See ../../verification.md for all twelve jobs and remaining direct-acceptance limits.",
+  "hash_definition": "SHA-256 of each retained JSON file, not the enclosing downloaded GitHub artifact ZIP."
+}

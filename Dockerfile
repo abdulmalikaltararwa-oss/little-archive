@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && mkdir /data && chown archive:archive /data
 COPY --chown=archive:archive server ./server
 COPY --chown=archive:archive web ./web
+COPY --chown=archive:archive LICENSE ./LICENSE
 USER archive
 EXPOSE 8787
 VOLUME ["/data"]

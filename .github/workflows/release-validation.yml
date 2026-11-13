@@ -11,11 +11,15 @@ on:
       - 'tests/**'
       - 'scripts/**'
       - 'requirements.txt'
+      - 'requirements-lock.txt'
       - 'package*.json'
       - 'playwright.config.mjs'
       - 'Dockerfile'
+      - '.dockerignore'
+      - '.env.example'
       - 'compose*.yml'
-      - '.github/workflows/release-validation.yml'
+      - 'compose*.yaml'
+      - '.github/workflows/**'
 
 permissions:
   contents: read

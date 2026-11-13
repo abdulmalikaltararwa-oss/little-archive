@@ -1,6 +1,6 @@
 # Little Archive v0.1 API contract
 
-Independent self-hosted saved-content library. Single owner per instance, multiple source accounts. Backend Python 3.12+, FastAPI, sqlite3; frontend buildless ES modules, HTML/CSS; Chrome MV3 extension. No other product names or personal information in source, docs, fixtures, images, or launch copy.
+Independent self-hosted saved-content library. Single owner per instance, multiple source accounts. Backend Python 3.12+, FastAPI, sqlite3; frontend buildless ES modules, HTML/CSS; Chrome MV3 extension. Public fixtures and screenshots use synthetic content.
 
 ## Conventions
 
@@ -77,13 +77,13 @@ Extension popup: server URL + import token setup, open-app link, selected accoun
 - POST `/api/items/{id}/ai/accept` -> item. Accept suggested summary/title only if not manually changed; merge topics into tags, needs_review false.
 - POST `/api/items/{id}/ai/dismiss` -> item. Store dismissal fingerprint; keep manual fields.
 
-### Parser module contract (agent owns server/importers.py)
+### Parser module contract (`server/importers.py`)
 
-`parse_import(data: bytes, filename: str) -> dict` returning `{items: list[dict], warnings:list[str]}`. Items normalize to `{url,title?,creator?,caption?,summary?,notes?,tags?:list[str],favorite?:bool,status?,saved_at?,source_account?,collections?:list[{name,kind:'source'|'local',source_key?:str}],preview_url?,thumbnail_alt?}`. Preserve exact source collection names. Export files import personal annotations; platform archives never overwrite existing user annotations. Include provenance flag `portable:bool` at result level. Strict resource/ZIP bounds; no archive extraction or external requests; reject traversal/symlink/bombs. Unrelated archive sections are ignored. Agent writes pure parser unittest tests.
+`parse_import(data: bytes, filename: str) -> dict` returning `{items: list[dict], warnings:list[str]}`. Items normalize to `{url,title?,creator?,caption?,summary?,notes?,tags?:list[str],favorite?:bool,status?,saved_at?,source_account?,collections?:list[{name,kind:'source'|'local',source_key?:str}],preview_url?,thumbnail_alt?}`. Preserve exact source collection names. Export files import personal annotations; platform archives never overwrite existing user annotations. Include provenance flag `portable:bool` at result level. Strict resource/ZIP bounds; no archive extraction or external requests; reject traversal/symlink/bombs. Unrelated archive sections are ignored. Pure parser tests cover supported shapes and resource limits.
 
-### AI module contract (same agent owns server/classifier.py)
+### AI module contract (`server/classifier.py`)
 
-`classify_item(item:dict, base_url:str, model:str, client=None) -> dict` synchronous httpx call with timeout, no tools, structured JSON schema, think:false, stream:false; validate supported categories/topics/counts/lengths; evidence text from caption, alt, title and user notes, never claim video understanding; result suggested_title,summary,topics,content_type,evidence_level,needs_review,model. Only configured server URL. Root handles durable worker/job integration.
+`classify_item(item:dict, base_url:str, model:str, client=None) -> dict` synchronous httpx call with timeout, no tools, structured JSON schema, think:false, stream:false; validate supported categories/topics/counts/lengths; evidence text from caption, alt, title and user notes, never claim video understanding; result suggested_title,summary,topics,content_type,evidence_level,needs_review,model. Only the configured server URL is used. The server integrates durable jobs and review state.
 
 ## UI design
 

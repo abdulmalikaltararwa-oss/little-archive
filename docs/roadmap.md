@@ -6,14 +6,18 @@ Roadmap entries are intentions, not promises of a release date or current suppor
 
 The first stable release targets a private, browsable library: authentication, source and local collections, keyword search, tags, notes, progress, file imports, explicit browser imports, optional model suggestions, and portable backup/export. The current internal version remains development software until the [1.0 release gates](release-gates.md) have passing evidence.
 
-## Validation before 1.0
+## Acceptance before 1.0
 
-- Expand sanitized Instagram and TikTok layout fixtures.
-- Record live adapter checks against specific platform layouts without publishing private records.
-- Improve collection discovery and reconciliation only where the source exposes sufficient evidence.
-- Exercise interrupted imports, browser worker restarts, and recovery on different machines.
-- Review accessibility with keyboard and assistive-technology users.
-- Benchmark large libraries and representative local text models, including multilingual examples.
+The complete automated matrix has passed, including authenticated browser flows, interrupted extension imports and browser restarts, real local-model inference, both Mac architectures, both container architectures, and update/rollback recovery. See the [verification record](verification.md) for the exact candidate and scope.
+
+The remaining required acceptance connects the chosen Mac installation, normal Chrome permission consent, and real Instagram and TikTok saved-content views. Record these results without publishing private records, resolve any observed failures, then align and publish the stable package. The [Mac acceptance guide](mac-acceptance.md) gives this procedure.
+
+## Ongoing quality work
+
+- Add sanitized source-layout fixtures as the platforms change.
+- Extend collection discovery and reconciliation where the source exposes sufficient evidence.
+- Gather keyboard and assistive-technology feedback beyond the existing browser tests.
+- Benchmark larger libraries and additional local text models, including multilingual examples.
 
 ## Possible later features
 

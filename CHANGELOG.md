@@ -2,7 +2,7 @@
 
 ## Unreleased — Development toward 1.0
 
-The implementation has passed the complete automated acceptance matrix at commit `7d24aa81cf8a5940397bd61985ef71a578962d76`. A stable release remains held for live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
+The implementation has passed all 12 automated acceptance jobs at commit `52adf28a5ac1f9a2baecf89442deb8e59577197c`. A stable release remains held for live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
 
 ### Included
 
@@ -17,6 +17,7 @@ The implementation has passed the complete automated acceptance matrix at commit
 - Whole-library and filtered organization across unloaded gallery pages, durable AI job counts, cancellation, retry, and sequential review.
 - Native installation and offline recovery checks on Apple Silicon Mac, Intel Mac, and Linux; hardened container checks on native AMD64 and ARM64 runners.
 - Authenticated Chromium, Firefox, and WebKit workflows; real packaged Chrome-extension workflows; real Ollama worker and browser acceptance.
+- Two-revision Docker Compose update verification, preserving the original library, images, sessions, and import token; app removal with retained data; separate recovery of the previous revision from its pre-update backup.
 
 ### Reliability fixes verified before release
 
@@ -31,6 +32,8 @@ The implementation has passed the complete automated acceptance matrix at commit
 ### Continuous verification
 
 - The full release acceptance matrix runs on changes to application, extension, test, packaging, or workflow source on `main`, and remains available manually.
+- Dependency lockfiles, both Compose filename extensions, Docker build exclusions, configuration examples, and all workflow files trigger the full matrix.
+- Container and standalone demo builds include the project license; the standalone extension installation guide covers pairing and import scope.
 - Public preview deployment is separate from a stable product release and contains synthetic records only.
 
 ### Known limitations
