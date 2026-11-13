@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeServerURL, permissionPattern, sourceContext, assertSource, canonicalPost,
   normalizeObservation, safePreview, makeBatches, queueObservations, byteLength,
-  MAX_BATCH_BYTES, initialState, publicState,
+  MAX_BATCH_BYTES, MAX_STATE_BYTES, STATE_CONTROL_RESERVE_BYTES, initialState, publicState,
 } from '../core.js';
 
 test('server destination is origin-only HTTPS or explicit HTTP loopback',()=>{
@@ -61,6 +61,36 @@ test('canonical IDs reject foreign and short URLs and preserve supported permali
   }
 });
 
+test('creator-prefixed Instagram permalinks preserve the root identity and observed creator',()=>{
+  for (const kind of ['p','reel','reels']) {
+    const post=canonicalPost(`https://www.instagram.com/synthetic.creator/${kind}/Observed_Shape-123/?igsh=fixture`,'instagram');
+    assert.equal(post.key,'Observed_Shape-123');
+    assert.equal(post.url,`https://www.instagram.com/${kind==='p'?'p':'reel'}/Observed_Shape-123/`);
+    assert.equal(post.creator,'@synthetic.creator');
+    assert.equal(post.content_type,kind==='p'?'post':'video');
+  }
+  assert.equal(normalizeObservation({url:'https://www.instagram.com/synthetic_creator/p/Observed123/'},'instagram').creator,'@synthetic_creator');
+  assert.equal(canonicalPost('https://www.instagram.com/p/Observed123/','instagram').creator,undefined);
+  for (const path of ['bad-name/p/Observed123','@creator/p/Observed123','bad%20name/p/Observed123','a/b/p/Observed123',`${'a'.repeat(31)}/p/Observed123`,'creator/p/Observed123/extra']) {
+    assert.equal(canonicalPost('https://www.instagram.com/'+path,'instagram'),null);
+  }
+});
+
+test('bounded observation text preserves whole emoji and repairs isolated surrogates',()=>{
+  const input={url:'https://www.tiktok.com/@synthetic/video/1234567890123456789'};
+  const limits={title:240,creator:160,caption:12000,thumbnail_alt:6000};
+  for (const [key,limit] of Object.entries(limits)) input[key]='a'+'😀'.repeat(limit);
+  const item=normalizeObservation(input,'tiktok');
+  for (const [key,limit] of Object.entries(limits)) {
+    assert.equal(item[key].length,limit-1);
+    assert.ok(item[key].endsWith('😀'));
+    assert.equal(/[\uD800-\uDFFF]/u.test(item[key]),false);
+  }
+  const repaired=normalizeObservation({url:input.url,title:'\uD800ok\uDC00',caption:'\uDC00caption\uD800'},'tiktok');
+  assert.equal(repaired.title,'\uFFFDok\uFFFD');
+  assert.equal(repaired.caption,'\uFFFDcaption\uFFFD');
+});
+
 test('normalization binds collection membership and keeps alt separate from captions',()=>{
   const item=normalizeObservation({url:'https://www.instagram.com/p/Test123/',thumbnail_alt:'Text on cover',collections:[{source_key:'injected',name:'Other'}],caption:null,preview_url:'https://localhost/private'},'instagram',{source_key:'observed:abc',name:'Original نام'});
   assert.equal(item.thumbnail_alt,'Text on cover');
@@ -85,7 +115,7 @@ test('batches respect byte and record limits, including multibyte evidence',()=>
 
 test('queue checkpoint deduplicates the same post across permalink variants',()=>{
   const state={...initialState(),run:{platform:'instagram',collection:null,nextSequence:0,seen:[],discovered:0}};
-  const first=queueObservations(state,[{url:'https://www.instagram.com/p/ABC/'},{url:'https://www.instagram.com/reel/ABC/'}],()=> 'batch-one');
+  const first=queueObservations(state,[{url:'https://www.instagram.com/p/ABC/'},{url:'https://www.instagram.com/reel/ABC/'},{url:'https://www.instagram.com/synthetic.creator/reel/ABC/'}],()=> 'batch-one');
   assert.equal(first.queued,1);
   const second=queueObservations(first.state,[{url:'https://www.instagram.com/p/ABC/'}],()=> 'unused');
   assert.equal(second.queued,0);
@@ -99,6 +129,18 @@ test('full outbox refuses more data without advancing the durable checkpoint',()
   assert.throws(()=>queueObservations(state,[{url:'https://www.instagram.com/p/NewOne/'}],()=> 'batch-two'),/queue is full/);
   assert.equal(state.run.nextSequence,1);
   assert.deepEqual(state.run.seen,[]);
+});
+
+test('a full seen-ID checkpoint reserves enough space to persist an actionable pause',()=>{
+  const count=Math.floor((MAX_STATE_BYTES-8192-1000)/103);
+  const seen=Array.from({length:count},(_,i)=>'A'.repeat(91)+String(i).padStart(9,'0'));
+  const state={...initialState(),run:{platform:'instagram',collection:null,nextSequence:count,seen,discovered:count,status:'running'}};
+  assert.ok(byteLength(state)<MAX_STATE_BYTES);
+  assert.ok(byteLength(state)>MAX_STATE_BYTES-STATE_CONTROL_RESERVE_BYTES);
+  assert.throws(()=>queueObservations(state,[{url:'https://www.instagram.com/p/NewAfterCheckpoint/'}],()=> 'unused'),/device checkpoint limit/);
+  assert.equal(state.run.seen.length,count);
+  const paused={...state,run:{...state.run,status:'paused',message:'x'.repeat(400)}};
+  assert.ok(byteLength(paused)<MAX_STATE_BYTES,'Control metadata must still fit when capture is refused.');
 });
 
 test('popup state never discloses the saved import token',()=>{

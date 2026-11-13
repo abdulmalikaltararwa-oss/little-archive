@@ -29,6 +29,7 @@ The suite uses a headed bundled Chromium under Xvfb so the real toolbar popup ex
 | Duplicate refresh | A second real popup import updates those same item IDs, retains personal edits, and preserves one source collection. |
 | Incremental scrolling | Scrolling adds two cards to an initial fifty-one; the worker sends batches of 50, 1 and 2 with consecutive zero-based sequences, each within 256 KiB. |
 | Preset collection workflow | All posts followed by two source collection views preserves exact names and overlapping memberships without duplicating posts or removing an earlier membership. |
+| Collection names | Collection URLs use the observed display-slug/numeric-ID shape. A single visible H3 prefills an editable exact name; ambiguous headings leave the field empty for manual verification. |
 | TikTok Favorites | Video and photo URLs produce separate items with caption and thumbnail-alt provenance; a duplicate video link is ignored. |
 | Login guard | A visible password prompt stops the scanner before it sends saved-card batches. |
 | Favorites guard | A selected Posts tab remains rejected even when the user confirms the popup checkbox. |
@@ -39,7 +40,7 @@ All Instagram and TikTok navigation responses are fulfilled with handwritten HTM
 
 ## Boundaries of the evidence
 
-The 21-card Instagram fixture mirrors **structural observations only** from a read-only check of a rendered Saved All Posts grid: `main`, post-shaped anchor URLs, descendant images with alternative text, and zero figcaptions. Its accounts, post IDs, text, collection names and HTML are entirely synthetic. Its explicit end marker and incremental-loading behavior are controlled test cases, not claims about Instagram's current pagination UI.
+The 21-card Instagram fixture mirrors **structural observations only** from a read-only check of a rendered Saved All Posts grid: `main`, post-shaped anchor URLs, descendant images with alternative text, and zero figcaptions. A separate read-only collection check established a display-slug/numeric-ID URL shape and an H3 collection heading; it did not expose a loaded post grid or prove enumeration. The fixtures' accounts, post IDs, numeric collection IDs, text, collection names and HTML are entirely synthetic. Their explicit end markers and incremental-loading behavior are controlled test cases, not claims about Instagram's current pagination UI.
 
 The browser's native optional-host consent bubble is **not automated**. In the fresh test profile, Chromium's own Extensions settings API grants exactly `http://127.0.0.1/*` before the real popup runs its unchanged `permissions.request()` flow. This avoids broad host grants and avoids faking the Chrome APIs. Source-host access still comes from the real toolbar action. A manual release check must still cover the native consent prompt.
 

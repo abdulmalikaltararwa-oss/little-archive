@@ -27,6 +27,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: node --test extension/tests/*.test.mjs web/*.test.mjs
+      - run: npm run test:e2e:infra
       - run: python scripts/build_demo.py
       - run: python scripts/release_check.py
 
@@ -99,12 +100,16 @@ jobs:
 
   containers:
     name: Container (${{ matrix.arch }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
         with:
@@ -112,9 +117,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
       - uses: docker/setup-buildx-action@v4
       - name: Build the packaged application
         uses: docker/build-push-action@v7
@@ -176,7 +178,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
       - run: pip install -r requirements.txt
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
       - name: Start a disposable CPU inference service
         run: docker run -d --name archive-model-check -p 127.0.0.1:11434:11434 ollama/ollama:0.40.16
       - name: Pull the supported small text model
@@ -193,6 +201,22 @@ jobs:
           docker exec archive-model-check ollama list
       - name: Verify real worker inference and review
         run: python scripts/ollama_smoke.py --url http://127.0.0.1:11434 --model qwen3:0.6b --timeout 360
+      - name: Verify the real categorization interface
+        env:
+          LA_E2E_OLLAMA_URL: http://127.0.0.1:11434
+          LA_E2E_OLLAMA_MODEL: qwen3:0.6b
+        run: npm run test:e2e:ai
+      - name: Retain the sanitized real-model browser report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: model-interface-${{ github.sha }}
+          path: |
+            playwright-report/index.html
+            test-results/*.xml
+            test-results/*.log
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Remove the disposable model service
         if: always()
         run: docker rm -f archive-model-check

@@ -155,7 +155,8 @@ test('bulk organization, archive, restore and delete update the selected items o
   await detail.getByRole('button', { name: 'Delete from this archive', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Delete this saved item?', exact: true });
   await apiAction(page, 'DELETE', `/api/items/${entries[0].id}`, () => confirm.getByRole('button', { name: 'Delete', exact: true }).click());
-  await expect(page.locator('.card-title')).toHaveText(entries[1].title);
   expect((await context.request.get(`/api/items/${entries[0].id}`)).status()).toBe(404);
+  await expect(page.locator('article.card')).toHaveCount(1);
+  await expect(page.locator('.card-title')).toHaveText(entries[1].title);
   expect((await context.request.get(`/api/items/${entries[1].id}`)).status()).toBe(200);
 });

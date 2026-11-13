@@ -130,6 +130,28 @@ class APIIntegrationTests(unittest.TestCase):
         self.assertEqual(self.write("PATCH", "/api/items/" + first["id"], {"source_account": "other"}).status_code, 422)
         self.assertEqual(self.write("POST", "/api/items", {"url": "javascript:alert(1)"}).status_code, 400)
 
+    def test_creator_qualified_instagram_links_keep_identity_and_post_type(self):
+        first = self.item("https://www.instagram.com/sample.creator/reel/CREATOR_123/?igsh=tracking")
+        self.assertEqual(first["content_type"], "video")
+        edited = self.write("PATCH", "/api/items/" + first["id"], {"notes": "Keep my note", "tags": ["mine"]})
+        self.assertEqual(edited.status_code, 200)
+        token = self.token()
+        run = self.begin(token, account="default")
+        response, _ = self.batch(token, run, [{"url": "https://www.instagram.com/another.creator/reel/CREATOR_123/", "collections": [{"source_key": "collection-42", "name": "Original collection"}]}])
+        self.assertEqual(response.status_code, 200, response.text)
+        refreshed = self.client.get("/api/items/" + first["id"]).json()
+        self.assertEqual(self.count(), 1)
+        self.assertEqual(refreshed["notes"], "Keep my note")
+        self.assertEqual(refreshed["tags"], ["mine"])
+        self.assertEqual(refreshed["collections"][0]["name"], "Original collection")
+        self.assertEqual(self.item("https://www.instagram.com/reel/CREATOR_123/")["id"], first["id"])
+        # A creator whose handle starts with 'reel' does not turn a photo into a video.
+        photo = self.item("https://www.instagram.com/reelmaker/p/PHOTO_123/")
+        self.assertEqual(photo["content_type"], "post")
+        for path in ("/sample.creator/saved/CREATOR_123/", "/sample.creator/reel/CREATOR_123/extra/", "/sample/creator/reel/CREATOR_123/"):
+            with self.subTest(path=path):
+                self.assertEqual(self.write("POST", "/api/items", {"url": "https://www.instagram.com" + path}).status_code, 400)
+
     def test_source_memberships_survive_manual_changes_and_refresh(self):
         token = self.token()
         run = self.begin(token, account="default")
@@ -238,6 +260,71 @@ class APIIntegrationTests(unittest.TestCase):
         self.assertEqual(imported["tags"], ["one", "two"])
         self.assertTrue(imported["favorite"])
         self.assertEqual(imported["status"], "done")
+
+    def test_portable_roundtrip_preserves_blank_summary_and_source_editability(self):
+        token = self.token()
+        run = self.begin(token, account="roundtrip-account")
+        response, _ = self.batch(token, run, [
+            {"url": "https://www.instagram.com/p/PROTECTED123/", "title": "Original protected title"},
+            {"url": "https://www.instagram.com/p/EDITABLE123/", "title": "Original source title"},
+        ])
+        self.assertEqual(response.status_code, 200, response.text)
+        original = {item["source_key"]: item for item in self.client.get("/api/items").json()["items"]}
+        changed = self.write("PATCH", "/api/items/" + original["PROTECTED123"]["id"], {"title": "My title", "summary": ""})
+        self.assertEqual(changed.status_code, 200, changed.text)
+        exported = self.client.get("/api/export?format=json")
+        flags = {item["source_key"]: (item["manual_title"], item["manual_summary"]) for item in exported.json()["items"]}
+        self.assertEqual(flags, {"PROTECTED123": (True, True), "EDITABLE123": (False, False)})
+        for item in original.values():
+            self.assertEqual(self.write("DELETE", "/api/items/" + item["id"]).status_code, 200)
+        imported = self.client.post("/api/imports/file?filename=export.json", content=exported.content, headers=self.headers)
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["created"], 2)
+        for item in self.client.get("/api/items").json()["items"]:
+            suggestion = {"input_hash": self.app.state.worker.fingerprint(item), "suggested_title": "Suggested title", "summary": "Suggested summary", "topics": []}
+            with self.app.state.store.transaction() as c:
+                c.execute("UPDATE items SET ai=? WHERE id=?", (json.dumps(suggestion), item["id"]))
+            accepted = self.write("POST", f"/api/items/{item['id']}/ai/accept")
+            self.assertEqual(accepted.status_code, 200, accepted.text)
+            expected = ("My title", "") if item["source_key"] == "PROTECTED123" else ("Suggested title", "Suggested summary")
+            self.assertEqual((accepted.json()["title"], accepted.json()["summary"]), expected)
+
+    def test_source_refresh_improves_content_type_without_generic_downgrade(self):
+        token = self.token()
+        run = self.begin(token)
+        observations = [
+            {"url": "https://www.instagram.com/p/TYPE123/"},
+            {"url": "https://www.instagram.com/creator/reel/TYPE123/", "content_type": "video"},
+            {"url": "https://www.instagram.com/p/TYPE123/"},
+        ]
+        for sequence, (record, expected) in enumerate(zip(observations, ("post", "video", "video"))):
+            response, _ = self.batch(token, run, [record], sequence=sequence)
+            self.assertEqual(response.status_code, 200, response.text)
+            items = self.client.get("/api/items").json()["items"]
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["content_type"], expected)
+        # The extension schema's generic default is weaker than a Reel URL.
+        response, _ = self.batch(token, run, [{"url": "https://www.instagram.com/reel/TYPE456/"}], sequence=3)
+        self.assertEqual(response.status_code, 200, response.text)
+        items = {item["source_key"]: item for item in self.client.get("/api/items").json()["items"]}
+        self.assertEqual(items["TYPE456"]["content_type"], "video")
+
+    def test_duplicate_bulk_and_ai_tags_are_idempotent_at_unique_limit(self):
+        tags = [f"tag-{index}" for index in range(50)]
+        item = self.item(tags=tags)
+        duplicate = self.write("POST", "/api/items/bulk", {"ids": [item["id"]], "action": "tag", "value": "TAG-0"})
+        self.assertEqual(duplicate.status_code, 200, duplicate.text)
+        current = self.client.get("/api/items/" + item["id"]).json()
+        self.assertEqual(current["tags"], tags)
+        suggestion = {"input_hash": self.app.state.worker.fingerprint(current), "suggested_title": "Suggested", "summary": "Suggested summary", "topics": ["TAG-0", "tag-1"]}
+        with self.app.state.store.transaction() as c:
+            c.execute("UPDATE items SET ai=? WHERE id=?", (json.dumps(suggestion), item["id"]))
+        accepted = self.write("POST", f"/api/items/{item['id']}/ai/accept")
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()["tags"], tags)
+        overflow = self.write("POST", "/api/items/bulk", {"ids": [item["id"]], "action": "tag", "value": "new-unique-tag"})
+        self.assertEqual(overflow.status_code, 400, overflow.text)
+        self.assertEqual(self.client.get("/api/items/" + item["id"]).json()["tags"], tags)
 
     def test_portable_import_keeps_empty_collections_and_colors(self):
         payload = {"format": "little-archive", "version": 1, "items": [], "collections": [

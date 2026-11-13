@@ -23,7 +23,21 @@ npm run test:e2e -- --grep 'portable JSON'
 npm run test:e2e -- --list
 ```
 
-The last command starts the isolated server and lists test cases without launching a browser. `LA_E2E_PYTHON` can select the Python executable. Other `LA_E2E_*` values and the application data/password/origin environment variables are generated or replaced by the harness, not supplied from a personal deployment.
+The last command starts the isolated server and lists test cases without launching a browser. `LA_E2E_PYTHON` can select the Python executable. The application data/password/origin environment variables are generated or replaced by the harness, not supplied from a personal deployment. Model settings stay disabled unless explicitly enabled for the separate gate below.
+
+## Separate real-model browser gate
+
+The AI browser test uses a real Ollama process already running on the CI host. It has its own configuration and is excluded from the core browser suite, so the core suite has no AI-related skips. Pull the model into the disposable service before running:
+
+```sh
+LA_E2E_OLLAMA_URL=http://127.0.0.1:11434 \
+LA_E2E_OLLAMA_MODEL=qwen3:0.6b \
+npm run test:e2e:ai
+```
+
+The harness accepts only a loopback HTTP(S) model origin without credentials, a path, query, or fragment. Existing `LA_OLLAMA_*` configuration is ignored. This gate imports two synthetic captioned records through the UI, queues the complete filtered scope, waits for real inference, observes live progress, accepts one suggestion, dismisses the other, verifies persistence after reload, and verifies an unchanged requeue does not repeat inference. It preserves manual notes, existing topics, and original collections.
+
+Infrastructure tests for model-origin restrictions and credential-safe reports run with `npm run test:e2e:infra` and require no browser.
 
 ## Assertions
 
@@ -32,6 +46,7 @@ The suite verifies:
 - Incorrect passwords, protected endpoints, HttpOnly/SameSite session cookies, inaccessible JavaScript cookies, valid and invalid CSRF tokens, cross-origin and cross-site refusal, retained sessions after reload, sign-out revocation, cookie replay refusal, and recovery from a revoked session.
 - Link creation, canonical URLs, editing titles/summaries/notes/topics, multilingual text, favorites with correct accessible labels, review/progress states, text search, source/topic filters, sorting, and persisted data after reload.
 - Local collection creation, assignment, rename, color change, and deletion without deleting its saves; bulk favorites/topics/archive/restore; individual deletion.
+- Organization of all 205 matching imported records while only 60 gallery cards are loaded, using a real server-side topic/collection operation, followed by sequential review across the complete scope.
 - Real file upload and parsing, source collection preservation, empty local collections and colors, partial-coverage reporting, import activity, literal rendering of HTML-shaped text, actual JSON downloads, duplicate-free re-import, and invalid-file errors without data changes.
 - Real PNG upload and authenticated serving, browser image decoding, persisted thumbnails, thumbnail removal, full backup download, ZIP checksums, SQLite integrity, asset inclusion, and removal of sessions, tokens, and password hashes from the downloadable snapshot.
 - Narrow-screen navigation and editing, no horizontal page overflow, keyboard search, and remembered dark appearance.

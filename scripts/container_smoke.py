@@ -221,12 +221,17 @@ status = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text
 print(json.dumps({'uid': os.getuid(), 'gid': os.getgid(), 'machine': platform.machine(), 'capabilities': int(status['CapEff'].strip(), 16), 'no_new_privileges': int(status['NoNewPrivs'].strip()), 'root_read_only': bool(os.statvfs('/app').f_flag & os.ST_RDONLY)}))
 """
         identity = json.loads(self.docker("exec", name, "python", "-c", probe).stdout)
+        # These fields contain no credentials. Retain them even when a strict
+        # assertion fails so architecture/emulation failures can be diagnosed.
+        self.report["runtime"] = identity
+        print("Runtime hardening probe: " + json.dumps(identity, sort_keys=True), flush=True)
         require(identity["uid"] != 0, "The image ran as root.")
-        require(identity["capabilities"] == 0 and identity["no_new_privileges"] == 1 and identity["root_read_only"], "Runtime Linux hardening differs from the requested configuration.")
+        require(identity["capabilities"] == 0, f"Runtime effective capabilities must be zero; observed {identity['capabilities']}.")
+        require(identity["no_new_privileges"] == 1, f"Runtime NoNewPrivs must be 1; observed {identity['no_new_privileges']}.")
+        require(identity["root_read_only"] is True, f"Runtime /app filesystem must be read-only; observed {identity['root_read_only']}.")
         if self.args.platform:
             machine = {"linux/amd64": {"x86_64", "amd64"}, "linux/arm64": {"aarch64", "arm64"}}[self.args.platform]
             require(identity["machine"].lower() in machine, "The runtime architecture does not match the requested image platform.")
-        self.report["runtime"] = identity
 
     def snapshot(self, client):
         value = client.json("GET", "/api/export?format=json")

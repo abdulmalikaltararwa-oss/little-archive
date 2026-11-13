@@ -33,6 +33,40 @@ test('synthetic rendered cards preserve alt provenance and exclude navigation li
   assert.equal(records[0].caption,undefined);
 });
 
+test('creator-prefixed collection links canonicalize and expose only a validated path creator',()=>{
+  const {api,root}=adapter({url:'https://www.instagram.com/sample/saved/synthetic-collection/1234567890123456/',anchors:[
+    anchor('/synthetic.creator/reel/ObservedA/'),
+    anchor('/synthetic_creator/p/ObservedB/'),
+    anchor('/reel/ObservedA/'),
+    anchor('/bad-name/p/Rejected/'),
+    anchor('/extra/path/p/Rejected/'),
+    anchor('/bad%20name/p/Rejected/'),
+    anchor(`/${'a'.repeat(31)}/p/Rejected/`),
+  ]});
+  const {records}=api.collect(root,'instagram');
+  assert.equal(records.length,2);
+  assert.equal(records[0].url,'https://www.instagram.com/reel/ObservedA/');
+  assert.equal(records[0].creator,'@synthetic.creator');
+  assert.equal(records[1].url,'https://www.instagram.com/p/ObservedB/');
+  assert.equal(records[1].creator,'@synthetic_creator');
+  assert.equal(api.postURL('/p/RootOnly/','instagram').creator,undefined);
+});
+
+test('DOM captions and alt text remain valid Unicode at field boundaries',()=>{
+  const caption='a'+'😀'.repeat(6000);
+  const {api,root}=adapter({anchors:[
+    anchor('/p/EmojiBoundary/',{caption,alt:'a'+'😀'.repeat(3000)}),
+    anchor('/p/IsolatedSurrogate/',{caption:'\uD800caption\uDC00',alt:'\uDC00cover\uD800'}),
+  ]});
+  const {records}=api.collect(root,'instagram');
+  assert.equal(records[0].title,'a'+'😀'.repeat(119));
+  assert.equal(records[0].caption,'a'+'😀'.repeat(5999));
+  assert.equal(records[0].thumbnail_alt,'a'+'😀'.repeat(2999));
+  assert.equal(records[1].title,'\uFFFDcaption\uFFFD');
+  assert.equal(records[1].caption,'\uFFFDcaption\uFFFD');
+  assert.equal(records[1].thumbnail_alt,'\uFFFDcover\uFFFD');
+});
+
 test('source login prompt stops collection',()=>{
   const url='https://www.instagram.com/sample/saved/all-posts/';
   const {api}=adapter({url,login:true});
@@ -78,4 +112,13 @@ test('end state uses explicit page-level markers and rejects caption text',()=>{
   fixture=adapter({headings:[{textContent:'No saved posts yet',closest:()=>null}]});
   assert.equal(fixture.api.endStatus(fixture.root,0),'empty');
   assert.equal(fixture.api.endStatus(fixture.root,1),null);
+});
+
+test('a collection named like an end marker cannot terminate its own scan',()=>{
+  const title={tagName:'H3',textContent:'No more posts',closest:()=>null};
+  let fixture=adapter({headings:[title]});
+  assert.equal(fixture.api.endStatus(fixture.root,21,'No more posts'),null);
+  const status={tagName:'P',textContent:'No more posts',closest:()=>null};
+  fixture=adapter({headings:[title,status]});
+  assert.equal(fixture.api.endStatus(fixture.root,21,'No more posts'),'end');
 });

@@ -1,14 +1,25 @@
 // Current-page DOM adapters. This isolated-world script reads rendered links/text only.
 // Source layouts are not stable APIs; unsupported views stop instead of importing a feed.
 (() => {
-  const trim = (value, limit=12000) => typeof value === 'string' ? value.trim().slice(0,limit) : '';
+  const trim = (value, limit=12000) => {
+    if (typeof value !== 'string') return '';
+    let result='';
+    // Preserve whole Unicode characters within the UTF-16 field limit.
+    for (const character of value.trim()) {
+      const point=character.codePointAt(0);
+      const safe=point>=0xD800 && point<=0xDFFF ? '\uFFFD' : character;
+      if (result.length+safe.length>limit) break;
+      result+=safe;
+    }
+    return result.trim();
+  };
   function postURL(value, platform) {
     try {
       const url=new URL(value,location.href);
       if (url.protocol!=='https:' || url.username || url.password) return null;
       if (platform==='instagram' && ['www.instagram.com','instagram.com'].includes(url.hostname)) {
-        const match=url.pathname.match(/^\/(p|reel|reels)\/([a-zA-Z0-9_-]{1,100})\/?$/);
-        return match ? {url:`https://www.instagram.com/${match[1]==='p'?'p':'reel'}/${match[2]}/`,key:match[2]} : null;
+        const match=url.pathname.match(/^\/(?:([a-zA-Z0-9._]{1,30})\/)?(p|reel|reels)\/([a-zA-Z0-9_-]{1,100})\/?$/);
+        return match ? {url:`https://www.instagram.com/${match[2]==='p'?'p':'reel'}/${match[3]}/`,key:match[3],...(match[1] ? {creator:'@'+match[1]} : {})} : null;
       }
       if (platform==='tiktok' && ['www.tiktok.com','tiktok.com'].includes(url.hostname)) {
         const match=url.pathname.match(/^\/@([a-zA-Z0-9._]{1,80})\/(video|photo)\/(\d{5,30})\/?$/);
@@ -84,18 +95,21 @@
       const caption=card.querySelector(platform==='tiktok' ? '[data-e2e="user-post-item-desc"]' : 'figcaption');
       if (caption) {
         const value=trim(caption.textContent);
-        if (value) { item.caption=value; item.title=value.split('\n')[0].slice(0,240); }
+        if (value) { item.caption=value; item.title=trim(value.split('\n')[0],240); }
       }
       records.push({...item,_key:post.key});
     }
     return {records,lastLink};
   }
 
-  function endStatus(root, count) {
+  function endStatus(root, count, collectionName='') {
     // Look only at page-level headings/statuses, not arbitrary captions containing these words.
     for (const node of root.querySelectorAll('[role="status"],h1,h2,h3')) {
-      if (node.closest('article,[data-e2e="user-post-item"],nav,aside')) continue;
+      if (node.closest('a,article,[data-e2e="user-post-item"],nav,aside')) continue;
       const label=trim(node.textContent,180).toLowerCase();
+      // A user may legitimately name a collection "No more posts". Its page
+      // title is a category label, not evidence that pagination is exhausted.
+      if (/^H[1-3]$/.test(node.tagName || '') && collectionName && label===trim(collectionName,180).toLowerCase()) continue;
       if (/^(you['’]?ve reached the end|no more (posts|videos|items)|end of (saved posts|favorites|favourites))[.!]?$/.test(label)) return 'end';
       if (!count && /^(no saved posts( yet)?|no favorites( yet)?|no favourites( yet)?|nothing saved yet|you haven['’]?t saved anything yet)[.!]?$/.test(label)) return 'empty';
     }

@@ -116,10 +116,13 @@ async function initialize() {
     $('account').value=context.account;
     $('collection-field').hidden=!context.isCollection;
     $('collection').required=context.isCollection;
+    $('collection').value=context.collectionName || '';
     $('context-help').textContent=context.isIndex
       ? 'Open All posts or an individual collection in Instagram, then reopen this popup.'
       : context.isCollection
-        ? 'Only the current collection will be scanned. Copy its exact name below to preserve the membership.'
+        ? context.collectionName
+          ? 'The collection name was read from the visible page heading. Verify or edit it below before importing this view.'
+          : 'Only the current collection will be scanned. Copy its exact name below to preserve the membership.'
         : 'Only this view will be scanned. Import individual collections separately to preserve their memberships.';
   } catch (error) { $('context-help').textContent=error.message; }
   render();

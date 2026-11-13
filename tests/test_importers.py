@@ -42,6 +42,21 @@ class ImportTests(unittest.TestCase):
         source = {"format": "little-archive", "version": 1, "collections": [{"id": "c1", "name": "Recipes", "kind": "source"}], "items": [{"url": "https://example.com/one", "collection_ids": ["c1"]}]}
         self.assertEqual(parse_import(blob(source), "a.json")["items"][0]["collections"][0]["name"], "Recipes")
 
+    def test_only_portable_boolean_flags_preserve_edit_intent(self):
+        record = {"url": "https://example.com/annotation", "summary": "", "manual_title": False, "manual_summary": True}
+        source = {"format": "little-archive", "version": 1, "items": [record]}
+        item = parse_import(blob(source), "export.json")["items"][0]
+        self.assertIs(item["manual_title"], False)
+        self.assertIs(item["manual_summary"], True)
+        self.assertEqual(item["summary"], "")
+        generic = parse_import(blob([record]), "links.json")["items"][0]
+        self.assertNotIn("manual_title", generic)
+        self.assertNotIn("manual_summary", generic)
+        source["items"][0].update(manual_title="false", manual_summary=1)
+        invalid = parse_import(blob(source), "export.json")["items"][0]
+        self.assertNotIn("manual_title", invalid)
+        self.assertNotIn("manual_summary", invalid)
+
     def test_portable_empty_collections_preserve_scope_and_color(self):
         source = {"format": "little-archive", "version": 1, "items": [], "collections": [
             {"id": "old-local-id", "name": "Empty ideas", "kind": "local", "color": "#d7A5ae", "platform": "ignored", "source_account": "ignored", "extra_secret": "do not retain"},

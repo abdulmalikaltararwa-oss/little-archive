@@ -30,7 +30,7 @@ def normalize_search(text):
 
 
 def clean_tags(tags):
-    if not isinstance(tags, list) or len(tags) > 50:
+    if not isinstance(tags, list):
         raise ValueError("Use at most 50 tags per item.")
     out, seen = [], set()
     for value in tags:
@@ -43,6 +43,8 @@ def clean_tags(tags):
         if key not in seen:
             seen.add(key)
             out.append(value)
+            if len(out) > 50:
+                raise ValueError("Use at most 50 tags per item.")
     return out
 
 
@@ -59,10 +61,12 @@ def normalize_url(raw):
         raise ValueError("Only HTTP(S) links without embedded credentials are supported.")
     host = p.hostname.lower().rstrip(".")
     if host in {"instagram.com", "www.instagram.com", "m.instagram.com"}:
-        m = re.fullmatch(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)/?", p.path)
+        # Saved grids can expose creator-qualified links as well as root post
+        # links. Their identity is the shortcode, independent of that prefix.
+        m = re.fullmatch(r"/(?:[A-Za-z0-9._]{1,30}/)?(?P<kind>p|reel|reels)/(?P<key>[A-Za-z0-9_-]{1,100})/?", p.path)
         if not m:
             raise ValueError("Use an individual Instagram post or Reel link.")
-        return "instagram", m[1], f"https://www.instagram.com/p/{m[1]}/", "video" if "/reel" in p.path else "post"
+        return "instagram", m["key"], f"https://www.instagram.com/p/{m['key']}/", "post" if m["kind"] == "p" else "video"
     if host in {"tiktok.com", "www.tiktok.com", "m.tiktok.com"}:
         m = re.fullmatch(r"/(@[^/]+)/(video|photo)/(\d+)/?", p.path)
         if m:
@@ -279,9 +283,16 @@ class Store:
         content_type = data.get("content_type", inferred_type)
         if content_type not in {"post", "video", "article", "image", "link"}:
             content_type = inferred_type
+        # A generic adapter default must not hide a media-specific URL.
+        if content_type in {"post", "link"} and inferred_type in {"video", "image"}:
+            content_type = inferred_type
         if row:
             iid = row["id"]
             updates = {"last_seen_at": stamp}
+            # Refresh more precise source observations, but a later generic
+            # saved-grid link must not erase a known video/image/article type.
+            if content_type not in {"post", "link"} or row["content_type"] in {"post", "link"}:
+                updates["content_type"] = content_type
             if title and not row["manual_title"]:
                 updates["title"] = title
             if creator:
@@ -323,7 +334,8 @@ class Store:
                 "favorite": int(bool(data.get("favorite"))) if annotations else 0, "status": status,
                 "needs_review": int(data.get("needs_review", True)) if annotations else 1,
                 "saved_at": parse_date(data.get("saved_at")), "created_at": stamp, "updated_at": stamp, "last_seen_at": stamp,
-                "manual_title": int(bool(title) and annotations), "manual_summary": int(bool(data.get("summary")) and annotations),
+                "manual_title": int(data["manual_title"]) if portable and isinstance(data.get("manual_title"), bool) else int(bool(title) and annotations),
+                "manual_summary": int(data["manual_summary"]) if portable and isinstance(data.get("manual_summary"), bool) else int(bool(data.get("summary")) and annotations),
             }
             c.execute("INSERT INTO items(" + ",".join(values) + ") VALUES(" + ",".join("?" for _ in values) + ")", list(values.values()))
             created = True
@@ -402,9 +414,15 @@ class Store:
         if c is None:
             with self.transaction() as conn:
                 return self.export_items(conn)
-        items = [self.decode_item(c, r) for r in c.execute("SELECT * FROM items ORDER BY created_at,id")]
-        for item in items:
+        items = []
+        for row in c.execute("SELECT * FROM items ORDER BY created_at,id"):
+            item = self.decode_item(c, row)
+            # Preserve annotation intent, including a deliberately blank
+            # summary, without exposing these internal flags in normal views.
+            item["manual_title"] = bool(row["manual_title"])
+            item["manual_summary"] = bool(row["manual_summary"])
             item["collections"] = [dict(x) for x in c.execute("SELECT c.id,c.name,c.kind,c.platform,c.source_account,c.source_key FROM collections c JOIN memberships m ON m.collection_id=c.id WHERE m.item_id=? ORDER BY c.name", (item["id"],))]
             # Relative authenticated assets are backed up separately, not portable remote URLs.
             item.pop("thumbnail_url", None)
+            items.append(item)
         return items

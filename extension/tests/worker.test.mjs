@@ -21,7 +21,7 @@ globalThis.chrome={
 globalThis.fetch=async(url,options)=>{
   assert.equal(options.credentials,'omit');
   assert.equal(options.redirect,'error');
-  assert.equal(options.headers.Authorization,'Bearer synthetic-private-import-token');
+  assert.ok(['Bearer synthetic-private-import-token','Bearer synthetic-replacement-import-token'].includes(options.headers.Authorization));
   const path=new URL(url).pathname;
   if(path.endsWith('/status')) return Response.json({ok:true,version:'0.1.0',instance_id:'instance-one'});
   if(path==='/api/extension/imports') return Response.json({run_id:'run-one',instance_id:'instance-one'});
@@ -77,6 +77,11 @@ test('worker rejects scope/account changes and server switching during a live ru
   assert.equal(config.ok,false);
   assert.match(config.error,/switching servers/);
   assert.equal(state().config.server,'https://archive.example.test');
+  const replacement=await send({type:'configure',server:'https://archive.example.test',token:'synthetic-replacement-import-token'});
+  assert.equal(replacement.ok,false);
+  assert.match(replacement.error,/before changing its import token/);
+  assert.equal(state().config.token,'synthetic-private-import-token');
+  assert.equal((await send({type:'configure',server:'https://archive.example.test',token:''})).ok,true);
 });
 
 test('finish waits for durable acknowledged batches and preserves partial coverage',async()=>{

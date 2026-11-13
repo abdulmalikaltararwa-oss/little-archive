@@ -53,6 +53,8 @@ The CLI loads `.env` without requiring a separate dotenv package; variables alre
 
 Run the commands from the same project directory so `.env` and a relative `LA_DATA_DIR` resolve consistently. The default native server binds to loopback and stores its library in `./data`. Keep the terminal process running; stop it with Ctrl-C before offline maintenance. Native setup does not install a macOS menu-bar application, a background launch agent, or automatic operating-system startup.
 
+For an isolated setup-and-recovery rehearsal, use the [native verification harness](native-verification.md). It copies the candidate into a temporary directory, generates separate credentials, exercises the real CLI, and cleans up its own servers and data.
+
 ## Configuration
 
 | Variable | Purpose |

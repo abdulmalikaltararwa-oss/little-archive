@@ -9,8 +9,13 @@ test('local previews persist and a downloaded backup contains verified data and 
   const notes = `These are synthetic backup test notes ${key}.`;
   const saved = await saveLink(page, { title, notes, url: `https://example.com/e2e/${key}/local-preview` });
   const previewFile = fileURLToPath(new URL('./fixtures/preview.png', import.meta.url));
-  const upload = await apiAction(page, 'POST', `/api/items/${saved.item.id}/thumbnail`, () => saved.detail.getByLabel('Upload a local preview image').setInputFiles(previewFile));
-  const uploaded = await upload.json();
+  await apiAction(page, 'POST', `/api/items/${saved.item.id}/thumbnail`, () => saved.detail.getByLabel('Upload a local preview image').setInputFiles(previewFile));
+  // Chromium can evict the intercepted upload response body from its protocol
+  // buffer. Read the persisted item through a fresh authenticated request;
+  // the upload itself still runs through the real browser file input and API.
+  const persistedResponse = await context.request.get(`/api/items/${saved.item.id}`);
+  expect(persistedResponse.status()).toBe(200);
+  const uploaded = await persistedResponse.json();
   expect(uploaded.thumbnail_url).toMatch(/^\/api\/assets\/[0-9a-f]{64}$/);
   const absoluteThumbnail = new URL(uploaded.thumbnail_url, page.url()).href;
   const image = saved.detail.locator('.detail-preview img');

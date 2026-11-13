@@ -214,6 +214,12 @@ def _record(raw: object, *, portable: bool = False, source: bool = False) -> dic
     content_type = lower.get("contenttype")
     if content_type in ("post", "video", "article", "image", "link"):
         result["content_type"] = content_type
+    # Portable exports retain edit intent as well as text. Only real booleans
+    # from this format may distinguish a source value from a protected edit.
+    if portable:
+        for field in ("manual_title", "manual_summary"):
+            if isinstance(lower.get(_key(field)), bool):
+                result[field] = lower[_key(field)]
     # Portable exports retain text provenance, but never asset paths or secrets.
     if portable and isinstance(raw.get("evidence"), list):
         evidence = []

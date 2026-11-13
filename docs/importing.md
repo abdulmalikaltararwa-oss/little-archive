@@ -23,6 +23,8 @@ The application's file-import endpoint accepts uploads up to 16 MiB and 20,000 i
 
 Portable source-collection definitions must include their original `platform`, `source_account`, and stable `source_key` when available. Missing scope is reported instead of inventing an empty collection under another account. For a portable JSON bundled with unrelated formats in the same ZIP, import the JSON separately to restore standalone collection definitions and annotations consistently.
 
+Portable JSON also preserves whether a title or summary was deliberately edited. Its boolean `manual_title` and `manual_summary` fields keep an intentionally blank summary protected from later suggestions. These flags are accepted only in the Little Archive format; older exports remain importable with the previous text-based inference.
+
 For CSV, `tags` can be a semicolon-separated string or a JSON array. `collections` can be a JSON array of objects with `name`, `kind`, and optional `source_key`; JSON is preferable when exact membership structure matters. A semicolon-separated collection string creates local collections.
 
 ### Minimal generic JSON

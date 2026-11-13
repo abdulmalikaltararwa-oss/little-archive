@@ -8,6 +8,7 @@ if (!process.env.LA_E2E_BASE_URL || !process.env.LA_E2E_OWNER_PASSWORD || !proce
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.spec.mjs',
+  testIgnore: '**/ai/**',
   fullyParallel: false,
   workers: 1,
   retries: 0,

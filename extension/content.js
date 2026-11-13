@@ -57,7 +57,7 @@
         if (!fresh.length) await send(current,'capture',{items:[],scrolls});
         current.ui.info.textContent=`${current.seen.size.toLocaleString()} unique posts observed. Scanning this view only.`;
         stagnant=progressed ? 0 : stagnant+1;
-        const end=adapter.endStatus(root,records.length);
+        const end=adapter.endStatus(root,records.length,current.run.collection?.name || '');
         if (end) {
           await send(current,'scan-finished',{coverage:'enumeration_exhausted',reason:end==='empty'?'The source displayed an explicit empty saved-view state.':'The source displayed an explicit end marker.'});
           current.ui.info.textContent=end==='empty'?'The source reports this view is empty.':'Observed end reached. Review import coverage in the app.';

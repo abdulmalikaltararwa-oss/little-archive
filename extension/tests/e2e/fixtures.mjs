@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {createFaultProxy} from './fault-proxy.mjs';
 import {PopupDriver} from './popup-driver.mjs';
+import {tabTargetForPage} from './target-selection.mjs';
 
 const extensionPath=fileURLToPath(new URL('../..',import.meta.url));
 const storageKey='littleArchiveState';
@@ -112,9 +113,13 @@ export const test=base.extend({
       const sourceCDP=await context.newCDPSession(source);
       const {targetInfo}=await sourceCDP.send('Target.getTargetInfo');
       await sourceCDP.detach();
+      const {targetInfos}=await cdp.send('Target.getTargets',{
+        filter:[{type:'tab',exclude:false},{type:'page',exclude:false},{exclude:true}],
+      });
+      const tabTarget=tabTargetForPage(targetInfo,targetInfos);
       // Actual toolbar action: Chrome supplies the activeTab grant and the
       // popup's real no-sender.tab runtime identity. No chrome API is mocked.
-      await cdp.send('Extensions.triggerAction',{id:extensionId,targetId:targetInfo.targetId});
+      await cdp.send('Extensions.triggerAction',{id:extensionId,targetId:tabTarget.targetId});
       let target;
       await expect.poll(async () => {
         const {targetInfos}=await cdp.send('Target.getTargets');

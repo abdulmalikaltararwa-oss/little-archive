@@ -40,22 +40,28 @@ docker build --platform linux/arm64 --tag little-archive:verification-arm64 .
 python3 scripts/container_smoke.py --image little-archive:verification-arm64 --platform linux/arm64 --startup-timeout 180 --report work/container-verification-arm64.json
 ```
 
-On an x86 Linux runner, register ARM64 QEMU emulation before building or running the ARM64 image. An emulated pass establishes Linux ARM64 packaging and runtime behavior under QEMU. It does not establish that a physical Mac, Docker Desktop installation, browser, filesystem sharing, or sleep/resume path has been tested. Record a separate Mac acceptance result before claiming a tested Mac installation.
+The release gate runs the ARM64 image on a native ARM64 Linux runner. QEMU on an x86 runner remains useful for optional cross-build checks, but does not replace native ARM runtime acceptance. A QEMU attempt built the ARM64 image and started the server, then failed a runtime-hardening probe; that result must not be represented as a passing ARM gate or bypassed by weakening the assertion.
+
+A native Linux ARM64 pass still does not establish that a physical Mac, Docker Desktop installation, browser, filesystem sharing, or sleep/resume path has been tested. Record a separate Docker Desktop acceptance result before claiming that installation path was tested on a Mac.
 
 ## CI job configuration
 
-Use one architecture per job so each image can be loaded into the runner's ordinary local Docker image store. The [manual Release validation workflow](../.github/workflows/release-validation.yml) includes both architectures; the [Checks workflow](../.github/workflows/checks.yml) covers routine regressions and the original startup smoke check. The following is the equivalent focused container job recipe.
+Use one architecture per native runner so each image can be loaded into that runner's ordinary local Docker image store and its kernel hardening can be checked directly. The [manual Release validation workflow](../.github/workflows/release-validation.yml) includes both architectures; the [Checks workflow](../.github/workflows/checks.yml) covers routine regressions and the original startup smoke check. The following is the equivalent focused container job recipe.
 
 ```yaml
 container:
-  runs-on: ubuntu-latest
+  runs-on: ${{ matrix.runner }}
   timeout-minutes: 35
   permissions:
     contents: read
   strategy:
     fail-fast: false
     matrix:
-      arch: [amd64, arm64]
+      include:
+        - arch: amd64
+          runner: ubuntu-24.04
+        - arch: arm64
+          runner: ubuntu-24.04-arm
   steps:
     - uses: actions/checkout@v7
       with:
@@ -63,11 +69,6 @@ container:
     - uses: actions/setup-python@v7
       with:
         python-version: '3.12'
-    - name: Register ARM64 emulation
-      if: matrix.arch == 'arm64'
-      uses: docker/setup-qemu-action@v4
-      with:
-        platforms: arm64
     - uses: docker/setup-buildx-action@v4
     - name: Build and load the candidate image
       uses: docker/build-push-action@v7
@@ -81,7 +82,9 @@ container:
       run: python scripts/container_smoke.py --image little-archive:ci-${{ matrix.arch }} --platform linux/${{ matrix.arch }} --startup-timeout 180 --report work/container-verification-${{ matrix.arch }}.json
 ```
 
-The Docker action major versions above were checked against their official repositories: [QEMU v4](https://github.com/docker/setup-qemu-action), [Buildx v4](https://github.com/docker/setup-buildx-action), and [build-push v7](https://github.com/docker/build-push-action). Docker's [multi-platform Actions guide](https://docs.docker.com/build/ci/github-actions/multi-platform/) documents emulation and the default runner image-store limitation. QEMU registration precedes Buildx, as documented by the QEMU action. The job builds locally and requires no registry credentials or image-publishing permission.
+The action major versions were checked against their official repositories: [Buildx v4](https://github.com/docker/setup-buildx-action) and [build-push v7](https://github.com/docker/build-push-action). GitHub documents its [hosted runner labels and architectures](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). The job builds locally and requires no registry credentials or image-publishing permission.
+
+For an additional cross-build experiment, the official [QEMU v4 action](https://github.com/docker/setup-qemu-action) can register ARM64 emulation before Buildx on an x86 runner. Docker's [multi-platform Actions guide](https://docs.docker.com/build/ci/github-actions/multi-platform/) explains that path and the default runner image-store limitation. Keep its result separate from the native runtime gate.
 
 ## Limits
 

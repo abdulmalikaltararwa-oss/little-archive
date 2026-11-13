@@ -10,6 +10,8 @@
     "build:demo": "python3 scripts/build_demo.py",
     "test:extension": "node --test extension/tests/*.test.mjs",
     "test:e2e": "node tests/e2e/run.mjs",
+    "test:e2e:ai": "node tests/e2e/run.mjs --config tests/e2e/ai/playwright.config.mjs",
+    "test:e2e:infra": "node --test tests/e2e/*.test.mjs",
     "test:extension:e2e": "node tests/e2e/run.mjs --config extension/tests/e2e/playwright.config.mjs"
   },
   "devDependencies": {

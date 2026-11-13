@@ -8,9 +8,11 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localModelEnvironment } from './environment.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const python = process.env.LA_E2E_PYTHON || 'python3';
+const localModel = localModelEnvironment(process.env);
 const dataDir = await mkdtemp(path.join(tmpdir(), 'little-archive-e2e-'));
 const ownerPassword = randomBytes(36).toString('base64url');
 const port = await new Promise((resolve, reject) => {
@@ -28,8 +30,7 @@ const environment = {
   LA_DATA_DIR: dataDir,
   LA_ADMIN_PASSWORD: ownerPassword,
   LA_PUBLIC_URL: baseURL,
-  LA_OLLAMA_URL: '',
-  LA_OLLAMA_MODEL: '',
+  ...localModel,
   LA_E2E_BASE_URL: baseURL,
   LA_E2E_OWNER_PASSWORD: ownerPassword,
   LA_E2E_DATA_DIR: dataDir,

@@ -2,6 +2,7 @@ import {
   STORAGE_KEY, initialState, normalizeServerURL, permissionPattern, normalizeAccount,
   sourceContext, assertSource, queueObservations, publicState, byteLength, MAX_STATE_BYTES,
 } from './core.js';
+import {visibleCollectionName} from './page-context.js';
 
 const RETRY_ALARM = 'little-archive-retry';
 const LIVE_STATES = new Set(['running','paused','finishing']);
@@ -158,7 +159,16 @@ async function handlePopup(message) {
     case 'context': {
       try {
         const tab = await activeTab();
-        return {ok:true, context:{...sourceContext(tab.url), tabId:tab.id}};
+        const context=sourceContext(tab.url);
+        let collectionName=null;
+        if (context.isCollection) {
+          try {
+            const results=await chrome.scripting.executeScript({target:{tabId:tab.id},func:visibleCollectionName,args:[context.url]});
+            const candidate=results[0]?.result;
+            if (typeof candidate==='string' && candidate.trim() && candidate.length<=200) collectionName=candidate;
+          } catch { /* Manual exact-name entry remains available on unsupported layouts. */ }
+        }
+        return {ok:true, context:{...context, collectionName, tabId:tab.id}};
       } catch (error) { return {ok:false, error:error.message}; }
     }
     case 'configure': return serial(async () => {
@@ -171,6 +181,9 @@ async function handlePopup(message) {
       if (token.length < 16 || token.length > 512 || /\s/.test(token)) throw new Error('Paste an import token generated in your app settings.');
       if (state.run && LIVE_STATES.has(state.run.status) && state.config?.server !== server) {
         throw new Error('Finish or forget the current scan before switching servers.');
+      }
+      if (state.run && LIVE_STATES.has(state.run.status) && state.config?.token !== token) {
+        throw new Error('Finish or forget the current scan before changing its import token. Each scan is bound to the token that created it.');
       }
       const expected = state.run && LIVE_STATES.has(state.run.status) ? state.run.instanceId : null;
       const info = await verifyInstance({server,token}, expected);

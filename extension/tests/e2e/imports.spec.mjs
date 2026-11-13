@@ -4,21 +4,23 @@ import {instagramPage,instagramVirtualizedPage,tiktokPage} from './source-pages.
 test('Instagram image grid imports through the real popup and refreshes without duplicating saves',async ({rig}) => {
   const collection='Weekend ideas · أفكار 🌿';
   const url=`https://www.instagram.com/${rig.account}/saved/synthetic-collection/1234567890123456/`;
-  const source=await rig.source(url,instagramPage());
+  const source=await rig.source(url,instagramPage({heading:collection,creator:'synthetic.creator'}));
   expect(await source.locator('main[role="main"] a img[alt]').count()).toBe(21);
   expect(await source.locator('figcaption').count()).toBe(0);
   let popup=await rig.pair(source);
-  await rig.start(popup,collection);
+  expect(await popup.value('collection')).toBe(collection);
+  await rig.start(popup);
   await rig.waitCompleted(popup);
 
   const original=await rig.items();
   expect(original).toHaveLength(21);
   for (const item of original) {
     expect(item.platform).toBe('instagram');
+    expect(item.creator).toBe('@synthetic.creator');
     expect(item.caption).toBe('');
     expect(item.evidence.some(entry => entry.kind==='thumbnail_alt' && entry.text.startsWith('Synthetic saved image '))).toBe(true);
     expect(item.collections.map(entry => ({name:entry.name,kind:entry.kind}))).toEqual([{name:collection,kind:'source'}]);
-    expect(item.url).not.toContain('?');
+    expect(item.url).toMatch(/^https:\/\/www\.instagram\.com\/(p|reel)\/CI_SYNTHETIC_\d{5}\/$/);
   }
   expect((await rig.imports())[0]).toMatchObject({created:21,updated:0,coverage:'enumeration_exhausted'});
   const first=original[0];
@@ -27,7 +29,8 @@ test('Instagram image grid imports through the real popup and refreshes without 
   await rig.closePopup();
   await source.reload();
   popup=await rig.openPopup(source);
-  await rig.start(popup,collection);
+  expect(await popup.value('collection')).toBe(collection);
+  await rig.start(popup);
   await expect.poll(async () => (await rig.imports()).length).toBe(2);
   await rig.waitCompleted(popup);
   const refreshed=await rig.items();
@@ -82,10 +85,11 @@ test('All posts followed by individual collections preserves overlapping preset 
     await rig.closePopup();
     await source.close();
     source=await rig.source(
-      `https://www.instagram.com/${rig.account}/saved/${slug}/${id}/`,instagramPage({count:2,startIndex}),
+      `https://www.instagram.com/${rig.account}/saved/${slug}/${id}/`,instagramPage({count:2,startIndex,heading:name,creator:'synthetic.creator'}),
     );
     popup=await rig.openPopup(source);
-    await rig.start(popup,name);
+    expect(await popup.value('collection')).toBe(name);
+    await rig.start(popup);
     await rig.waitCompleted(popup);
   }
   const items=await rig.items();
@@ -98,8 +102,22 @@ test('All posts followed by individual collections preserves overlapping preset 
   expect((await rig.imports()).reduce((sum,run)=>sum+run.updated,0)).toBe(4);
 });
 
+test('ambiguous collection headings keep the exact-name field editable and empty',async ({rig}) => {
+  const source=await rig.source(
+    `https://www.instagram.com/${rig.account}/saved/ambiguous-headings/5234567890123456/`,
+    instagramPage({count:1,heading:'First visible heading',extraHeading:'Another visible heading'}),
+  );
+  const popup=await rig.pair(source);
+  expect(await popup.value('collection')).toBe('');
+  await rig.start(popup,'The manually verified exact name 🌿');
+  await rig.waitCompleted(popup);
+  expect((await rig.items())[0].collections[0].name).toBe('The manually verified exact name 🌿');
+});
+
 test('TikTok Favorites imports video and photo identities with caption provenance',async ({rig}) => {
-  const source=await rig.source(`https://www.tiktok.com/@${rig.account}`,tiktokPage());
+  // The odd-length prefix would make a UTF-16 slice at 240 split an emoji.
+  const emojiCaption='A synthetic emojis '+'😀'.repeat(200);
+  const source=await rig.source(`https://www.tiktok.com/@${rig.account}`,tiktokPage({videoCaption:emojiCaption}));
   const popup=await rig.pair(source);
   await rig.start(popup);
   await rig.waitCompleted(popup);
@@ -111,6 +129,9 @@ test('TikTok Favorites imports video and photo identities with caption provenanc
   expect(items.every(item => item.evidence.some(entry => entry.kind==='thumbnail_alt'))).toBe(true);
   expect(items.every(item => item.evidence.some(entry => entry.kind==='caption'))).toBe(true);
   expect(items.every(item => item.collections.length===0)).toBe(true);
+  const video=items.find(item=>item.content_type==='video');
+  expect(video.caption).toBe(emojiCaption);
+  expect(video.title).toBe('A synthetic emojis '+'😀'.repeat(110));
   expect((await rig.state()).run.discovered).toBe(2);
 });
 

@@ -3,6 +3,8 @@ export const MAX_BATCH_ITEMS = 50;
 export const MAX_BATCH_BYTES = 256 * 1024;
 export const MAX_OUTBOX_BYTES = 4 * 1024 * 1024;
 export const MAX_STATE_BYTES = 8 * 1024 * 1024;
+// Keep room for durable pause/error/finalization metadata at the data limit.
+export const STATE_CONTROL_RESERVE_BYTES = 16 * 1024;
 export const STORAGE_KEY = 'littleArchiveState';
 const encoder = new TextEncoder();
 export const byteLength = value => encoder.encode(JSON.stringify(value)).byteLength;
@@ -74,9 +76,9 @@ export function canonicalPost(value, platform) {
   try { url = new URL(value); } catch { return null; }
   if (url.protocol !== 'https:' || url.username || url.password) return null;
   if (platform === 'instagram' && ['instagram.com','www.instagram.com'].includes(url.hostname)) {
-    const match = url.pathname.match(/^\/(p|reel|reels)\/([a-zA-Z0-9_-]{1,100})\/?$/);
+    const match = url.pathname.match(/^\/(?:([a-zA-Z0-9._]{1,30})\/)?(p|reel|reels)\/([a-zA-Z0-9_-]{1,100})\/?$/);
     if (!match) return null;
-    return {url:`https://www.instagram.com/${match[1] === 'p' ? 'p' : 'reel'}/${match[2]}/`, key:match[2], content_type:match[1] === 'p' ? 'post' : 'video'};
+    return {url:`https://www.instagram.com/${match[2] === 'p' ? 'p' : 'reel'}/${match[3]}/`, key:match[3], content_type:match[2] === 'p' ? 'post' : 'video', ...(match[1] ? {creator:'@'+match[1]} : {})};
   }
   if (platform === 'tiktok' && ['tiktok.com','www.tiktok.com'].includes(url.hostname)) {
     const match = url.pathname.match(/^\/@([a-zA-Z0-9._]{1,80})\/(video|photo)\/(\d{5,30})\/?$/);
@@ -86,7 +88,19 @@ export function canonicalPost(value, platform) {
   return null;
 }
 
-function text(value, limit) { return typeof value === 'string' ? value.slice(0, limit).trim() : ''; }
+function text(value, limit) {
+  if (typeof value !== 'string') return '';
+  let result='';
+  // Keep the existing UTF-16 size cap, but never split a supplementary
+  // character. Repair isolated surrogates before they reach JSON validation.
+  for (const character of value.trim()) {
+    const point=character.codePointAt(0);
+    const safe=point>=0xD800 && point<=0xDFFF ? '\uFFFD' : character;
+    if (result.length+safe.length>limit) break;
+    result+=safe;
+  }
+  return result.trim();
+}
 export function safePreview(value) {
   if (typeof value !== 'string' || value.length > 4096) return null;
   try {
@@ -107,6 +121,7 @@ export function normalizeObservation(value, platform, collection = null) {
     const clean = text(value[key], cap);
     if (clean) item[key] = clean;
   }
+  if (post.creator) item.creator=post.creator;
   const preview = safePreview(value.preview_url);
   if (preview) item.preview_url = preview;
   // Collections are supplied from the bound run, never accepted from page-supplied records.
@@ -145,8 +160,11 @@ export function queueObservations(state, records, idFactory) {
   const bodies = makeBatches(fresh, run.nextSequence, idFactory);
   const outbox = [...(state.outbox || []), ...bodies.map(body => ({body, attempts:0, nextRetryAt:0}))];
   const next = {...state, outbox, run:{...run, seen:[...seen], nextSequence:run.nextSequence + bodies.length, discovered:seen.size}};
-  if (byteLength(outbox) > MAX_OUTBOX_BYTES || byteLength(next) > MAX_STATE_BYTES) {
+  if (byteLength(outbox) > MAX_OUTBOX_BYTES) {
     throw new Error('The local import queue is full. Pause, reconnect the server, and retry pending batches before resuming.');
+  }
+  if (byteLength(next) > MAX_STATE_BYTES - STATE_CONTROL_RESERVE_BYTES) {
+    throw new Error('This scan reached its device checkpoint limit. Finish this partial scan, then start a new scan from your current source view to continue. Existing server items will be deduplicated.');
   }
   return {state:next, queued:fresh.length};
 }

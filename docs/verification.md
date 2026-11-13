@@ -46,6 +46,12 @@ python3 scripts/release_check.py
 
 The [Checks workflow](../.github/workflows/checks.yml) defines the CI commands and container smoke check. The [publishing guide](publishing.md) explains how to preview or deploy the separate synthetic demo. Test counts can change as coverage is added; use the logs for the commit you are installing.
 
+## Additional native development check
+
+On 2026-11-13, the [native harness](native-verification.md) passed locally on Linux x86_64 with Python 3.12.14 and SQLite 3.53.1. It exercised real setup overwrite protection and permissions, CLI startup, authenticated HTTP CRUD/import/search/image operations, authenticated backup, process restart, offline password reset with old-credential invalidation, and offline restore with fresh credentials. Its owned temporary processes and data were removed successfully.
+
+This run used a modified development worktree based on `85d50bf51504d047ab95fd48992d2e8589318616`; it is **not** a clean-commit CI result or a macOS result. The copied runtime source fingerprint was `cd57bc7cd770ba0fae19b585f4cbded4982e2d4b5a724a421eb0d1591bb04f61`. Candidate CI runs must separately establish Linux and both macOS architectures using the fresh-environment matrix.
+
 ## Remaining release work
 
 The [packaged-container harness](container-verification.md) now supplies reproducible hardened AMD64/ARM64 runtime, persistence, and recovery checks. Its execution results must be recorded before counting that gate as passed. The earlier container health smoke did not run this new harness.
