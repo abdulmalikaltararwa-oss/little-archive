@@ -10,11 +10,13 @@ Run one private instance on your Mac, Linux machine, or server. There is no proj
 
 **Status:** Development toward 1.0; no stable release published · **License:** MIT · **Architecture:** Python + SQLite + buildless web UI
 
-**[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Install your own instance](#quick-start-with-docker) · [Verification](docs/verification.md)
+**[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Mac setup and live acceptance](docs/mac-acceptance.md) · [Install your own instance](#quick-start-with-docker) · [Verification](docs/verification.md)
 
 The public demo uses synthetic content and temporary page memory. Your private library runs in your own instance.
 
-![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery.jpg)
+The complete automated acceptance matrix passed on [`7d24aa81`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266): authenticated browser workflows, packaged extension scenarios, native Mac/Linux recovery, both container architectures, and real local-model inference. Live account imports and the final Mac operator check remain required before a stable release. See the verification record for the exact scope and evidence.
+
+![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery-current.jpg)
 
 *The interface shown above uses synthetic demo content. Read the [verification results and limits](docs/verification.md) for the tested release scope.*
 

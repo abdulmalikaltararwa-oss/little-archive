@@ -181,6 +181,52 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  upgrade:
+    name: Upgrade, rollback, and retained-data removal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: docker/setup-buildx-action@v4
+      - name: Prepare the previous published source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/upgrade-baseline
+          git archive 85d50bf51504d047ab95fd48992d2e8589318616 | tar -x -C work/upgrade-baseline
+      - name: Build the previous revision
+        uses: docker/build-push-action@v7
+        with:
+          context: work/upgrade-baseline
+          tags: little-archive:upgrade-previous
+          labels: org.opencontainers.image.revision=85d50bf51504d047ab95fd48992d2e8589318616
+          load: true
+          push: false
+      - name: Build the candidate revision
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: little-archive:upgrade-candidate
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          load: true
+          push: false
+      - name: Verify an existing library through update, removal, and rollback
+        run: python scripts/upgrade_smoke.py --previous-image little-archive:upgrade-previous --candidate-image little-archive:upgrade-candidate --previous-ref 85d50bf51504d047ab95fd48992d2e8589318616 --candidate-ref ${{ github.sha }} --report work/upgrade-verification.json
+      - name: Retain the credential-free lifecycle report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: upgrade-${{ github.sha }}
+          path: work/upgrade-verification.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   local-model:
     name: Real local model
     runs-on: ubuntu-24.04

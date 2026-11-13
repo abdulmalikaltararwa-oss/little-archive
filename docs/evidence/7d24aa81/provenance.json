@@ -1,0 +1,82 @@
+{
+  "format": "little-archive-verification-provenance",
+  "candidate_commit": "7d24aa81cf8a5940397bd61985ef71a578962d76",
+  "workflow_name": "Release validation",
+  "workflow_run_id": 43395263266,
+  "workflow_run_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266",
+  "workflow_conclusion": "success",
+  "observed_date_utc": "2026-11-13",
+  "report_files": [
+    {
+      "file": "container-amd64.json",
+      "sha256": "b6b68002c45e93ecedc844f559a40170f1936c3fe8dfa92203882c7f063da231",
+      "job_id": 131784528885,
+      "job_name": "Container (amd64)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528885",
+      "runner_label": "ubuntu-24.04",
+      "artifact_id": 14022532098,
+      "artifact_name": "container-amd64-7d24aa81cf8a5940397bd61985ef71a578962d76",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "image_id": "sha256:982bd4309f1149b0cf42645286b5bc7bc3dd953d7fe1871a5b44b20c5cfcfa07",
+      "image_platform": "linux/amd64",
+      "source_binding": "GitHub workflow/artifact head SHA, job checkout log, and Buildx vcs:revision; source SHA is not present inside the container report."
+    },
+    {
+      "file": "container-arm64.json",
+      "sha256": "009fdf1583ec3cbad9ab19fb60f3302b94819fbbf9dc51a8241196c7b273b91e",
+      "job_id": 131784528815,
+      "job_name": "Container (arm64)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528815",
+      "runner_label": "ubuntu-24.04-arm",
+      "artifact_id": 14022104723,
+      "artifact_name": "container-arm64-7d24aa81cf8a5940397bd61985ef71a578962d76",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "image_id": "sha256:aac511e558a9cd3bd718cfed890d570f3cad9cf678ed81f4759575513bbc67c5",
+      "image_platform": "linux/arm64",
+      "source_binding": "GitHub workflow/artifact head SHA, job checkout log, and Buildx vcs:revision; source SHA is not present inside the container report."
+    },
+    {
+      "file": "native-ubuntu-24.04.json",
+      "sha256": "b993343e8b4dbb4f2ae54d1d6da6754c72ce7c5fd56faf93f9ebedbb174d4383",
+      "job_id": 131784528874,
+      "job_name": "Native install (ubuntu-24.04)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528874",
+      "runner_label": "ubuntu-24.04",
+      "artifact_id": 14023015565,
+      "artifact_name": "native-ubuntu-24.04-7d24aa81cf8a5940397bd61985ef71a578962d76",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "source_binding": "Report source_commit and clean-worktree flag, corroborated by GitHub workflow/artifact head SHA and job checkout log."
+    },
+    {
+      "file": "native-macos-arm64.json",
+      "sha256": "bb4ab45da29d1071383cfd4f0956034a9d3e8ec905ef09895bbeaf7b649d834e",
+      "job_id": 131784528860,
+      "job_name": "Native install (macos-15)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528860",
+      "runner_label": "macos-15",
+      "artifact_id": 14021853771,
+      "artifact_name": "native-macos-15-7d24aa81cf8a5940397bd61985ef71a578962d76",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "source_binding": "Report source_commit and clean-worktree flag, corroborated by GitHub workflow/artifact head SHA and job checkout log."
+    },
+    {
+      "file": "native-macos-intel.json",
+      "sha256": "9e1545d47d0e8abd298a06aaf27da5edc6ce2f26ae028024bfeb47a4aea8061a",
+      "job_id": 131784528936,
+      "job_name": "Native install (macos-15-intel)",
+      "job_url": "https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528936",
+      "runner_label": "macos-15-intel",
+      "artifact_id": 14023075430,
+      "artifact_name": "native-macos-15-intel-7d24aa81cf8a5940397bd61985ef71a578962d76",
+      "checks_passed": 7,
+      "cleanup": "passed",
+      "source_binding": "Report source_commit and clean-worktree flag, corroborated by GitHub workflow/artifact head SHA and job checkout log."
+    }
+  ],
+  "scope": "Five installation/recovery jobs; see ../../verification.md for the other six passing jobs and direct-acceptance limits.",
+  "hash_definition": "SHA-256 of each retained JSON file, not the enclosing downloaded GitHub artifact ZIP."
+}

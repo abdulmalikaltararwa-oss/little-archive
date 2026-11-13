@@ -1,59 +1,71 @@
 # Development verification toward 1.0
 
-This records checks observed during development and the boundaries they establish. The current internal version is `0.1.0`; no stable release has been published. The [1.0 release gates](release-gates.md) define the remaining acceptance requirements. This is a verification record, not an independent security audit or a guarantee that every platform, model, or installation has been tested.
+**All 11 jobs in the full acceptance workflow passed on 2026-11-13** for candidate [`7d24aa81cf8a5940397bd61985ef71a578962d76`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/7d24aa81cf8a5940397bd61985ef71a578962d76). The result is [Release validation run 43395263266](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266). The five installation and recovery reports are retained with their [provenance index](evidence/7d24aa81/README.md).
 
-The successful GitHub **Checks** run is tied to commit [`85d50bf51504d047ab95fd48992d2e8589318616`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/85d50bf51504d047ab95fd48992d2e8589318616). Its **test** and **container** jobs passed: [view the run and logs](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43388516184). Later source changes need their own verification; this result applies to that commit.
+The candidate's internal version is `0.1.0`; no stable release has been published. The automated results below do not complete the remaining live-account, browser permission-consent, and Mac operator acceptance checks in the [1.0 release gates](release-gates.md). This is a record of observed behavior, not an independent security audit or a claim that every platform, model, installation, or library size has been tested.
 
-## Scope matrix
+## Passing candidate matrix
 
-| Area | Method | Observed result | Boundary |
-| --- | --- | --- | --- |
-| Python behavior | Local `unittest` suite | **67 tests passed.** | Automated tests cover selected parser, classifier, API, storage, and backup behaviors. Passing tests do not establish behavior for every external export or deployment. |
-| Frontend and extension logic | Local Node test suites | **33 tests passed in total.** | These exercise fixtures and isolated logic; they do not establish live platform compatibility. |
-| GitHub CI | The linked Checks run | **test** and **container** jobs passed. | The recorded run applies to the linked commit, not all future changes. |
-| Container packaging | GitHub runner built the Docker image and started a container | Build and container health smoke check passed. | This checks packaging, startup, and the health endpoint on the CI runner. It is not a full browser or production deployment test. |
-| Shared web interface | Browser interaction with the actual application UI and an isolated synthetic adapter | Search, editing, favorites, JSON download, dark theme, and reset were checked as detailed below. | The adapter uses page memory; no authenticated application server was involved in this browser session. |
-| Authentication in a browser | Full browser session through the real authenticated backend | **Not verified end to end in a browser.** | Automated API coverage is separate from a browser login, session, CSRF, and persistence flow. |
-| Optional Ollama integration | Mocks and a local test server | Protocol handling and validation were exercised. | **No real Ollama model inference was verified.** Model quality, runtime, and resource use remain unmeasured. |
-| Instagram and TikTok capture | Synthetic extension fixtures and logic tests | Automated tests passed. | **No live Instagram or TikTok capture was verified.** The importer remains experimental, with no complete-account coverage claim. |
-| macOS Docker installation | Native Mac installation and launch | **Not run on macOS.** | The Linux CI container result does not establish a tested Docker Desktop experience on a Mac. |
+Every row applies to the candidate and workflow run linked above. Test cases, model inferences, and harness checks are different units and are reported separately.
 
-## Browser observations
+| Area | Observed result | Evidence and scope |
+| --- | --- | --- |
+| Python regression suite | **78 tests passed.** | [Regression job](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784529212). Parser, classifier, authenticated API, storage, import integrity, queue, and recovery checks use isolated synthetic data. |
+| JavaScript regression suites | **35 extension + 17 web + 3 browser-harness infrastructure tests passed.** | The same regression job records 52 extension/web tests and a separate 3-test infrastructure suite. These are distinct from the browser cases below. |
+| Authenticated web application | **27 browser cases passed: 9 each in Chromium, Firefox, and WebKit.** | [Chromium](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528955), [Firefox](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528841), [WebKit](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528788). These browsers used the real application server, owner authentication, SQLite, and synthetic records. |
+| Packaged Chrome extension | **9 cases passed using the actual Manifest V3 extension and server.** | [Extension job](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528491). Source pages are controlled synthetic fixtures, not live Instagram or TikTok accounts. The native optional-host permission bubble remains a manual acceptance check. |
+| Real local model | **Worker smoke passed with 2 real inferences; 1 additional real-model browser case passed.** | [Model job](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528856), using `ollama/ollama:0.40.16` and `qwen3:0.6b` on a disposable CPU service. The separate browser case queued two synthetic records and checked review, acceptance, dismissal, persistence, and unchanged-input deduplication. |
+| Packaged Linux containers | **AMD64 and native ARM64 jobs passed, each with 7 lifecycle checks plus cleanup.** | [Container evidence](container-verification.md#observed-candidate-result). Both architectures passed actual non-root, capability, privilege, read-only filesystem, authentication, persistence, backup, and fresh-volume restore assertions. |
+| Native installation and recovery | **Ubuntu, Apple Silicon macOS, and Intel macOS jobs passed, each with 7 checks plus cleanup.** | [Native evidence](native-verification.md#observed-candidate-result). Each used a fresh Python 3.12 environment, a clean copy of the candidate application, real CLI processes, and real HTTP requests. |
+| Source and demo packaging | **Demo build and release-source check passed.** | The regression job built the synthetic demo and passed the source check for 17 required files. This is a check of the development candidate; it is not a published stable-version package. |
 
-The [public synthetic demo](https://abdulmalikaltararwa-oss.github.io/little-archive/) was deployed successfully by [Pages run 43388893222](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43388893222). Its gallery and post inspector were opened and checked at the published URL. The source and public demo contain synthetic examples only.
+## What the browser and extension results establish
 
-The browser checks used the shared frontend with the standalone synthetic demo adapter. This is the same interface used by the application, with backend calls handled by an isolated in-memory store. The session established the following behavior:
+The core browser cases cover owner sign-in and sign-out, session-cookie attributes, CSRF rejection, session revocation, editing and reload persistence, search and filters, topics, favorites, progress, collections, selected-item bulk operations, archive/restore/delete, JSON import/export, rejected invalid imports, local previews, authenticated backup downloads, narrow-screen navigation, keyboard search, and remembered appearance. The Organize case imported **205 synthetic saves**, displayed the first 60, and applied topics and a collection to all 205 matches. This establishes operation beyond the currently visible gallery page, not a large-library throughput benchmark. The test sources and setup are documented in [browser testing](../tests/e2e/README.md).
 
-- Searching for `lemon` returned one matching result.
-- Editing a note and setting the item to **Done** saved those changes in the active demo state.
-- Favoriting an item increased the favorites count from **4 to 5**.
-- A downloaded JSON export contained **15 items**. Inspection confirmed that the edited note, status, and favorite value were retained in the exported data.
-- Dark theme and the demo reset interaction were checked.
+The extension cases exercise the real toolbar popup, source-tab injection, service worker, durable extension storage, import-only token, and server requests. They cover an Instagram image grid, incremental ordered batches, overlapping source collections, ambiguous collection headings, TikTok video/photo identity, a login prompt, rejection of a TikTok Posts view, pause/resume with scope protection, and recovery after a committed batch's response is lost and the browser restarts. The [extension test boundary](../extension/tests/e2e/README.md) is explicit: fixture pages replace the source services, and Chromium's settings API pregrants the exact loopback server host in the fresh test profile. The production permission-request flow is unchanged, but the browser's native consent bubble was not operated by this suite.
 
-The successful export demonstrates that the checked demo edits reached its export path. It does not establish database persistence or an authenticated browser-to-server round trip. Demo edits intentionally reset when the page is reloaded. Public screenshots, including the [gallery image](assets/gallery.jpg), contain synthetic content.
+The real-model smoke confirms worker completion, structured suggestions, evidence provenance, review before changes, preservation of manual annotations, acceptance, stale-suggestion rejection, and dismissal. The AI browser case separately confirms these review actions through the interface. Whole-library/filter queue selection, repeated-request deduplication, cancellation, retry, and discarded late results have regression coverage; the real-model browser case is not a cancellation stress test. No video decoding or frame-by-frame understanding was tested or claimed, and one small text model does not establish the quality or speed of other models.
 
-## Reproduce the automated checks
+## Remaining direct acceptance
 
-After following the development setup in the [README](../README.md), run:
+Follow [Mac setup and final live acceptance](mac-acceptance.md) to connect the chosen private installation, real browser permissions, and known source-account views. The following limits remain distinct from the passing automated matrix.
+
+| Area | Current boundary |
+| --- | --- |
+| Live Instagram capture | Read-only inspection observed real Saved-grid post identifiers, image alternative text, and creator-qualified post/Reel paths. The candidate has automated coverage for those path shapes. A complete real-account extension capture, transmission, server ingestion, and comparison with a known source inventory has **not** been observed. |
+| Live TikTok capture | The available TikTok session was signed out. The nine extension cases include synthetic TikTok source views, but no completed live-account capture-to-server result is recorded. |
+| Native browser permission consent | Manually grant the extension's optional server-host permission in a normal installed browser and observe its response. The CI suite's exact-host pregrant does not complete this check. |
+| Mac Docker Desktop | Native macOS Python and native Linux ARM64 containers passed independently. Docker Desktop installation, GUI startup, filesystem sharing, and the documented operator flow on a physical Mac remain unverified. |
+| Operator lifecycle | The scripted native/container recovery checks passed. A human rehearsal of the documented update/rollback and retain-data removal procedures, and any claimed desktop sleep/resume behavior, remains a separate scope. |
+
+The latest manual browser session did not complete these live checks: TikTok was signed out, and the local browser connection later stalled. A DOM inspection or synthetic fixture pass must not be promoted into a real-account import result. Record completed direct checks against an identified candidate before marking the relevant [release gate](release-gates.md) accepted.
+
+## Reproduce the checks
+
+After the development setup in the [README](../README.md), the local regression commands are:
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
 node --test extension/tests/*.test.mjs
 node --test web/*.test.mjs
+npm run test:e2e:infra
 python3 scripts/build_demo.py
 python3 scripts/release_check.py
 ```
 
-The [Checks workflow](../.github/workflows/checks.yml) defines the CI commands and container smoke check. The [publishing guide](publishing.md) explains how to preview or deploy the separate synthetic demo. Test counts can change as coverage is added; use the logs for the commit you are installing.
+Use the [browser test guide](../tests/e2e/README.md) and [packaged-extension guide](../extension/tests/e2e/README.md) for browser/dependency setup. The [container guide](container-verification.md) and [native guide](native-verification.md) give the installation/recovery commands. Real inference requires a running, configured Ollama service with the selected model available.
 
-## Additional native development check
+The [Release validation workflow](../.github/workflows/release-validation.yml) runs the full matrix on relevant source pushes to `main` and can also be dispatched manually. The smaller [Checks workflow](../.github/workflows/checks.yml) remains a separate fast regression/startup check. Use the logs and retained evidence for the exact revision you are installing; later runtime changes need fresh acceptance results.
 
-On 2026-11-13, the [native harness](native-verification.md) passed locally on Linux x86_64 with Python 3.12.14 and SQLite 3.53.1. It exercised real setup overwrite protection and permissions, CLI startup, authenticated HTTP CRUD/import/search/image operations, authenticated backup, process restart, offline password reset with old-credential invalidation, and offline restore with fresh credentials. Its owned temporary processes and data were removed successfully.
+## Earlier development evidence
 
-This run used a modified development worktree based on `85d50bf51504d047ab95fd48992d2e8589318616`; it is **not** a clean-commit CI result or a macOS result. The copied runtime source fingerprint was `cd57bc7cd770ba0fae19b585f4cbded4982e2d4b5a724a421eb0d1591bb04f61`. Candidate CI runs must separately establish Linux and both macOS architectures using the fresh-environment matrix.
+An earlier [Checks run 43388516184](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43388516184) at `85d50bf51504d047ab95fd48992d2e8589318616` passed the then-current 67 Python and 33 Node tests plus a container health smoke. Those counts and the earlier absence of authenticated browser/real-model checks are historical, superseded by the current matrix above. An initial ARM64 emulation attempt later failed a hardening assertion; the current native ARM64 job passed the unchanged strict assertions.
 
-## Remaining release work
+The first [public synthetic demo](https://abdulmalikaltararwa-oss.github.io/little-archive/) deployment was [Pages run 43388893222](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43388893222). Earlier manual demo checks covered search, notes, Done status, favorites, JSON export, dark theme, and reset using its in-memory adapter. Those observations are separate from the authenticated backend cases now recorded above.
 
-The [packaged-container harness](container-verification.md) now supplies reproducible hardened AMD64/ARM64 runtime, persistence, and recovery checks. Its execution results must be recorded before counting that gate as passed. The earlier container health smoke did not run this new harness.
+## Current public demo
 
-The other required acceptance checks include an authenticated browser session against a real instance, installation on a Mac, actual model inference through a configured Ollama service, and deliberate live extension captures on both supported source platforms. A read-only Instagram DOM inspection established 21 loaded post anchors with image alternative text and no `figcaption` elements; it did not exercise the extension-to-server import path. Record each completed check against its exact candidate and environment in the [release gates](release-gates.md).
+[Pages run 43394662571](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43394662571) successfully deployed the demo from `c99c4bf04b458f680050e01a6949e9398103a34f`. Its UI/runtime files are unchanged through the accepted automated candidate `7d24aa81cf8a5940397bd61985ef71a578962d76`. The live URL was reloaded and its gallery, detail inspector, and **Organize library** dialog were checked; the dialog showed a scope of **15 synthetic saves**.
+
+The current [gallery](assets/gallery-current.jpg), [Organize dialog](assets/organize-current.jpg), and [detail inspector](assets/detail-current.jpg) screenshots show synthetic records only. No private account content was imported into or published with the demo. Demo changes intentionally reset on reload; it remains a public interface preview, separate from a private authenticated instance.

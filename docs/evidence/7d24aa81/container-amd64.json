@@ -1,0 +1,56 @@
+{
+  "format": "little-archive-container-verification",
+  "started_at": "2026-11-13T08:42:26+00:00",
+  "status": "passed",
+  "image": "little-archive:ci-amd64",
+  "requested_platform": "linux/amd64",
+  "checks": [
+    {
+      "name": "hardened_packaged_image_start",
+      "status": "passed",
+      "platform": "linux/amd64"
+    },
+    {
+      "name": "owner_login_and_private_library_boundary",
+      "status": "passed"
+    },
+    {
+      "name": "create_edit_import_deduplicate_search_and_local_asset",
+      "status": "passed",
+      "items": 3,
+      "collections": 4
+    },
+    {
+      "name": "consistent_backup_with_assets_and_without_authentication",
+      "status": "passed"
+    },
+    {
+      "name": "restart_preserves_library_asset_session_and_identity",
+      "status": "passed"
+    },
+    {
+      "name": "offline_restore_fresh_volume_preserves_content_and_assets",
+      "status": "passed"
+    },
+    {
+      "name": "restore_requires_fresh_password_sessions_and_extension_tokens",
+      "status": "passed"
+    }
+  ],
+  "image_id": "sha256:982bd4309f1149b0cf42645286b5bc7bc3dd953d7fe1871a5b44b20c5cfcfa07",
+  "image_platform": "linux/amd64",
+  "application_version": "0.1.0",
+  "runtime": {
+    "uid": 10001,
+    "gid": 10001,
+    "machine": "x86_64",
+    "capabilities": 0,
+    "no_new_privileges": 1,
+    "root_read_only": true
+  },
+  "cleanup": {
+    "status": "passed",
+    "errors": []
+  },
+  "finished_at": "2026-11-13T08:42:32+00:00"
+}

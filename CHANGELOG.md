@@ -2,7 +2,7 @@
 
 ## Unreleased — Development toward 1.0
 
-The current source is a development build. A stable release will be published after the release gates are verified.
+The implementation has passed the complete automated acceptance matrix at commit `7d24aa81cf8a5940397bd61985ef71a578962d76`. A stable release remains held for live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
 
 ### Included
 
@@ -14,6 +14,24 @@ The current source is a development build. A stable release will be published af
 - Optional Ollama text suggestions with an explicit review flow.
 - Local raster thumbnail uploads, optional browser-loaded remote previews, and backup/export tools.
 - Docker and native Python setup, tests, contributor guidance, and privacy documentation.
+- Whole-library and filtered organization across unloaded gallery pages, durable AI job counts, cancellation, retry, and sequential review.
+- Native installation and offline recovery checks on Apple Silicon Mac, Intel Mac, and Linux; hardened container checks on native AMD64 and ARM64 runners.
+- Authenticated Chromium, Firefox, and WebKit workflows; real packaged Chrome-extension workflows; real Ollama worker and browser acceptance.
+
+### Reliability fixes verified before release
+
+- Preserve stable Instagram collection identities and accept observed creator-qualified post links.
+- Prefill an unambiguous visible collection name, with editable manual naming when the source view is ambiguous.
+- Keep emoji-heavy text valid at field boundaries and retain annotation intent through portable JSON roundtrips.
+- Improve observed media types without downgrading known video or image records on a generic refresh.
+- Deduplicate topics before applying the unique-topic limit.
+- Resume past already imported screens, reserve room for durable scanner status, and keep collection names from being mistaken for end markers.
+- Verify idempotent retry after a server commit succeeds but its acknowledgement is lost, including a browser restart.
+
+### Continuous verification
+
+- The full release acceptance matrix runs on changes to application, extension, test, packaging, or workflow source on `main`, and remains available manually.
+- Public preview deployment is separate from a stable product release and contains synthetic records only.
 
 ### Known limitations
 

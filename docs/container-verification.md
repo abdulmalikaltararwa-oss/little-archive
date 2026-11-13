@@ -2,6 +2,19 @@
 
 The [container harness](../scripts/container_smoke.py) exercises a built Little Archive image with real HTTP requests and the image's restore CLI. It is a release gate for packaging and recovery. Merely adding the harness or building an image does not mean the gate has passed; retain the result for the exact candidate commit and image ID.
 
+## Observed candidate result
+
+Both container jobs passed on 2026-11-13 in [Release validation run 43395263266](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266), for candidate [`7d24aa81cf8a5940397bd61985ef71a578962d76`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/7d24aa81cf8a5940397bd61985ef71a578962d76). Each report records **7 lifecycle checks passed and cleanup passed**.
+
+| Image platform | Native runner / observed runtime | Evidence |
+| --- | --- | --- |
+| `linux/amd64` | `ubuntu-24.04` / `x86_64` | [Job 131784528885](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528885), [retained JSON](evidence/7d24aa81/container-amd64.json) |
+| `linux/arm64` | `ubuntu-24.04-arm` / `aarch64` | [Job 131784528815](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43395263266/job/131784528815), [retained JSON](evidence/7d24aa81/container-arm64.json) |
+
+The job logs show the strict runtime probe passing on both the original and restored containers: UID/GID `10001`, effective capabilities `0`, `NoNewPrivs` `1`, and read-only `/app` filesystem. Docker configuration checks also required read-only root, all capabilities dropped, no-new-privileges, and `/tmp` tmpfs. Actual owner authentication, content/asset persistence, backup integrity/authentication exclusion, offline restore, and fresh-credential enforcement then passed.
+
+The reports retain full image IDs and platforms. They do **not** contain a source-commit field: their association with this candidate is established by the workflow/artifact metadata, checkout logs, and Buildx revision metadata. The [provenance index](evidence/7d24aa81/README.md) records those job/artifact associations and retained-file hashes rather than inferring a commit from a mutable image tag.
+
 ## What the harness checks
 
 | Area | Check |
@@ -40,18 +53,18 @@ docker build --platform linux/arm64 --tag little-archive:verification-arm64 .
 python3 scripts/container_smoke.py --image little-archive:verification-arm64 --platform linux/arm64 --startup-timeout 180 --report work/container-verification-arm64.json
 ```
 
-The release gate runs the ARM64 image on a native ARM64 Linux runner. QEMU on an x86 runner remains useful for optional cross-build checks, but does not replace native ARM runtime acceptance. A QEMU attempt built the ARM64 image and started the server, then failed a runtime-hardening probe; that result must not be represented as a passing ARM gate or bypassed by weakening the assertion.
+The passing candidate above ran ARM64 on a native ARM64 Linux runner. QEMU on an x86 runner remains useful for optional cross-build checks, but does not replace native ARM runtime acceptance. An earlier QEMU attempt built the ARM64 image and started the server, then failed a runtime-hardening probe. That is historical failed evidence; the current native pass used the unchanged strict assertions.
 
 A native Linux ARM64 pass still does not establish that a physical Mac, Docker Desktop installation, browser, filesystem sharing, or sleep/resume path has been tested. Record a separate Docker Desktop acceptance result before claiming that installation path was tested on a Mac.
 
 ## CI job configuration
 
-Use one architecture per native runner so each image can be loaded into that runner's ordinary local Docker image store and its kernel hardening can be checked directly. The [manual Release validation workflow](../.github/workflows/release-validation.yml) includes both architectures; the [Checks workflow](../.github/workflows/checks.yml) covers routine regressions and the original startup smoke check. The following is the equivalent focused container job recipe.
+Use one architecture per native runner so each image can be loaded into that runner's ordinary local Docker image store and its kernel hardening can be checked directly. The [Release validation workflow](../.github/workflows/release-validation.yml) includes both architectures, runs on relevant source pushes to `main`, and can also be dispatched manually. The [Checks workflow](../.github/workflows/checks.yml) covers routine regressions and the original startup smoke check. The following is the equivalent focused container job recipe.
 
 ```yaml
 container:
   runs-on: ${{ matrix.runner }}
-  timeout-minutes: 35
+  timeout-minutes: 25
   permissions:
     contents: read
   strategy:
@@ -88,4 +101,4 @@ For an additional cross-build experiment, the official [QEMU v4 action](https://
 
 ## Limits
 
-These checks use actual packaged code, HTTP, SQLite, local assets, and restore. They use a tiny synthetic library, so they do not measure large-library throughput, long-running disk pressure, real social-page capture, model quality, or browser usability. Run the other [release gates](release-gates.md) as well, and keep their evidence separate.
+These checks use actual packaged code, HTTP, SQLite, local assets, and restore. They use a tiny synthetic library, so they do not measure large-library throughput or long-running disk pressure. They are separate from the passing browser, synthetic-source MV3, and real-model checks in the [verification matrix](verification.md). Live social-page capture, the browser's native extension permission prompt, physical-Mac Docker Desktop setup, and operator update/removal rehearsal remain pending direct [release gates](release-gates.md).
