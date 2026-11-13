@@ -4,16 +4,16 @@ The [container harness](../scripts/container_smoke.py) exercises a built Little 
 
 ## Observed candidate result
 
-Both container jobs passed on 2026-11-13 in [Release validation run 43397490019](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019), for candidate [`52adf28a5ac1f9a2baecf89442deb8e59577197c`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/52adf28a5ac1f9a2baecf89442deb8e59577197c). Each report records **7 lifecycle checks passed and cleanup passed**.
+Both container jobs passed on 2026-11-13 in [Release validation run 43398600381](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381), for candidate [`6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6). Each report records **7 lifecycle checks passed and cleanup passed**.
 
 | Image platform | Native runner / observed runtime | Evidence |
 | --- | --- | --- |
-| `linux/amd64` | `ubuntu-24.04` / `x86_64` | [Job 131791895405](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895405), [retained JSON](evidence/52adf28a/container-amd64.json) |
-| `linux/arm64` | `ubuntu-24.04-arm` / `aarch64` | [Job 131791895583](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895583), [retained JSON](evidence/52adf28a/container-arm64.json) |
+| `linux/amd64` | `ubuntu-24.04` / `x86_64` | [Job 131795523149](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523149), [retained JSON](evidence/6fb4c1db/container-amd64.json) |
+| `linux/arm64` | `ubuntu-24.04-arm` / `aarch64` | [Job 131795523426](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523426), [retained JSON](evidence/6fb4c1db/container-arm64.json) |
 
 The job logs show the strict runtime probe passing on both the original and restored containers: UID/GID `10001`, effective capabilities `0`, `NoNewPrivs` `1`, and read-only `/app` filesystem. Docker configuration checks also required read-only root, all capabilities dropped, no-new-privileges, and `/tmp` tmpfs. Actual owner authentication, content/asset persistence, backup integrity/authentication exclusion, offline restore, and fresh-credential enforcement then passed.
 
-The reports retain full image IDs and platforms. They do **not** contain a source-commit field: their association with this candidate is established by the workflow/artifact metadata, checkout logs, and Buildx revision metadata. The [provenance index](evidence/52adf28a/README.md) records those job/artifact associations and retained-file hashes rather than inferring a commit from a mutable image tag.
+The reports retain full image IDs and platforms. They do **not** contain a source-commit field: their association with this candidate is established by the workflow/artifact metadata, checkout logs, and Buildx revision metadata. The [provenance index](evidence/6fb4c1db/README.md) records those job/artifact associations and retained-file hashes rather than inferring a commit from a mutable image tag.
 
 The same workflow also passed the separate [Compose lifecycle gate](upgrade-verification.md#observed-candidate-result): 8 checks plus cleanup for actual old-to-candidate image replacement, retained-data removal, and previous-image rollback into a separate volume. Its source refs, runtime image IDs, and packaged-source fingerprints are recorded independently of these same-version container recovery reports.
 

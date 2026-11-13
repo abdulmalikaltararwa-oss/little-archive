@@ -1,6 +1,6 @@
 # Mac setup and final live acceptance
 
-All 12 jobs in [Release validation run 43397490019](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019) passed for commit `52adf28a5ac1f9a2baecf89442deb8e59577197c`. The matrix includes native Apple Silicon and Intel Mac installation/recovery, authenticated browser flows, real local-model inference, the packaged Chrome extension against synthetic source pages, and a real Compose update/rollback/retained-data removal rehearsal. The [verification record](verification.md) and [six retained reports](evidence/52adf28a/README.md) contain the exact scope and provenance.
+All 12 jobs in [Release validation run 43398600381](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381) passed for commit `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. The matrix includes native Apple Silicon and Intel Mac installation/recovery, authenticated browser flows, real local-model inference, the packaged Chrome extension against synthetic source pages, and a real Compose update/rollback/retained-data removal rehearsal. The [verification record](verification.md) and [six retained reports](evidence/6fb4c1db/README.md) contain the exact scope and provenance.
 
 The remaining check connects the actual source accounts, Chrome's permissions, and a private instance on the operator's Mac. A synthetic fixture cannot establish that a currently logged-in platform exposes the same saved-content layout.
 
@@ -11,7 +11,7 @@ Have Docker Desktop running and Python 3 available. From Terminal, use a **new c
 ```sh
 git clone https://github.com/abdulmalikaltararwa-oss/little-archive.git
 cd little-archive
-git switch --detach 52adf28a5ac1f9a2baecf89442deb8e59577197c
+git switch --detach 6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6
 python3 scripts/setup.py
 docker compose up -d --build
 open -a "Google Chrome" http://localhost:8787

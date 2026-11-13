@@ -2,7 +2,7 @@
 
 ## Unreleased — Development toward 1.0
 
-The implementation has passed all 12 automated acceptance jobs at commit `52adf28a5ac1f9a2baecf89442deb8e59577197c`. A stable release remains held for live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
+The implementation has passed all 12 automated acceptance jobs at commit `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. A stable release remains held for live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
 
 ### Included
 

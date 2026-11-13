@@ -1,0 +1,161 @@
+{
+  "format": "little-archive-upgrade-verification",
+  "started_at": "2026-11-13T09:07:19+00:00",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "distinct_source_revision_labels_and_image_ids",
+      "status": "passed",
+      "platform": "linux/amd64"
+    },
+    {
+      "name": "previous_compose_library_and_pre_update_backup",
+      "status": "passed",
+      "items": 2,
+      "collections": 3
+    },
+    {
+      "name": "image_replacement_preserves_project_volume_original_session_csrf_token_and_library",
+      "status": "passed"
+    },
+    {
+      "name": "candidate_accepts_new_writes_and_produces_valid_backup",
+      "status": "passed"
+    },
+    {
+      "name": "compose_down_without_volumes_retains_data_and_authentication",
+      "status": "passed"
+    },
+    {
+      "name": "previous_image_restores_pre_update_backup_to_separate_fresh_volume",
+      "status": "passed"
+    },
+    {
+      "name": "rollback_requires_fresh_password_session_token_and_instance_identity",
+      "status": "passed"
+    },
+    {
+      "name": "upgraded_original_remains_unchanged_after_separate_rollback",
+      "status": "passed"
+    }
+  ],
+  "previous_ref": "85d50bf51504d047ab95fd48992d2e8589318616",
+  "candidate_ref": "6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6",
+  "images": {
+    "previous": {
+      "source_ref": "85d50bf51504d047ab95fd48992d2e8589318616",
+      "image_id": "sha256:0f58d2f013b4ffff17756df535bfb46fe11c38da6e1edc1290f29aa9ca0db370",
+      "image_platform": "linux/amd64",
+      "packaged_source_sha256": "3d2b026b88b2a03db41b583aac4007560aa986d32d325dad30f459dbce7eb7a7"
+    },
+    "candidate": {
+      "source_ref": "6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6",
+      "image_id": "sha256:def1c73d68f4ada61132403b1ef9d472945b8bb760d9e25a805c00bbfc514a93",
+      "image_platform": "linux/amd64",
+      "packaged_source_sha256": "de090c35a9f015f8debe3311f950f873085d8aa8f40622a007047943eca89b80"
+    }
+  },
+  "deployments": {
+    "previous": {
+      "container_id": "d57dcb2dc8706462be20c18fe71ba7483162fa8e15b20f811267537eab9c697e",
+      "image_id": "sha256:0f58d2f013b4ffff17756df535bfb46fe11c38da6e1edc1290f29aa9ca0db370",
+      "compose_project": "little-archive-upgrade-24f768d7e1eb82a46dda-source",
+      "volume_name": "little-archive-upgrade-24f768d7e1eb82a46dda-source-archive-data",
+      "mount_source_sha256": "16a6c91b9a314d593e771859db8d66722dc0707f3420da4bda27d0c3ee3b24a2",
+      "application_version": "0.1.0",
+      "private_configuration_unchanged": true
+    },
+    "candidate": {
+      "container_id": "525e4e06706fed98a408d9c56112a90feea7828f0f419317478ff9bfd259491e",
+      "image_id": "sha256:def1c73d68f4ada61132403b1ef9d472945b8bb760d9e25a805c00bbfc514a93",
+      "compose_project": "little-archive-upgrade-24f768d7e1eb82a46dda-source",
+      "volume_name": "little-archive-upgrade-24f768d7e1eb82a46dda-source-archive-data",
+      "mount_source_sha256": "16a6c91b9a314d593e771859db8d66722dc0707f3420da4bda27d0c3ee3b24a2",
+      "application_version": "0.1.0",
+      "private_configuration_unchanged": true
+    },
+    "after_down_up": {
+      "container_id": "8438de8663fae0e6d2c7e3bb9e6bc9ddbf34cc59c37892e8198019dbfea5c376",
+      "image_id": "sha256:def1c73d68f4ada61132403b1ef9d472945b8bb760d9e25a805c00bbfc514a93",
+      "compose_project": "little-archive-upgrade-24f768d7e1eb82a46dda-source",
+      "volume_name": "little-archive-upgrade-24f768d7e1eb82a46dda-source-archive-data",
+      "mount_source_sha256": "16a6c91b9a314d593e771859db8d66722dc0707f3420da4bda27d0c3ee3b24a2",
+      "application_version": "0.1.0",
+      "private_configuration_unchanged": true
+    },
+    "rollback_previous": {
+      "container_id": "f594acfc8a1fb1d4f2309d8e3760b41159d5fd70a14054225f87b151ead59200",
+      "image_id": "sha256:0f58d2f013b4ffff17756df535bfb46fe11c38da6e1edc1290f29aa9ca0db370",
+      "compose_project": "little-archive-upgrade-24f768d7e1eb82a46dda-rollback",
+      "volume_name": "little-archive-upgrade-24f768d7e1eb82a46dda-rollback-data",
+      "mount_source_sha256": "ce50df62a607779a35231702f65f5d16842fb9755b807f63f96b1cc7374bc6ba",
+      "application_version": "0.1.0",
+      "private_configuration_unchanged": true
+    },
+    "original_after_rollback": {
+      "container_id": "8438de8663fae0e6d2c7e3bb9e6bc9ddbf34cc59c37892e8198019dbfea5c376",
+      "image_id": "sha256:def1c73d68f4ada61132403b1ef9d472945b8bb760d9e25a805c00bbfc514a93",
+      "compose_project": "little-archive-upgrade-24f768d7e1eb82a46dda-source",
+      "volume_name": "little-archive-upgrade-24f768d7e1eb82a46dda-source-archive-data",
+      "mount_source_sha256": "16a6c91b9a314d593e771859db8d66722dc0707f3420da4bda27d0c3ee3b24a2",
+      "application_version": "0.1.0",
+      "private_configuration_unchanged": true
+    }
+  },
+  "runtime_probes": {
+    "previous": {
+      "uid": 10001,
+      "gid": 10001,
+      "machine": "x86_64",
+      "capabilities": 0,
+      "no_new_privileges": 1,
+      "root_read_only": true
+    },
+    "candidate": {
+      "uid": 10001,
+      "gid": 10001,
+      "machine": "x86_64",
+      "capabilities": 0,
+      "no_new_privileges": 1,
+      "root_read_only": true
+    },
+    "after_down_up": {
+      "uid": 10001,
+      "gid": 10001,
+      "machine": "x86_64",
+      "capabilities": 0,
+      "no_new_privileges": 1,
+      "root_read_only": true
+    },
+    "rollback_previous": {
+      "uid": 10001,
+      "gid": 10001,
+      "machine": "x86_64",
+      "capabilities": 0,
+      "no_new_privileges": 1,
+      "root_read_only": true
+    },
+    "original_after_rollback": {
+      "uid": 10001,
+      "gid": 10001,
+      "machine": "x86_64",
+      "capabilities": 0,
+      "no_new_privileges": 1,
+      "root_read_only": true
+    }
+  },
+  "docker_engine": "28.0.4",
+  "docker_compose": "2.38.2",
+  "application_version": "0.1.0",
+  "pre_update_backup": {
+    "sha256": "4b2c5f9f4a43987e21ffd5d602668f683b8856d8eff57b40bd6744f7f1f35c62",
+    "items": 2,
+    "local_assets_verified": true,
+    "authentication_excluded": true
+  },
+  "cleanup": {
+    "status": "passed",
+    "errors": []
+  },
+  "finished_at": "2026-11-13T09:07:30+00:00"
+}

@@ -2,16 +2,16 @@
 
 The [upgrade harness](../scripts/upgrade_smoke.py) exercises a real Docker Compose lifecycle between two distinct application revisions. It complements the [container](container-verification.md) and [native](native-verification.md) recovery harnesses, which establish restart and recovery behavior within one revision.
 
-The recorded upgrade path starts at published source commit `85d50bf51504d047ab95fd48992d2e8589318616` and replaces it with candidate `52adf28a5ac1f9a2baecf89442deb8e59577197c`. Both revisions report application version `0.1.0`, so a successful health response or version string alone cannot prove an upgrade. This harness requires different full Git source refs, different inspected image IDs, and different fingerprints of the packaged `server` and `web` files. It also checks the actual running container image before accepting each phase.
+The recorded upgrade path starts at published source commit `85d50bf51504d047ab95fd48992d2e8589318616` and replaces it with candidate `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. Both revisions report application version `0.1.0`, so a successful health response or version string alone cannot prove an upgrade. This harness requires different full Git source refs, different inspected image IDs, and different fingerprints of the packaged `server` and `web` files. It also checks the actual running container image before accepting each phase.
 
 ## Observed candidate result
 
-**All 8 lifecycle checks and cleanup passed on 2026-11-13** in [job 131791895491](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895491), part of the successful 12-job [Release validation run 43397490019](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019). The real execution used Linux AMD64 on `ubuntu-24.04`, Docker Engine `28.0.4`, and Docker Compose `2.38.2`. The [retained lifecycle report](evidence/52adf28a/upgrade.json) and [provenance index](evidence/52adf28a/README.md) identify both source revisions and the exact builds.
+**All 8 lifecycle checks and cleanup passed on 2026-11-13** in [job 131795523089](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523089), part of the successful 12-job [Release validation run 43398600381](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381). The real execution used Linux AMD64 on `ubuntu-24.04`, Docker Engine `28.0.4`, and Docker Compose `2.38.2`. The [retained lifecycle report](evidence/6fb4c1db/upgrade.json) and [provenance index](evidence/6fb4c1db/README.md) identify both source revisions and the exact builds.
 
 | Build | Full source revision | Inspected image ID |
 | --- | --- | --- |
-| Previous | `85d50bf51504d047ab95fd48992d2e8589318616` | `sha256:380ec91b2b032d37d6d337ee27c50da8c244aaa682e9de9f86be0825d7381152` |
-| Candidate | `52adf28a5ac1f9a2baecf89442deb8e59577197c` | `sha256:88d146a9bcfa7bc784afd344e077ceeede40a6077b0027622e0edab075c49c71` |
+| Previous | `85d50bf51504d047ab95fd48992d2e8589318616` | `sha256:0f58d2f013b4ffff17756df535bfb46fe11c38da6e1edc1290f29aa9ca0db370` |
+| Candidate | `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6` | `sha256:def1c73d68f4ada61132403b1ef9d472945b8bb760d9e25a805c00bbfc514a93` |
 
 The packaged `server`/`web` source fingerprints also differ: previous `3d2b026b88b2a03db41b583aac4007560aa986d32d325dad30f459dbce7eb7a7`, candidate `de090c35a9f015f8debe3311f950f873085d8aa8f40622a007047943eca89b80`. The same source-project volume name and hashed actual mount source remained unchanged through replacement and `compose down`/startup. Five runtime probes passed with UID/GID `10001`, zero effective capabilities, no-new-privileges, read-only root, and `x86_64` architecture.
 

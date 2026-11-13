@@ -4,15 +4,15 @@ The [native harness](../scripts/native_smoke.py) tests the Python application's 
 
 ## Observed candidate result
 
-All three native installation jobs passed on 2026-11-13 in [Release validation run 43397490019](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019), for clean candidate [`52adf28a5ac1f9a2baecf89442deb8e59577197c`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/52adf28a5ac1f9a2baecf89442deb8e59577197c). Each report records **7 checks passed and cleanup passed**.
+All three native installation jobs passed on 2026-11-13 in [Release validation run 43398600381](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381), for clean candidate [`6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`](https://github.com/abdulmalikaltararwa-oss/little-archive/commit/6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6). Each report records **7 checks passed and cleanup passed**.
 
 | Runner target | Reported host | Python / SQLite | Evidence |
 | --- | --- | --- | --- |
-| `ubuntu-24.04` | Linux, `x86_64`; kernel `7.0.0-1017-azure` | `3.12.16` / `3.45.1` | [Job 131791895477](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895477), [retained JSON](evidence/52adf28a/native-ubuntu-24.04.json) |
-| `macos-15` | macOS `15.8.2`, `arm64`; Darwin `24.6.0` | `3.12.10` / `3.49.1` | [Job 131791895506](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895506), [retained JSON](evidence/52adf28a/native-macos-arm64.json) |
-| `macos-15-intel` | macOS `15.7.9`, `x86_64`; Darwin `24.6.0` | `3.12.10` / `3.49.1` | [Job 131791895387](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43397490019/job/131791895387), [retained JSON](evidence/52adf28a/native-macos-intel.json) |
+| `ubuntu-24.04` | Linux, `x86_64`; kernel `7.0.0-1017-azure` | `3.12.16` / `3.45.1` | [Job 131795523250](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523250), [retained JSON](evidence/6fb4c1db/native-ubuntu-24.04.json) |
+| `macos-15` | macOS `15.8.2`, `arm64`; Darwin `24.6.0` | `3.12.10` / `3.49.1` | [Job 131795523185](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523185), [retained JSON](evidence/6fb4c1db/native-macos-arm64.json) |
+| `macos-15-intel` | macOS `15.7.9`, `x86_64`; Darwin `24.6.0` | `3.12.10` / `3.49.1` | [Job 131795523192](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523192), [retained JSON](evidence/6fb4c1db/native-macos-intel.json) |
 
-The workflow created a fresh Python 3.12 virtual environment and installed the pinned application requirements on each runner. All three reports identify the candidate commit, `source_worktree_modified: false`, and copied-source SHA-256 `03cffe6cadbd5c042a7b5bc127a2341c9dbf8c15a4500787fb34c4c65a207d34`. The [provenance index](evidence/52adf28a/README.md) records original artifact IDs and retained-file hashes.
+The workflow created a fresh Python 3.12 virtual environment and installed the pinned application requirements on each runner. All three reports identify the candidate commit, `source_worktree_modified: false`, and copied-source SHA-256 `03cffe6cadbd5c042a7b5bc127a2341c9dbf8c15a4500787fb34c4c65a207d34`. The [provenance index](evidence/6fb4c1db/README.md) records original artifact IDs and retained-file hashes.
 
 These results establish the real native backend install/recovery paths described below. The [current verification matrix](verification.md) separately records passing authenticated browser and real-model suites. Docker Desktop on a physical Mac, native browser permission consent, and live Instagram/TikTok capture remain direct acceptance limits; they are not implied by a native Python pass.
 
