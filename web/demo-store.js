@@ -64,7 +64,7 @@ export function createDemoAPI(fixtures, { clock = () => new Date().toISOString()
       items.set(id, {
         id, ...identity, source_key: identity.key, source_account: 'demo', title: fixture.title,
         creator: fixture.creator, caption: fixture.caption, summary: fixture.summary, notes: fixture.notes,
-        content_type: fixture.content_type, preview_url: null, thumbnail_url: null,
+        content_type: fixture.content_type, preview_url: null, thumbnail_url: fixture.cover ? new URL(`./demo-media/${fixture.cover}`, import.meta.url).href : null,
         tags: [...fixture.tags], collections: fixture.collections.map(c => clone(resolveCollection(c.name))),
         favorite: fixture.favorite, status: fixture.status, needs_review: fixture.needs_review,
         saved_at: fixture.saved_at, created_at: timestamp, updated_at: timestamp, last_seen_at: timestamp,
