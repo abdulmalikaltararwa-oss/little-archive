@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { safeURL, parseTags, buildItemPatch, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue } from './utils.js';
+import { safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue } from './utils.js';
 
 test('untrusted links reject executable protocols and embedded credentials', () => {
   assert.equal(safeURL('javascript:alert(1)'), null);
@@ -37,6 +37,35 @@ test('filter query preserves combined constraints and omits empty fields', () =>
   assert.equal(query.get('offset'), '60');
   assert.equal(query.has('needs_review'), false);
   assert.equal(query.has('collection_id'), false);
+});
+
+test('ordinary annotation updates retain loaded pages and a Rediscover sample', () => {
+  const before = { title: 'An idea', notes: '', tags: ['design'], status: 'inbox', favorite: false, needs_review: true };
+  for (const sort of ['recent', 'oldest', 'random']) {
+    assert.equal(itemChangeAffectsView(before, { ...before, title: 'A named idea', notes: 'Try this', favorite: true, status: 'done', needs_review: false }, { sort }), false, sort);
+  }
+  assert.equal(itemChangeAffectsView(before, { ...before, favorite: true }, { q: 'idea', sort: 'random' }), false);
+  assert.equal(itemChangeAffectsView(before, { ...before, thumbnail_url: '/assets/new.png' }, { q: 'idea', sort: 'title' }), false);
+});
+
+test('edits affecting membership or title ordering require authoritative results', () => {
+  const before = { title: 'An idea', notes: '', tags: ['design', 'weekend'], status: 'inbox', favorite: true, needs_review: true, collections: [{ id: 'saved', kind: 'local' }] };
+  assert.equal(itemChangeAffectsView(before, { ...before, favorite: false }, { favorite: true }), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, needs_review: false }, { needs_review: true }), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, title: 'Zebra' }, { sort: 'title' }), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, status: 'archived' }, {}), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, status: 'done' }, { status: 'inbox' }), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, tags: ['weekend'] }, { tag: 'design' }), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, tags: ['design'] }, { tag: 'design' }), false);
+  assert.equal(itemChangeAffectsView(before, { ...before, collections: [] }, { collection_id: 'saved' }), true);
+  assert.equal(itemChangeAffectsView(before, { ...before, collections: [...before.collections, { id: 'other', kind: 'local' }] }, { collection_id: 'saved' }), false);
+});
+
+test('search changes defer to the server rather than approximating FTS in the UI', () => {
+  const before = { title: 'أفكار', notes: 'A fresh start', tags: ['design'], summary: 'A saved idea' };
+  for (const [field, value] of Object.entries({ title: 'Another title', notes: '', summary: '', tags: [] })) {
+    assert.equal(itemChangeAffectsView(before, { ...before, [field]: value }, { q: 'أفكار start', sort: 'recent' }), true, field);
+  }
 });
 
 test('unknown dates are not replaced by current dates', () => {

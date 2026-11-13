@@ -176,6 +176,10 @@ jobs:
           .venv/bin/python -m pip install -r requirements.txt
       - name: Verify native setup, restart, password reset, and recovery
         run: .venv/bin/python scripts/native_smoke.py --report work/native-verification-${{ matrix.os }}.json
+      - name: Verify isolated contributor and operator setup on this platform
+        run: |
+          .venv/bin/python -m unittest discover -s tests -p test_dev_workspace.py -v
+          .venv/bin/python -m unittest discover -s tests -p test_operator_setup.py -v
       - name: Retain the credential-free native report
         if: always()
         uses: actions/upload-artifact@v7

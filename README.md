@@ -10,11 +10,11 @@ Run one private instance on your Mac, Linux machine, or server. There is no proj
 
 **Status:** Development toward 1.0; no stable release published · **License:** MIT · **Architecture:** Python + SQLite + buildless web UI
 
-**[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Mac setup and live acceptance](docs/mac-acceptance.md) · [Install your own instance](#quick-start-with-docker) · [Verification](docs/verification.md)
+**[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Mac setup and live acceptance](docs/mac-acceptance.md) · [Install your own instance](#quick-start-with-docker) · [Setup for local assistants](docs/operator-setup.md) · [Verification](docs/verification.md)
 
 The public demo uses synthetic content and temporary page memory. Your private library runs in your own instance.
 
-All 12 automated acceptance jobs passed on [`6fb4c1db`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381): authenticated browser workflows, packaged extension scenarios, native Mac/Linux recovery, both container architectures, real local-model inference, and a two-revision Compose update with retained-data removal and separate backup rollback. Live account imports and the final Mac operator check remain required before a stable release. See the verification record for the exact scope and evidence.
+The previous full automated baseline passed all 12 acceptance jobs on [`6fb4c1db`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381), covering authenticated browsers, extension scenarios, native Mac/Linux recovery, containers, local-model inference, and update/rollback. Current development adds browsing continuity, isolated contributor setup, redacted operator diagnostics, and protocol compatibility. The broader [v1 plan](docs/v1-product-plan.md) adds product and public-project acceptance beyond the existing live-account and Mac operator gates. See the verification record for exact tested revisions and limits.
 
 ![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery-current.jpg)
 
@@ -51,11 +51,23 @@ python3 scripts/setup.py
 docker compose up -d --build
 ```
 
-The setup helper prepares local configuration and an owner password. Keep that password private. Open **http://localhost:8787** and sign in. The default Docker configuration binds the service to the local machine.
+The setup helper prepares private local configuration and an owner password. Open `.env` locally in a text editor to retrieve that password; it is no longer printed in terminal logs. Keep it out of chats and issue reports. Open **http://localhost:8787** and sign in. The default Docker configuration binds the service to the local machine.
 
 Use **Add link** for your first item, import a supported file, or explicitly load the synthetic demo library to explore the interface. Demo content is not loaded automatically.
 
 See [self-hosting](docs/self-hosting.md) for native Python setup, HTTPS deployment, updates, and the optional model service.
+
+### Predictable setup and diagnostics
+
+For an installed source/native Python environment, the new operator commands can preview configuration creation and diagnose it without exposing credentials:
+
+```sh
+.venv/bin/python -m server.cli setup --dry-run --json
+.venv/bin/python -m server.cli setup --apply --json
+.venv/bin/python -m server.cli doctor --json
+```
+
+Existing configuration is preserved. Doctor does not open or initialize the library database, and makes no network requests by default. Add `--check-ai` for bounded Ollama version/model-inventory checks; this does not run inference or establish that processing is local. The [operator and assistant guide](docs/operator-setup.md) explains prerequisites, result codes, environment precedence, and supported scope. These commands do not yet provide the planned packaged Mac installer or model-download wizard.
 
 ## Explore the synthetic demo
 
@@ -107,14 +119,16 @@ Read [privacy](docs/privacy.md), [security](SECURITY.md), and [backup and restor
 
 ## Development
 
-The frontend and extension are plain ES modules; no JavaScript bundler or package installation is required.
+The frontend and extension are plain ES modules. Use the isolated contributor workspace so development does not reuse personal configuration or saved content:
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python scripts/setup.py
-.venv/bin/python -m server.cli serve
+.venv/bin/python scripts/dev.py --prepare --seed
+.venv/bin/python scripts/dev.py
 ```
+
+Open **http://127.0.0.1:8788**. Retrieve its private password locally from `work/contributor-dev/owner-password.txt`. This launcher binds only to loopback, ignores production `.env`/`LA_*` settings, and preserves its synthetic library on restart. From an activated environment, `npm run dev -- --seed` is equivalent. See [contributing](CONTRIBUTING.md) for inspection, bounded cleanup, and locked JavaScript test setup.
 
 In a separate terminal, run the checks:
 
@@ -128,7 +142,7 @@ See [architecture](docs/architecture.md), [the API contract](API_CONTRACT.md), a
 
 ## Project direction
 
-The next priorities are broader adapter fixtures, verified platform coverage, accessibility feedback, and dependable recovery. See [the roadmap](docs/roadmap.md) for the distinction between implemented capabilities and planned work.
+The [22-deliverable v1 plan](docs/v1-product-plan.md) covers guided importing, personal categories, Mac delivery, local AI setup, recovery, accessibility, and open-source maintainability. See [the roadmap](docs/roadmap.md) for the distinction between implemented capabilities and planned work.
 
 Little Archive is independent software. Platform names describe compatible import contexts; they do not imply affiliation, endorsement, or authorization. Use it with content and access you are entitled to use.
 

@@ -108,7 +108,7 @@ def create_app(config: Config | None = None):
             response = Response(status_code=204, headers={
                 "Access-Control-Allow-Origin": origin,
                 "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-                "Access-Control-Allow-Headers": "Authorization,Content-Type",
+                "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Little-Archive-Protocol",
                 "Access-Control-Max-Age": "600",
                 "Vary": "Origin",
             })
@@ -492,19 +492,37 @@ def create_app(config: Config | None = None):
             c.execute("UPDATE import_runs SET status='cancelled',coverage='partial',finished_at=? WHERE token_id=? AND status='running'", (now(), tid))
         return {"ok": True}
 
+    # Import protocol versions are independent of application release numbers.
+    # The original 0.1.0 extension omitted this header; its unchanged payloads
+    # are protocol 1. An explicit unknown version must never perform a write.
+    def extension_protocol(request: Request):
+        values = request.headers.getlist("x-little-archive-protocol")
+        if values and values != ["1"]:
+            raise HTTPException(409, "This server supports extension import protocol 1. Update to a compatible extension/server pair, then retry; keep pending batches unchanged.")
+        return 1
+
     @app.get("/api/extension/status")
     def extension_status(auth=Depends(importer)):
-        return {"ok": True, "version": __version__, "instance_id": store.meta("instance_id")}
+        return {
+            "ok": True, "version": __version__, "instance_id": store.meta("instance_id"),
+            "extension_protocol": {
+                "name": "little-archive.extension",
+                "versions": {"1": {
+                    "capabilities": ["current_view_imports", "idempotent_batches", "exact_batch_finish", "source_collection_memberships", "partial_coverage"],
+                    "limits": {"max_batch_items": 50, "max_batch_bytes": 256 * 1024},
+                }},
+            },
+        }
 
     @app.post("/api/extension/imports")
-    def begin_import(data: ImportStart, auth=Depends(importer)):
+    def begin_import(data: ImportStart, auth=Depends(importer), protocol=Depends(extension_protocol)):
         rid = str(uuid4())
         with store.transaction() as c:
             c.execute("INSERT INTO import_runs(id,source,source_account,token_id,status,started_at,scopes) VALUES(?,?,?,?,?,?,?)", (rid, data.platform, data.source_account, auth["id"], "running", now(), json_text([data.scope])))
-        return {"run_id": rid, "instance_id": store.meta("instance_id")}
+        return {"run_id": rid, "instance_id": store.meta("instance_id"), "protocol_version": protocol}
 
     @app.post("/api/extension/imports/{rid}/batches")
-    def import_batch(rid: str, data: ImportBatch, auth=Depends(importer)):
+    def import_batch(rid: str, data: ImportBatch, auth=Depends(importer), protocol=Depends(extension_protocol)):
         digest = hashlib.sha256(json_text(data.model_dump()).encode()).hexdigest()
         with store.transaction() as c:
             run = c.execute("SELECT * FROM import_runs WHERE id=? AND token_id=?", (rid, auth["id"])).fetchone()
@@ -528,7 +546,7 @@ def create_app(config: Config | None = None):
         return {"status": "applied", "created": created, "updated": updated, "skipped": 0, "replayed": False}
 
     @app.post("/api/extension/imports/{rid}/finish")
-    def finish_import(rid: str, data: ImportFinish, auth=Depends(importer)):
+    def finish_import(rid: str, data: ImportFinish, auth=Depends(importer), protocol=Depends(extension_protocol)):
         with store.transaction() as c:
             run = c.execute("SELECT * FROM import_runs WHERE id=? AND token_id=?", (rid, auth["id"])).fetchone()
             if not run:

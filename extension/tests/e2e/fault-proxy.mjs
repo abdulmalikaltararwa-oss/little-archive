@@ -1,15 +1,16 @@
 import http from 'node:http';
 import {createHash} from 'node:crypto';
 
-// A real HTTP relay, not an API mock: every successful response comes from the
-// running FastAPI application. The fault mode drops a response *after* FastAPI
-// commits it, reproducing an ambiguous network failure for durable replay.
+// Every import mutation goes to the real FastAPI application. Fault modes can
+// drop a batch response after commit, or deliberately rewrite only protocol
+// discovery metadata to exercise older/unsupported server declarations.
 export async function createFaultProxy(baseURL) {
   const upstream=new URL(baseURL);
   if (upstream.protocol!=='http:' || !['127.0.0.1','localhost'].includes(upstream.hostname)) {
     throw new Error('Extension CI requires the disposable loopback server harness.');
   }
   let dropBatchResponses=false;
+  let statusMode='real';
   const attempts=[];
   const sockets=new Set();
   const server=http.createServer(async (request,response) => {
@@ -32,6 +33,7 @@ export async function createFaultProxy(baseURL) {
         body:JSON.parse(body.toString('utf8')),
         bytes:body.length,
         digest:createHash('sha256').update(body).digest('hex'),
+        protocol:request.headers['x-little-archive-protocol'] ?? null,
         status:null,
         replayed:null,
         responseDropped:false,
@@ -44,7 +46,7 @@ export async function createFaultProxy(baseURL) {
         const responseChunks=[];
         result.on('data', chunk => responseChunks.push(chunk));
         result.on('end', () => {
-          const bytes=Buffer.concat(responseChunks);
+          let bytes=Buffer.concat(responseChunks);
           if (observation) {
             observation.status=result.statusCode;
             try { observation.replayed=JSON.parse(bytes.toString('utf8')).replayed ?? null; } catch { /* Keep status for diagnostics. */ }
@@ -55,6 +57,16 @@ export async function createFaultProxy(baseURL) {
             // failed request and must retain precisely the original batch.
             response.destroy();
             return;
+          }
+          if (request.method==='GET' && request.url==='/api/extension/status' && result.statusCode===200 && statusMode!=='real') {
+            const status=JSON.parse(bytes.toString('utf8'));
+            if (statusMode==='legacy') {
+              status.version='0.1.0';
+              delete status.extension_protocol;
+            } else {
+              status.extension_protocol={name:'little-archive.extension',versions:{'2':{}}};
+            }
+            bytes=Buffer.from(JSON.stringify(status));
           }
           const headers={...result.headers,'Content-Length':String(bytes.length)};
           delete headers['transfer-encoding'];
@@ -87,6 +99,10 @@ export async function createFaultProxy(baseURL) {
     origin:`http://127.0.0.1:${server.address().port}`,
     attempts,
     setDropBatchResponses(value) { dropBatchResponses=Boolean(value); },
+    setStatusMode(value) {
+      if (!['real','legacy','unsupported'].includes(value)) throw new Error('Unknown synthetic compatibility fault.');
+      statusMode=value;
+    },
     async close() {
       const closed=new Promise(resolve => server.close(resolve));
       for (const socket of sockets) socket.destroy();

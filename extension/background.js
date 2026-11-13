@@ -3,6 +3,7 @@ import {
   sourceContext, assertSource, queueObservations, publicState, byteLength, MAX_STATE_BYTES,
 } from './core.js';
 import {visibleCollectionName} from './page-context.js';
+import {negotiateProtocol,protocolHeaders,runProtocolVersion,ProtocolCompatibilityError} from './protocol.js';
 
 const RETRY_ALARM = 'little-archive-retry';
 const LIVE_STATES = new Set(['running','paused','finishing']);
@@ -13,7 +14,14 @@ const serial = task => {
   operation = result.catch(() => {});
   return result;
 };
-const read = async () => (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY] || initialState();
+const read = async () => {
+  const state=(await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY] || initialState();
+  if (state.version!==1) {
+    throw new ProtocolCompatibilityError('checkpoint_format_unsupported',
+      'This browser checkpoint uses an unsupported storage format. Keep this browser profile and install a compatible extension; its pending data has not been changed.');
+  }
+  return state;
+};
 const write = async state => {
   if (byteLength(state) > MAX_STATE_BYTES) throw new Error('Local extension storage is full. Finish or forget the current scan.');
   await chrome.storage.local.set({[STORAGE_KEY]:state});
@@ -23,7 +31,7 @@ class RequestError extends Error {
   constructor(message, status = 0) { super(message); this.status = status; }
 }
 
-async function request(config, path, body) {
+async function request(config, path, body, protocol=null) {
   if (!config?.token) throw new RequestError('Connect your server first.', 401);
   if (!path.startsWith('/api/extension/')) throw new Error('Unsupported extension endpoint.');
   const controller = new AbortController();
@@ -31,7 +39,7 @@ async function request(config, path, body) {
   try {
     const response = await fetch(normalizeServerURL(config.server) + path, {
       method:body === undefined ? 'GET' : 'POST',
-      headers:{Authorization:`Bearer ${config.token}`, ...(body === undefined ? {} : {'Content-Type':'application/json'})},
+      headers:{Authorization:`Bearer ${config.token}`, ...(body === undefined ? {} : {'Content-Type':'application/json',...protocolHeaders(protocol)})},
       body:body === undefined ? undefined : JSON.stringify(body),
       credentials:'omit', cache:'no-store', redirect:'error', signal:controller.signal,
     });
@@ -45,16 +53,17 @@ async function request(config, path, body) {
     }
     return data;
   } catch (error) {
-    if (error instanceof RequestError) throw error;
+    if (error instanceof RequestError || error instanceof ProtocolCompatibilityError) throw error;
     throw new RequestError(error.name === 'AbortError' ? 'The server timed out. Pending batches are saved on this device.' : 'Cannot reach the server. Pending batches are saved on this device.');
   } finally { clearTimeout(timer); }
 }
 
-async function verifyInstance(config, expected) {
+async function verifyInstance(config, expected, run=null) {
+  const requestedVersion=runProtocolVersion(run);
   const info = await request(config, '/api/extension/status');
-  if (!info.ok || typeof info.instance_id !== 'string' || !info.instance_id) throw new Error('This server is not a compatible Little Archive instance.');
-  if (expected && info.instance_id !== expected) throw new Error('The server library changed. Forget this scan before connecting to the new instance.');
-  return info;
+  const protocol=negotiateProtocol(info,requestedVersion);
+  if (expected && info.instance_id !== expected) throw new Error('The server library changed. Reconnect the original library to deliver pending batches; keep this scan checkpoint.');
+  return {...info,protocol};
 }
 
 async function activeTab() {
@@ -101,12 +110,13 @@ async function flushQueue(force = false) {
         if (!head) {
           if (state.run.status !== 'finishing') return false;
           try {
-            await verifyInstance(state.config, state.run.instanceId);
+            const info=await verifyInstance(state.config, state.run.instanceId,state.run);
+            state.config.protocol=info.protocol;
             const result = await request(state.config, `/api/extension/imports/${encodeURIComponent(state.run.id)}/finish`, {
               expected_batches:state.run.nextSequence,
               coverage:state.run.coverage || 'partial',
               reason:(state.run.finishReason || 'User finished this scan.').slice(0,400),
-            });
+            },info.protocol);
             if (!result.ok) throw new Error('The server did not confirm scan completion.');
             if (['partial','enumeration_exhausted'].includes(result.coverage)) state.run.coverage=result.coverage;
             state.run.status = 'completed';
@@ -122,8 +132,9 @@ async function flushQueue(force = false) {
         }
         if (!force && (head.blocked || head.nextRetryAt > Date.now())) return false;
         try {
-          await verifyInstance(state.config, state.run.instanceId);
-          const result = await request(state.config, `/api/extension/imports/${encodeURIComponent(state.run.id)}/batches`, head.body);
+          const info=await verifyInstance(state.config, state.run.instanceId,state.run);
+          state.config.protocol=info.protocol;
+          const result = await request(state.config, `/api/extension/imports/${encodeURIComponent(state.run.id)}/batches`, head.body,info.protocol);
           if (result.status !== 'applied') throw new Error('The server did not confirm this batch was applied.');
           state.outbox.shift();
           state.run.appliedBatches += 1;
@@ -186,8 +197,8 @@ async function handlePopup(message) {
         throw new Error('Finish or forget the current scan before changing its import token. Each scan is bound to the token that created it.');
       }
       const expected = state.run && LIVE_STATES.has(state.run.status) ? state.run.instanceId : null;
-      const info = await verifyInstance({server,token}, expected);
-      state.config = {server,token,instance_id:info.instance_id};
+      const info = await verifyInstance({server,token}, expected,state.run && LIVE_STATES.has(state.run.status) ? state.run : null);
+      state.config = {server,token,instance_id:info.instance_id,protocol:info.protocol};
       await write(state);
       return {ok:true, state:publicState(state)};
     });
@@ -208,16 +219,17 @@ async function handlePopup(message) {
         const source = await request(state.config, '/api/extension/imports', {
           platform:context.platform, source_account:account,
           scope:context.isCollection ? name : (context.platform === 'instagram' ? 'All posts' : 'Favorites'),
-        });
+        },info.protocol);
         if (typeof source.run_id !== 'string' || source.instance_id !== info.instance_id) throw new Error('The server returned an invalid import identity.');
         state.run = {
-          id:source.run_id, instanceId:info.instance_id, platform:context.platform, sourceAccount:account,
+          id:source.run_id, instanceId:info.instance_id, protocolVersion:info.protocol.version, platform:context.platform, sourceAccount:account,
           scopeUrl:context.url, scopeKey:context.scopeKey, tabId:tab.id,
           collection:context.isCollection ? {source_key:context.scopeKey,name} : null,
           confirmed:true, status:'running', discovered:0, created:0, updated:0, skipped:0,
           appliedBatches:0, nextSequence:0, seen:[], scrolls:0, coverage:'partial',
           startedAt:Date.now(), lastHeartbeat:Date.now(), message:'Reading the current source view…',
         };
+        state.config.protocol=info.protocol;
         state.outbox = [];
         await write(state);
         return state.run;
@@ -244,7 +256,8 @@ async function handlePopup(message) {
         const state = await read();
         if (!state.run || !['paused','running'].includes(state.run.status)) throw new Error('There is no paused scan to resume.');
         assertSource(tab.url, state.run.sourceAccount, state.run.scopeKey);
-        await verifyInstance(state.config, state.run.instanceId);
+        const info=await verifyInstance(state.config, state.run.instanceId,state.run);
+        state.config.protocol=info.protocol;
         state.run.tabId=tab.id; state.run.status='running'; state.run.lastHeartbeat=Date.now();
         state.run.message='Resuming this view. Existing post identifiers will be skipped.';
         state.outbox.forEach(entry => { entry.blocked=false; entry.nextRetryAt=0; });
@@ -328,7 +341,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse) => {
   const fromPage=Boolean(sender.tab) && ['capture','scan-paused','scan-finished'].includes(message.type);
   if (!trustedPopup && !fromPage) { sendResponse({ok:false,error:'Untrusted extension message.'}); return false; }
   (trustedPopup ? handlePopup(message) : handleContent(message,sender))
-    .then(sendResponse).catch(error => sendResponse({ok:false,error:error.message || 'Operation failed.'}));
+    .then(sendResponse).catch(error => sendResponse({ok:false,error:error.message || 'Operation failed.',...(error.code ? {code:error.code} : {})}));
   return true;
 });
 
@@ -336,16 +349,25 @@ async function initialize() {
   await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   await chrome.alarms.create(RETRY_ALARM,{periodInMinutes:1});
   await serial(async () => { const state=await read(); if (staleRun(state)) await write(state); });
-  void flushQueue();
+  await flushQueue();
 }
-chrome.runtime.onInstalled.addListener(() => { void initialize(); });
-chrome.runtime.onStartup.addListener(() => { void initialize(); });
+function backgroundTask(task) {
+  void task.catch(error => {
+    // Unsupported checkpoints remain untouched. The popup's status response
+    // explains which compatible extension is needed; never reset storage here.
+    if (!(error instanceof ProtocolCompatibilityError)) {
+      console.error('Little Archive background task could not finish. Open the popup to inspect the scan status.');
+    }
+  });
+}
+chrome.runtime.onInstalled.addListener(() => { backgroundTask(initialize()); });
+chrome.runtime.onStartup.addListener(() => { backgroundTask(initialize()); });
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name===RETRY_ALARM) {
-    void serial(async () => { const state=await read(); if (staleRun(state)) await write(state); }).then(() => flushQueue());
+    backgroundTask(serial(async () => { const state=await read(); if (staleRun(state)) await write(state); }).then(() => flushQueue()));
   }
 });
 chrome.tabs.onRemoved.addListener(tabId => {
-  void serial(async () => { const state=await read(); if (state.run?.tabId===tabId && state.run.status==='running') { state.run.status='paused'; state.run.message='Source tab closed. Reopen the same view and resume.'; await write(state); } });
+  backgroundTask(serial(async () => { const state=await read(); if (state.run?.tabId===tabId && state.run.status==='running') { state.run.status='paused'; state.run.message='Source tab closed. Reopen the same view and resume.'; await write(state); } }));
 });
-void initialize();
+backgroundTask(initialize());

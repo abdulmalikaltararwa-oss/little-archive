@@ -174,7 +174,7 @@ export function initialState() { return {version:1, config:null, run:null, outbo
 export function publicState(state) {
   const run = state.run;
   return {
-    config:state.config ? {server:state.config.server, hasToken:Boolean(state.config.token), instance_id:state.config.instance_id} : null,
+    config:state.config ? {server:state.config.server, hasToken:Boolean(state.config.token), instance_id:state.config.instance_id,protocol:state.config.protocol || null} : null,
     run:run ? {
       id:run.id, platform:run.platform, sourceAccount:run.sourceAccount, scopeUrl:run.scopeUrl,
       collectionName:run.collection?.name || '', status:run.status, discovered:run.discovered,

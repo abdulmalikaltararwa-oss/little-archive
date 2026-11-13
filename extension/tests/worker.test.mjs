@@ -22,6 +22,7 @@ globalThis.fetch=async(url,options)=>{
   assert.equal(options.credentials,'omit');
   assert.equal(options.redirect,'error');
   assert.ok(['Bearer synthetic-private-import-token','Bearer synthetic-replacement-import-token'].includes(options.headers.Authorization));
+  assert.equal(options.headers['X-Little-Archive-Protocol'],undefined,'known legacy server keeps its original header contract');
   const path=new URL(url).pathname;
   if(path.endsWith('/status')) return Response.json({ok:true,version:'0.1.0',instance_id:'instance-one'});
   if(path==='/api/extension/imports') return Response.json({run_id:'run-one',instance_id:'instance-one'});
@@ -51,6 +52,7 @@ async function until(predicate){for(let i=0;i<200;i++){if(predicate())return;awa
 
 test('worker retains an ambiguous committed batch and retries its exact identity',async()=>{
   assert.equal((await send({type:'configure',server:'https://archive.example.test',token:'synthetic-private-import-token'})).ok,true);
+  assert.equal(state().config.protocol.mode,'legacy');
   assert.equal((await send({type:'start',sourceAccount:'sample',collectionName:'',confirmed:true})).ok,true);
   const rejected=await send({type:'capture',runId:'run-one',items:[{url:'https://www.instagram.com/p/BadFrame/'}]}, {...source,frameId:1});
   assert.equal(rejected.ok,false);

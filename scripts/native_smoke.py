@@ -128,14 +128,16 @@ class NativeHarness:
     def setup(self):
         self.copy_source()
         require(not (self.checkout / ".env").exists() and not (self.checkout / "data").exists(), "The copied source unexpectedly contains runtime data.")
-        # setup.py prints its generated password; capture it privately and never
-        # include this output in diagnostics or a verification report.
-        self.command(["scripts/setup.py"])
+        preview = self.command(["-m", "server.cli", "setup", "--dry-run", "--json"])
+        require(json.loads(preview.stdout).get("status") == "planned", "The deterministic setup preview did not return its versioned plan.")
+        require(not (self.checkout / ".env").exists() and not (self.checkout / "data").exists(), "Setup preview wrote configuration or initialized a database.")
+        setup_result = self.command(["scripts/setup.py"])
         env_path = self.checkout / ".env"
         self.original_configuration = env_path.read_bytes()
         values = dict(line.split("=", 1) for line in self.original_configuration.decode().splitlines() if line and not line.startswith("#"))
         password = values["LA_ADMIN_PASSWORD"]
         self.secrets.append(password)
+        require(password.encode() not in setup_result.stdout + setup_result.stderr, "The setup helper printed its generated owner password.")
         require(len(password) >= 12, "Setup generated a password shorter than the application minimum.")
         require(stat.S_IMODE(env_path.stat().st_mode) == 0o600, "Setup configuration is not owner-only.")
         require(values.get("LA_DATA_DIR") == "./data", "Setup's native data-directory default changed; update its acceptance check deliberately.")
@@ -143,6 +145,15 @@ class NativeHarness:
         self.command(["scripts/setup.py"], expected=1)
         require(env_path.read_bytes() == self.original_configuration and env_path.stat().st_mtime_ns == before, "A repeated setup overwrote existing configuration.")
         self.record("clean_source_setup_private_configuration_and_overwrite_protection")
+        repeated = self.command(["-m", "server.cli", "setup", "--apply", "--json"])
+        require(json.loads(repeated.stdout).get("status") == "unchanged", "Repeated deterministic setup did not preserve the existing configuration.")
+        diagnostic = self.command(["-m", "server.cli", "doctor", "--json"])
+        report = json.loads(diagnostic.stdout)
+        require(report.get("format") == "little-archive-diagnostics" and report.get("schema_version") == 1 and report.get("read_only") is True, "Doctor did not return the versioned read-only contract.")
+        require(report.get("exit_code") == 0 and report.get("network_checks_requested") is False, "Default diagnostics failed or requested a network probe.")
+        require(password.encode() not in diagnostic.stdout + diagnostic.stderr + repeated.stdout + repeated.stderr, "An operator command disclosed the owner password.")
+        require(env_path.read_bytes() == self.original_configuration and env_path.stat().st_mtime_ns == before and not (self.checkout / "data").exists(), "Diagnostics or repeated setup changed configuration or initialized the library.")
+        self.record("deterministic_setup_preview_and_read_only_redacted_diagnostics")
         return password
 
     def start(self, label, *, port=None, data_dir=None, password=None):

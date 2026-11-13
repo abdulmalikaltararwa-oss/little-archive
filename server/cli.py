@@ -1,42 +1,75 @@
 """Local operator commands. Environment values override an optional .env file."""
 import argparse
 import getpass
+import json
 import os
 from pathlib import Path
 import sys
 
 from .config import Config
+from .configuration import read_env_values
 
 
 def load_env(path=Path(".env")):
-    if not path.is_file():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if not sep or not key.startswith("LA_") or not key.replace("_", "").isalnum():
-            continue
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
+    for key, value in read_env_values(path).items():
         os.environ.setdefault(key, value)
 
 
-def main():
-    load_env()
+def _port(value):
+    value = int(value)
+    if not 1 <= value <= 65535:
+        raise argparse.ArgumentTypeError("Use a port between 1 and 65535.")
+    return value
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(prog="little-archive")
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="Start the private library")
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8787)
+    serve.add_argument("--port", type=_port, default=8787)
+    serve.add_argument("--env-file", type=Path, default=Path(".env"))
     restore = sub.add_parser("restore", help="Restore a verified backup into a NEW directory")
     restore.add_argument("archive")
     restore.add_argument("--destination", required=True)
-    sub.add_parser("reset-password", help="Reset the owner password and revoke sessions/tokens while the server is stopped")
-    args = parser.parse_args()
+    reset = sub.add_parser("reset-password", help="Reset the owner password and revoke sessions/tokens while the server is stopped")
+    reset.add_argument("--env-file", type=Path, default=Path(".env"))
+    setup = sub.add_parser("setup", help="Preview or create private configuration; does not install dependencies or start services")
+    action = setup.add_mutually_exclusive_group()
+    action.add_argument("--dry-run", action="store_true", help="Preview without writing; this is the default")
+    action.add_argument("--apply", action="store_true", help="Create configuration only if it does not exist")
+    setup.add_argument("--config", type=Path, default=Path(".env"))
+    setup.add_argument("--data-dir", default="./data")
+    setup.add_argument("--public-url", default="http://localhost:8787")
+    setup.add_argument("--json", action="store_true", help="Print versioned results without secret values")
+    doctor = sub.add_parser("doctor", help="Read-only configuration/filesystem diagnostics; no network requests by default")
+    doctor.add_argument("--env-file", type=Path, default=Path(".env"))
+    doctor.add_argument("--json", action="store_true", help="Print versioned, redacted diagnostic results")
+    doctor.add_argument("--check-ai", action="store_true", help="Request bounded runtime-version/model-list checks; never inference or downloads")
+    doctor.add_argument("--check-port", action="store_true", help="Check whether a local service accepts a connection; never stop it")
+    doctor.add_argument("--port", type=_port, default=8787)
+    args = parser.parse_args(argv)
     try:
+        if args.command == "setup":
+            from .bootstrap import setup_configuration
+            result = setup_configuration(args.config, data_dir=args.data_dir, public_url=args.public_url, apply=args.apply)
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True) if args.json else result["summary"] + "\n" + result["next_action"])
+            return 1 if result["status"] == "blocked" else 0
+        if args.command == "doctor":
+            from .diagnostics import diagnose
+            result = diagnose(env_file=args.env_file, check_ai=args.check_ai, check_port=args.check_port, port=args.port)
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+            else:
+                print("Little Archive diagnostics: " + result["status"])
+                for row in result["checks"]:
+                    print(f"{row['status'].upper()} [{row['code']}] {row['summary']}")
+                    if row.get("next_action"):
+                        print("  " + row["next_action"])
+                print("Read-only checks finished. No library, credentials, or configuration were changed.")
+            return result["exit_code"]
+        if args.command in {"serve", "reset-password"}:
+            load_env(args.env_file)
         if args.command == "serve":
             import uvicorn
             # Fail clearly before starting the server if operator configuration is invalid.

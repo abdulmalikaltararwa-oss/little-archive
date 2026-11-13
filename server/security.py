@@ -11,11 +11,21 @@ def token_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def hash_password(password: str) -> str:
+def validate_password(password: str) -> None:
+    if not isinstance(password, str):
+        raise ValueError("Use a text owner password.")
     if password == "replace-with-a-unique-password-of-at-least-12-characters":
         raise ValueError("Replace the example owner password, or run scripts/setup.py to generate private configuration.")
     if len(password) < 12 or len(password) > 1024:
         raise ValueError("Use an owner password between 12 and 1,024 characters.")
+    try:
+        password.encode("utf-8")
+    except UnicodeError as exc:
+        raise ValueError("Use an owner password that can be encoded as UTF-8.") from exc
+
+
+def hash_password(password: str) -> str:
+    validate_password(password)
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
     return f"scrypt$16384$8$1${salt.hex()}${digest.hex()}"

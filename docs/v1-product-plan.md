@@ -1,12 +1,25 @@
 # Little Archive v1: product, open-source, and delivery plan
 
-**Status: recommended product scope, not implemented features or a release announcement.**
+**Status: v1 target in implementation; proposed scope and delivered foundations are distinguished below. No stable release has been announced.**
 
 Prepared 13 November 2026 after a read-only audit of source commit `45f04a1ef33abf9a99f634f77395b7a694e7c5b0`. The existing [verification record](verification.md) describes the passing automated matrix for `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. Those results establish the behavior that was exercised; they do not establish account-wide discovery, a consumer Mac installer, classification quality, or every live platform layout.
 
 This plan recommends a broader product target than the current explicit-view importer. It preserves the existing release evidence and [technical acceptance gates](release-gates.md). New work must earn its own acceptance results. No proposed capability below should be advertised as shipped until implemented and verified.
 
-Expanded to include public installation, contributors and maintainers, English/Arabic accessibility, guided local AI, and installation by a local AI coding assistant. The goal is a complete, supportable first release within a published scope. This is one implementation plan; the additional interfaces and commands described below are proposals, not existing features.
+Expanded to include public installation, contributors and maintainers, English/Arabic accessibility, guided local AI, and installation by a local AI coding assistant. The goal is a complete, supportable first release within a published scope. Capabilities not identified as delivered in the progress table remain proposed scope.
+
+### Implementation progress
+
+The first foundation batch implements the following subset. Its verification status is maintained in [the verification record](verification.md); implementation alone does not complete the full v1 gates.
+
+| Deliverable | Delivered foundation | Remaining acceptance or scope |
+| --- | --- | --- |
+| V1-02 | Loaded gallery continuity after edits/favorites and narrow-navigation focus handling, with browser regressions. | Direct Mac VoiceOver acceptance and broader navigation/history work in D remain separate. Search-affecting edits can reselect a random Rediscover sample. |
+| V1-16 | Isolated loopback contributor workspace, synthetic seed, private credentials, read-only check, and bounded cleanup. | Independent newcomer contribution rehearsal remains a public-project gate. |
+| V1-17 | Explicit extension protocol/capability handshake and tested preservation of pending payloads; narrow legacy compatibility. | Versioned DB migrations, portable-format evolution, and broader migration policy remain open. |
+| V1-09 / V1-22 | Configuration preview/creation, read-only doctor, bounded optional model inventory probe, operator guide, and repository assistant instructions. | GUI setup, runtime/model download, inference/quality evaluation, and an independent local-assistant installation remain open. |
+
+The existing source audit below records the pre-foundation behavior. Consult these progress notes and current source when assessing a finding that has since been addressed. Commands implemented in [operator setup](operator-setup.md) supersede the illustrative command names in the proposed scope.
 
 Reading guide: [product and users](#1-the-product-promise), [required features](#3-required-v1-workstreams), [local model setup](#g-guided-local-ai-setup), [coding-assistant setup](#h-installation-by-a-local-ai-coding-assistant), [open-source project](#4-building-a-useful-public-open-source-project), [build order](#6-build-order-and-decision-gates), [release acceptance](#7-concrete-release-acceptance), and [22-item backlog](#9-implementation-backlog).
 
@@ -258,7 +271,7 @@ The assistant's reasoning model and Little Archive's optional classification mod
 
 Publish a concise repository `AGENTS.md` and an assistant setup guide describing supported environments, release selection, commands, expected results, data locations, and recovery. Keep installation instructions separate from development instructions. A local assistant should be able to install a released artifact without modifying application source. A browser chat can explain these steps, but running them on a person's Mac requires a local tool connection or local assistant; browser presence alone is insufficient.
 
-Create deterministic setup and diagnostic operations shared by the GUI, documented CLI, and assistant guide. Proposed interfaces include `setup --check`, `setup --dry-run`, and `doctor --json`; these names are design proposals and are not commands available today. Define versioned JSON results, stable exit/reason codes, prerequisites, bounded timeouts, and suggested next actions. Generate reference documentation from the actual command interface where practical.
+Share deterministic setup and diagnostic operations between the future GUI, documented CLI, and assistant guide. The first foundation implements configuration-only `setup --dry-run` / `setup --apply`, read-only `doctor --json`, and the operator guide; see [the actual command contract](operator-setup.md). Full application/runtime installation and GUI integration remain open. Keep versioned JSON results, stable exit/reason codes, prerequisites, bounded timeouts, and suggested next actions. Generate reference documentation from the actual command interface where practical.
 
 Dry-run and doctor must be read-only, including their initialization paths. Do not construct a store or service that creates a database, performs migrations, or requeues work merely to inspect it. Keep synthetic inference as a separately requested operation. Diagnostic output must be bounded and redact secrets by construction.
 

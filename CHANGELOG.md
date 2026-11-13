@@ -2,7 +2,17 @@
 
 ## Unreleased — Development toward 1.0
 
-The implementation has passed all 12 automated acceptance jobs at commit `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. A stable release remains held for live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
+The previous full automated baseline passed all 12 acceptance jobs at commit `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. Current changes must pass their own acceptance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
+
+### First v1 foundations
+
+- Retain loaded gallery pages, scroll position, and useful keyboard focus after item edits and favorites; keep random samples stable when the edit does not change search/filter membership.
+- Keep closed narrow navigation out of the accessibility tree and tab order; manage focus through opening, closing, dialogs, and viewport changes.
+- Provide a separate, owner-marked contributor workspace with optional once-only synthetic seeding, redacted inspection, and bounded stopped-workspace cleanup.
+- Add deterministic setup preview/creation and versioned read-only diagnostics for people and local coding assistants. Generated passwords remain in private files instead of terminal output.
+- Add opt-in bounded Ollama version/model-inventory checks without inference or downloads; do not infer local processing from a local URL.
+- Negotiate extension/server protocol capabilities before imports and retries, preserving pending batch bodies and identities. Retain explicitly labeled compatibility with the original 0.1.0 status contract.
+- Extend native acceptance to the contributor/operator commands on Mac and Linux and add browser/extension regressions for the new behavior.
 
 ### Included
 

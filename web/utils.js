@@ -32,6 +32,21 @@ export function buildItemPatch(original, edits) {
   return patch;
 }
 
+// An ordinary annotation edit must not reset pagination or reshuffle Rediscover.
+// Search matching stays on the server: it has the authoritative text index.
+export function itemChangeAffectsView(before, after, filters) {
+  const changed = key => JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null);
+  if (filters.q && ['title', 'summary', 'notes', 'caption', 'creator', 'tags'].some(changed)) return true;
+  if (filters.sort === 'title' && changed('title')) return true;
+  if (filters.platform && changed('platform')) return true;
+  if (filters.favorite && changed('favorite')) return true;
+  if (filters.needs_review && changed('needs_review')) return true;
+  if (filters.status ? changed('status') : (before.status === 'archived') !== (after.status === 'archived')) return true;
+  if (filters.tag && (before.tags || []).includes(filters.tag) !== (after.tags || []).includes(filters.tag)) return true;
+  if (filters.collection_id && (before.collections || []).some(c => c.id === filters.collection_id) !== (after.collections || []).some(c => c.id === filters.collection_id)) return true;
+  return false;
+}
+
 export function formatDate(value, options = {}) {
   if (!value) return 'Unknown';
   const d = new Date(value);

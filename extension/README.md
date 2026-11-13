@@ -16,10 +16,10 @@ Remote servers require HTTPS. Plain HTTP is allowed only for `localhost` and `12
 ## Scope and coverage
 
 - Import one view at a time. Scanning All posts/Favorites does **not** discover every original collection membership; scan each collection separately with its original name.
-- Instagram supports account URLs shaped like `/ACCOUNT/saved/all-posts/` and `/ACCOUNT/saved/COLLECTION/`. Audio is excluded.
+- Instagram supports account URLs shaped like `/ACCOUNT/saved/all-posts/`, `/ACCOUNT/saved/COLLECTION/`, and `/ACCOUNT/saved/DISPLAY-SLUG/NUMERIC-ID/`. The numeric collection ID remains the identity when its display slug changes. Audio is excluded.
 - TikTok supports profile Favorites views and `/@ACCOUNT/collection/COLLECTION` paths. Select Favorites, not Posted or Liked. When selected-tab semantics are unavailable, the extension relies on your explicit view confirmation; it never claims to detect your signed-in account independently.
 - Only rendered permalink cards are collected. Captions, thumbnails, and alternative text may be absent. Alternative text is labeled separately from captions. No claim of full-video understanding is made.
-- After several scrolls without new cards, the scan is saved as **partial**. Only an explicit page-level end/empty marker can produce `enumeration_exhausted`; this still does not prove every historic save is exposed.
+- After several scrolls without new cards, the scan is saved as **partial**. Only an explicit page-level end/empty marker can request `enumeration_exhausted`; the server keeps every zero-batch run partial, and an observed end still does not prove every historic save is exposed.
 - Platform layouts change. These adapters are experimental and need live validation against each supported layout. Passing fixture/unit tests is not proof of universal platform support.
 - The importer pauses for a detected login/verification prompt, changed page/account, or scan limit. Complete source prompts yourself; it does not bypass them.
 
@@ -32,6 +32,12 @@ The extension stores a bounded local outbox and a checkpoint in this Chrome prof
 **Forget this scan** intentionally removes this device's checkpoint and pending queue. Already processed server records remain, and an unfinished server import entry may remain. Use this when abandoning an unavailable or replaced server; normal interruptions should use Resume instead.
 
 The outbox is capped at 4 MiB, total extension state at 8 MiB, and each batch at 50 observations/256 KiB. Collection stops before exceeding those limits. Individual sessions pause after 300 scrolls or 10 minutes; you may inspect the page and resume.
+
+## Server compatibility and upgrades
+
+The extension checks the server's versioned import capabilities before connecting, starting, resuming, uploading each batch, and completing a scan. Compatible servers use import protocol 1. The original `0.1.0` server without protocol metadata still works through a visible **legacy compatibility mode**; update it to enable explicit capability checks. Unknown or malformed declarations stop imports with repair guidance.
+
+An incompatibility keeps pending batch bodies, IDs and sequences unchanged. Keep the same browser profile, restore compatible software, then use **Retry uploads**. Do not forget the scan or clear extension storage as an upgrade step. Existing original checkpoints remain supported; an unknown future checkpoint format is retained without being rewritten. See [the full compatibility policy](../docs/extension-protocol.md).
 
 ## Privacy and permissions
 

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDemoAPI } from './demo-store.js';
 import { SYNTHETIC_RECORDS } from './demo-data.js';
+import { itemChangeAffectsView } from './utils.js';
 
 const call = async (api, path, method = 'GET', body) => {
   const response = await api(path, { method, body: body == null ? undefined : JSON.stringify(body) });
@@ -39,6 +40,16 @@ test('notes and favorite changes are in-memory and reset with a fresh demo', asy
   assert.equal((await call(api, '/api/stats')).data.favorites, 3);
   const reset = createDemoAPI(SYNTHETIC_RECORDS);
   assert.notEqual((await call(reset, `/api/items/${id}`)).data.notes, 'My temporary note');
+});
+
+test('demo item responses support the same retained-gallery update decisions', async () => {
+  const api = createDemoAPI(SYNTHETIC_RECORDS);
+  const before = (await call(api, '/api/items/demo-item-1')).data;
+  const after = (await call(api, '/api/items/demo-item-1', 'PATCH', { favorite: false, notes: 'A synthetic reminder' })).data;
+  assert.equal(after.id, before.id);
+  assert.equal(itemChangeAffectsView(before, after, { sort: 'random' }), false);
+  assert.equal(itemChangeAffectsView(before, after, { favorite: true }), true);
+  assert.equal((await call(api, '/api/items?favorite=true')).data.items.some(item => item.id === after.id), false);
 });
 
 test('collection CRUD and membership counts behave consistently', async () => {

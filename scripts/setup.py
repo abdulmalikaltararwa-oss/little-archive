@@ -16,6 +16,6 @@ with os.fdopen(fd, "w") as f:
     f.write("LA_PUBLIC_URL=http://localhost:8787\nLA_DATA_DIR=./data\n")
     f.write("LA_OLLAMA_URL=\nLA_OLLAMA_MODEL=\n")
 print("Created private .env configuration.")
-print("Your initial owner password (also in .env): " + password)
+print("Open .env locally to retrieve your generated owner password. It is not printed in logs.")
 print("Run: docker compose up -d --build")
 print("Then open http://localhost:8787 and sign in.")

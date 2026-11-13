@@ -35,8 +35,10 @@ The suite uses a headed bundled Chromium under Xvfb so the real toolbar popup ex
 | Favorites guard | A selected Posts tab remains rejected even when the user confirms the popup checkbox. |
 | Pause and resume | A different collection cannot resume a bound run; the original view reopens at the top, traverses twelve already-known virtualized cards, imports the next new card, and finishes with partial coverage. |
 | Durable network recovery | A loopback relay drops a batch response after the real server commits it. The same disk-backed outbox survives a full Chromium restart and sends the identical batch again; the real server reports an idempotent replay. |
+| Original protocol compatibility | The relay removes only status protocol metadata to reproduce the known original 0.1.0 declaration. The actual popup displays legacy mode and sends real headerless imports. |
+| Incompatible protocol recovery | With a real committed batch still pending, an unsupported status declaration blocks any further batch POST. Restoring protocol 1 sends the unchanged batch bytes and records an idempotent replay. |
 
-All Instagram and TikTok navigation responses are fulfilled with handwritten HTML. Every other web request is blocked, except the single ephemeral loopback relay. Host resolution is also disabled for external names. Images use inline data URLs. The relay forwards only `/api/extension/*` to the real local backend and changes no successful response except when the lost-response case intentionally closes the socket.
+All Instagram and TikTok navigation responses are fulfilled with handwritten HTML. Every other web request is blocked, except the single ephemeral loopback relay. Host resolution is also disabled for external names. Images use inline data URLs. The relay forwards only `/api/extension/*` to the real local backend. Its explicit fault modes drop a committed batch's response or rewrite only protocol discovery metadata; import mutation responses always come from the real backend. The legacy case reproduces the original status contract and headerless writes against the current server, not execution of a historical server binary.
 
 ## Boundaries of the evidence
 

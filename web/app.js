@@ -1,4 +1,4 @@
-import { PLATFORM_NAMES, STATUS_NAMES, safeURL, parseTags, buildItemPatch, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage } from './utils.js';
+import { PLATFORM_NAMES, STATUS_NAMES, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage } from './utils.js';
 
 const app = document.getElementById('app');
 const IS_DEMO = document.documentElement.dataset.demo === 'true';
@@ -10,6 +10,10 @@ const state = {
 };
 let dom = {};
 let uid = 0;
+let lastFocusedControl = null;
+const narrowLayout = matchMedia('(max-width: 820px)');
+const cardSnapshots = new WeakMap();
+document.addEventListener('focusin', event => { if (event.target !== document.body) lastFocusedControl = event.target; });
 const icons = {
   search: ['circle|cx=10.5|cy=10.5|r=6.5', 'path|d=M16 16l4 4'],
   grid: ['rect|x=3|y=3|width=7|height=7|rx=1.4', 'rect|x=14|y=3|width=7|height=7|rx=1.4', 'rect|x=3|y=14|width=7|height=7|rx=1.4', 'rect|x=14|y=14|width=7|height=7|rx=1.4'],
@@ -124,10 +128,16 @@ function toast(message, error = false) {
 
 async function busy(button, operation) {
   if (button?.disabled) return;
+  const hadFocus = button && document.activeElement === button;
   if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
   try { return await operation(); }
   catch (error) { toast(errorMessage(error), true); }
-  finally { if (button) { button.disabled = false; button.removeAttribute('aria-busy'); } }
+  finally {
+    if (button) {
+      button.disabled = false; button.removeAttribute('aria-busy');
+      if (hadFocus && [document.body, button.closest('dialog')].includes(document.activeElement) && button.isConnected) focusAvailable(button);
+    }
+  }
 }
 
 function applyTheme(theme) {
@@ -179,14 +189,14 @@ async function initializeLibrary() {
 function renderShell() {
   const sidebar = h('aside', { class: 'sidebar', id: 'sidebar', 'aria-label': 'Library navigation' });
   const shell = h('div', { class: 'app-shell' });
-  const menu = iconBtn('Open navigation', 'menu', () => { shell.classList.toggle('menu-open'); menu.setAttribute('aria-expanded', String(shell.classList.contains('menu-open'))); }, 'mobile-menu');
+  const menu = iconBtn('Open navigation', 'menu', () => setNavigation(true), 'mobile-menu');
   menu.setAttribute('aria-controls', 'sidebar'); menu.setAttribute('aria-expanded', 'false');
-  const scrim = h('button', { class: 'mobile-scrim', 'aria-label': 'Close navigation', onClick: () => { shell.classList.remove('menu-open'); menu.setAttribute('aria-expanded', 'false'); } });
+  const scrim = h('div', { class: 'mobile-scrim', 'aria-hidden': 'true', onClick: () => setNavigation(false) });
   const importButton = btn('Import', 'upload', openImport);
   const addButton = btn('Save a link', 'plus', openAdd, 'primary');
   const topbar = h('header', { class: 'topbar' }, menu, h('span', { class: 'topbar-label' }, 'A little space for everything you love'), h('div', { class: 'topbar-actions' }, importButton, addButton));
   const hero = h('section', { class: 'hero', 'aria-label': 'Your personal archive' }, h('div', { class: 'hero-copy' }, h('div', { class: 'eyebrow' }, 'Collect a little. Discover a lot.'), h('h1', {}, 'Good things, kept close.'), h('p', {}, 'The recipe. The idea. That thing you wanted to try. Find your little discoveries again.')), paperArt());
-  const title = h('h2', {}, 'All saves');
+  const title = h('h2', { tabindex: '-1' }, 'All saves');
   const count = h('span', {}, 'Opening your library…');
   const selectButton = btn('Select', 'checkcircle', () => { state.selecting = !(state.selecting || state.selected.size > 0); if (!state.selecting) state.selected.clear(); renderSelection(); }, 'ghost small');
   const organize = btn('Organize', 'sparkles', () => openOrganize(), 'soft small');
@@ -206,8 +216,72 @@ function renderShell() {
   shell.append(sidebar, scrim, main);
   if (IS_DEMO) app.replaceChildren(h('div', { class: 'demo-banner', role: 'note' }, h('span', {}, icon('sparkles'), h('strong', {}, 'Interactive demo'), ' · synthetic content · changes reset on reload'), btn('Reset demo', 'arrow', () => location.reload(), 'ghost small')), shell);
   else app.replaceChildren(shell);
-  dom = { shell, sidebar, title, count, search, tagSelect, sort, tabs, bulk, grid, more, selectButton, menu };
-  renderSidebar(); renderTabs();
+  dom = { shell, sidebar, main, title, count, search, tagSelect, sort, tabs, bulk, grid, more, selectButton, menu };
+  renderSidebar(); renderTabs(); syncNavigation();
+}
+
+function setNavigation(open, { focus = true } = {}) {
+  if (!dom.shell?.isConnected) return;
+  const wasOpen = dom.shell.classList.contains('menu-open');
+  dom.shell.classList.toggle('menu-open', narrowLayout.matches && open);
+  syncNavigation();
+  if (!focus || !narrowLayout.matches) return;
+  if (open) dom.sidebar.querySelector('.navigation-close')?.focus({ preventScroll: true });
+  else if (wasOpen) dom.menu.focus({ preventScroll: true });
+}
+
+function syncNavigation() {
+  if (!dom.shell?.isConnected) return;
+  const narrow = narrowLayout.matches;
+  const wasOpen = dom.shell.classList.contains('menu-open');
+  const open = narrow && wasOpen;
+  // CSS may already have blurred a control that disappeared at this breakpoint.
+  const focused = document.activeElement === document.body ? lastFocusedControl : document.activeElement;
+  if (!narrow) dom.shell.classList.remove('menu-open');
+  dom.main.inert = open;
+  // Move focus before hiding a focused panel at a breakpoint.
+  if (narrow && !open && dom.sidebar.contains(focused)) dom.menu.focus({ preventScroll: true });
+  dom.sidebar.inert = narrow && !open;
+  dom.menu.setAttribute('aria-expanded', String(open));
+  if (narrow && !open) dom.sidebar.setAttribute('aria-hidden', 'true');
+  else dom.sidebar.removeAttribute('aria-hidden');
+  if (open) {
+    dom.sidebar.setAttribute('role', 'dialog');
+    dom.sidebar.setAttribute('aria-modal', 'true');
+  } else {
+    dom.sidebar.removeAttribute('role');
+    dom.sidebar.removeAttribute('aria-modal');
+  }
+  if (!narrow && (wasOpen || focused === dom.menu || focused?.classList.contains('navigation-close'))) {
+    dom.sidebar.querySelector('.nav-button.active, .nav-button')?.focus({ preventScroll: true });
+  }
+}
+narrowLayout.addEventListener('change', syncNavigation);
+
+function rememberFocus(element = document.activeElement) {
+  const card = element?.closest('[data-item-id]');
+  const cardControl = ['card-open', 'card-favorite', 'card-select'].find(name => element?.classList.contains(name));
+  const navigationKey = element?.dataset.navKey;
+  const label = dom.sidebar?.contains(element) && element.getAttribute('aria-label');
+  return () => {
+    if (element?.isConnected) return element;
+    if (card && cardControl) return dom.grid?.querySelector(`[data-item-id="${CSS.escape(card.dataset.itemId)}"] .${cardControl}`);
+    if (navigationKey) return dom.sidebar?.querySelector(`[data-nav-key="${CSS.escape(navigationKey)}"]`);
+    if (label) return dom.sidebar?.querySelector(`[aria-label="${CSS.escape(label)}"]`);
+    return null;
+  };
+}
+
+function focusAvailable(target, fallback = dom.title) {
+  const node = target?.isConnected && !target.closest('[inert], [aria-hidden="true"]') ? target : fallback;
+  if (node?.isConnected && !node.closest('[inert], [aria-hidden="true"]')) node.focus({ preventScroll: true });
+}
+
+function visibleCardControl() {
+  return [...(dom.grid?.querySelectorAll('.card-open') || [])].find(node => {
+    const rect = node.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < innerHeight;
+  });
 }
 
 async function refreshMetadata() {
@@ -216,16 +290,18 @@ async function refreshMetadata() {
   if (!dom.sidebar?.isConnected) return;
   renderSidebar(); renderTabs();
   dom.tagSelect.replaceChildren(h('option', { value: '' }, 'All topics'), ...state.tags.map(tag => h('option', { value: tag.name }, `${tag.name} (${tag.count})`)));
-  if (!state.tags.some(x => x.name === state.filters.tag)) state.filters.tag = '';
+  if (state.filters.tag && !state.tags.some(x => x.name === state.filters.tag)) dom.tagSelect.append(h('option', { value: state.filters.tag }, `${state.filters.tag} (0)`));
   dom.tagSelect.value = state.filters.tag;
 }
 
 function navButton(label, iconName, view, count, extra = {}) {
-  return h('button', { class: `nav-button${state.view === view ? ' active' : ''}`, 'aria-current': state.view === view ? 'page' : null, onClick: () => setView(view, extra), type: 'button' }, icon(iconName), h('span', { class: 'nav-label' }, label), count != null && h('span', { class: 'nav-count' }, Number(count).toLocaleString()));
+  return h('button', { class: `nav-button${state.view === view ? ' active' : ''}`, 'data-nav-key': view, 'aria-current': state.view === view ? 'page' : null, onClick: () => setView(view, extra), type: 'button' }, icon(iconName), h('span', { class: 'nav-label' }, label), count != null && h('span', { class: 'nav-count' }, Number(count).toLocaleString()));
 }
 
 function renderSidebar() {
   if (!dom.sidebar) return;
+  const restoreFocus = dom.sidebar.contains(document.activeElement) ? rememberFocus() : null;
+  const scrollTop = dom.sidebar.scrollTop;
   const primary = h('nav', { class: 'sidebar-section', 'aria-label': 'Library views' },
     h('div', { class: 'sidebar-heading' }, 'Your library'),
     navButton('All saves', 'grid', 'all', state.stats.total),
@@ -238,19 +314,23 @@ function renderSidebar() {
   const locals = state.collections.filter(x => x.kind === 'local');
   if (!locals.length) collections.append(h('p', { class: 'small-text muted', }, ''));
   for (const collection of locals) {
-    const button = h('button', { class: `nav-button${state.filters.collection_id === collection.id ? ' active' : ''}`, onClick: () => setView(`collection:${collection.id}`, { collection_id: collection.id }), type: 'button', title: collection.name }, h('span', { class: `collection-dot ${colorName(collection.color)}` }), h('span', { class: 'nav-label' }, collection.name), h('span', { class: 'nav-count' }, collection.count || 0));
-    collections.append(h('div', { class: 'collection-row' }, button, iconBtn(`Edit ${collection.name}`, 'dots', () => openCollection(collection), 'collection-edit')));
+    const button = h('button', { class: `nav-button${state.filters.collection_id === collection.id ? ' active' : ''}`, 'data-nav-key': `collection:${collection.id}`, onClick: () => setView(`collection:${collection.id}`, { collection_id: collection.id }), type: 'button', title: collection.name }, h('span', { class: `collection-dot ${colorName(collection.color)}` }), h('span', { class: 'nav-label' }, collection.name), h('span', { class: 'nav-count' }, collection.count || 0));
+    const edit = iconBtn(`Edit ${collection.name}`, 'dots', () => openCollection(collection), 'collection-edit');
+    edit.dataset.navKey = `edit:${collection.id}`;
+    collections.append(h('div', { class: 'collection-row' }, button, edit));
   }
   if (!locals.length) collections.append(h('button', { class: 'nav-button', onClick: () => openCollection(), type: 'button' }, icon('plus'), 'Make your first collection'));
   const sources = h('div', { class: 'sidebar-section' }, h('div', { class: 'sidebar-heading' }, 'From your sources'));
   for (const platform of ['instagram', 'tiktok', 'web']) {
     sources.append(navButton(PLATFORM_NAMES[platform], platform, `platform:${platform}`, state.stats.platforms?.[platform] || 0, { platform }));
     for (const collection of state.collections.filter(x => x.kind === 'source' && x.platform === platform)) {
-      sources.append(h('button', { class: `nav-button source-collection${state.filters.collection_id === collection.id ? ' active' : ''}`, onClick: () => setView(`collection:${collection.id}`, { collection_id: collection.id, platform }), title: `${collection.name} · original source collection`, type: 'button' }, icon('folder'), h('span', { class: 'nav-label' }, collection.name), h('span', { class: 'nav-count' }, collection.count || 0)));
+      sources.append(h('button', { class: `nav-button source-collection${state.filters.collection_id === collection.id ? ' active' : ''}`, 'data-nav-key': `collection:${collection.id}`, onClick: () => setView(`collection:${collection.id}`, { collection_id: collection.id, platform }), title: `${collection.name} · original source collection`, type: 'button' }, icon('folder'), h('span', { class: 'nav-label' }, collection.name), h('span', { class: 'nav-count' }, collection.count || 0)));
     }
   }
-  const bottom = h('div', { class: 'sidebar-bottom' }, navButton('Archived', 'archive', 'archived', state.stats.archived, { status: 'archived' }), h('button', { class: 'nav-button', type: 'button', onClick: () => openActivity() }, icon('activity'), 'Import activity'), h('button', { class: 'nav-button', type: 'button', onClick: openSettings }, icon('settings'), 'Settings & connections'), h('p', { class: 'sidebar-note' }, icon('shield'), h('span', {}, 'Self-hosted & open source', h('br'), 'A small place of your own.')));
-  dom.sidebar.replaceChildren(brand(), primary, collections, sources, h('div', { class: 'sidebar-spacer' }), bottom);
+  const bottom = h('div', { class: 'sidebar-bottom' }, navButton('Archived', 'archive', 'archived', state.stats.archived, { status: 'archived' }), h('button', { class: 'nav-button', type: 'button', 'data-nav-key': 'activity', onClick: () => openActivity() }, icon('activity'), 'Import activity'), h('button', { class: 'nav-button', type: 'button', 'data-nav-key': 'settings', onClick: openSettings }, icon('settings'), 'Settings & connections'), h('p', { class: 'sidebar-note' }, icon('shield'), h('span', {}, 'Self-hosted & open source', h('br'), 'A small place of your own.')));
+  dom.sidebar.replaceChildren(iconBtn('Close navigation', 'x', () => setNavigation(false), 'navigation-close'), brand(), primary, collections, sources, h('div', { class: 'sidebar-spacer' }), bottom);
+  dom.sidebar.scrollTop = scrollTop;
+  if (restoreFocus) focusAvailable(restoreFocus());
 }
 
 function colorName(color) {
@@ -270,11 +350,13 @@ function renderTabs() {
 }
 
 function setView(view, overrides = {}) {
+  const fromNarrowNavigation = narrowLayout.matches && dom.shell.classList.contains('menu-open');
   state.view = view; state.filters = { q: '', platform: '', collection_id: '', tag: '', status: '', favorite: false, needs_review: false, sort: 'recent', ...overrides };
   state.selected.clear(); state.selecting = false;
   dom.search.value = ''; dom.tagSelect.value = ''; dom.sort.value = state.filters.sort;
-  dom.shell.classList.remove('menu-open'); dom.menu.setAttribute('aria-expanded', 'false');
+  setNavigation(false, { focus: false });
   renderSidebar(); renderTabs(); loadItems();
+  if (fromNarrowNavigation) dom.title.focus();
 }
 
 function viewTitle() {
@@ -282,25 +364,40 @@ function viewTitle() {
   return ({ all: 'All saves', favorites: 'Your favorites', revisit: 'A little later', review: 'Needs a little review', rediscover: 'Rediscover something good', archived: 'Archived saves' })[state.view] || `${PLATFORM_NAMES[state.filters.platform] || 'All'} saves`;
 }
 
-async function loadItems(append = false) {
+async function loadItems(append = false, { preserveLoaded = false } = {}) {
   const request = ++state.request;
+  const filters = { ...state.filters };
   state.loading = true;
   const offset = append ? state.items.length : 0;
+  const target = preserveLoaded ? Math.max(60, state.items.length) : 60;
   dom.title.textContent = viewTitle();
   document.title = `${viewTitle()} — Little Archive${IS_DEMO ? ' demo' : ''}`;
-  if (!append) {
+  if (!append && !preserveLoaded) {
     state.selected.clear(); renderSelection();
     dom.grid.replaceChildren(...Array.from({ length: 8 }, () => h('div', { class: 'skeleton', 'aria-hidden': 'true' })));
     dom.count.textContent = 'Finding your saves…';
   }
-  dom.more.replaceChildren(); dom.grid.setAttribute('aria-busy', 'true');
+  if (!preserveLoaded && !append) dom.more.replaceChildren();
+  dom.grid.setAttribute('aria-busy', 'true');
   try {
-    const result = await api(`/items?${createQuery(state.filters, offset)}`);
-    if (request !== state.request || !state.authenticated) return;
-    state.items = append ? [...state.items, ...result.items] : result.items;
-    state.total = result.total;
-    renderItems();
-  } catch (error) { if (request === state.request && state.authenticated) renderLoadError(error); }
+    const items = [];
+    let total = 0;
+    // Keep the loaded window without exceeding the server's 200-item page limit.
+    do {
+      const result = await api(`/items?${createQuery(filters, offset + items.length, Math.min(200, target - items.length))}`);
+      if (request !== state.request || !state.authenticated) return;
+      items.push(...result.items); total = result.total;
+      if (!result.items.length || filters.sort === 'random') break;
+    } while (items.length < target && offset + items.length < total);
+    state.items = append ? [...state.items, ...items] : items;
+    state.total = total;
+    renderItems({ preservePosition: append || preserveLoaded });
+  } catch (error) {
+    if (request === state.request && state.authenticated) {
+      if (preserveLoaded || append) toast(`Your loaded saves are still here. ${errorMessage(error)}`, true);
+      else renderLoadError(error);
+    }
+  }
   finally { if (request === state.request) { state.loading = false; dom.grid?.removeAttribute('aria-busy'); } }
 }
 
@@ -328,17 +425,41 @@ function makeCover(item, detail = false) {
   return wrap;
 }
 
-function renderItems() {
+function renderItems({ preservePosition = false } = {}) {
+  const activeElement = document.activeElement;
+  const restoreFocus = dom.grid.contains(activeElement) ? rememberFocus(activeElement) : null;
+  const position = preservePosition ? {
+    x: window.scrollX, y: window.scrollY,
+    anchors: [...dom.grid.querySelectorAll('[data-item-id]')].map(card => ({ id: card.dataset.itemId, top: card.getBoundingClientRect().top, bottom: card.getBoundingClientRect().bottom })).filter(card => card.bottom > 0 && card.top < window.innerHeight),
+  } : null;
   dom.count.textContent = state.filters.sort === 'random' && state.items.length < state.total ? `${state.items.length} of ${countLabel(state.total, 'save')}` : countLabel(state.total, 'save');
   if (!state.items.length) {
     const libraryEmpty = !state.stats.total && !state.stats.archived;
     const clear = () => setView('all');
     dom.grid.replaceChildren(h('section', { class: 'empty-state' }, h('div', { class: 'empty-illustration' }, icon(libraryEmpty ? 'bookmark' : 'search')), h('h3', {}, libraryEmpty ? 'Every collection starts somewhere.' : 'Nothing here just yet.'), h('p', {}, libraryEmpty ? 'Save your first link, bring in an export, or explore with a small collection of clearly labeled demo saves.' : 'Try a different search or filter. Your next rediscovery might be one collection over.'), h('div', { class: 'empty-actions' }, libraryEmpty ? [btn('Save a link', 'plus', openAdd, 'primary'), btn('Import your saves', 'upload', openImport), btn('Try demo saves', 'sparkles', event => addDemo(event.currentTarget), 'ghost')] : [btn('Clear filters', 'x', clear, 'primary')])));
-  } else dom.grid.replaceChildren(...state.items.map(renderCard));
+  } else {
+    const existing = new Map([...dom.grid.querySelectorAll('[data-item-id]')].map(card => [card.dataset.itemId, card]));
+    let cursor = dom.grid.firstChild;
+    for (const item of state.items) {
+      const snapshot = JSON.stringify([item, Boolean(state.settings.remote_previews)]);
+      let card = existing.get(item.id);
+      if (!card || cardSnapshots.get(card) !== snapshot) { card = renderCard(item); cardSnapshots.set(card, snapshot); }
+      if (card !== cursor) dom.grid.insertBefore(card, cursor);
+      cursor = card.nextSibling;
+    }
+    while (cursor) { const next = cursor.nextSibling; cursor.remove(); cursor = next; }
+  }
   dom.more.replaceChildren();
   if (state.filters.sort === 'random' && state.items.length) dom.more.append(btn('Shuffle these discoveries', 'sparkles', event => busy(event.currentTarget, () => loadItems())));
   else if (state.items.length < state.total) dom.more.append(btn(`Load more · ${state.total - state.items.length} remaining`, 'plus', event => busy(event.currentTarget, () => loadItems(true))));
+  const loaded = new Set(state.items.map(item => item.id));
+  for (const id of state.selected) if (!loaded.has(id)) state.selected.delete(id);
   renderSelection();
+  if (restoreFocus && !activeElement.isConnected) focusAvailable(restoreFocus());
+  if (position) {
+    const anchor = position.anchors.map(previous => ({ previous, card: dom.grid.querySelector(`[data-item-id="${CSS.escape(previous.id)}"]`) })).find(entry => entry.card);
+    window.scrollTo({ left: position.x, top: anchor ? window.scrollY + anchor.card.getBoundingClientRect().top - anchor.previous.top : position.y, behavior: 'instant' });
+  }
 }
 
 function renderCard(item) {
@@ -347,12 +468,20 @@ function renderCard(item) {
   const status = item.status === 'done' ? h('span', { class: 'source-label', title: 'Done', 'aria-label': 'Done' }, icon('check')) : item.status === 'to_revisit' ? h('span', { class: 'source-label', title: 'To revisit', 'aria-label': 'To revisit' }, icon('clock')) : null;
   const tags = h('div', { class: 'tags' }, (item.tags || []).slice(0, 2).map(tag => h('span', { class: 'tag', dir: 'auto' }, tag)), item.needs_review && h('span', { class: 'tag review' }, 'To review'));
   const body = h('div', { class: 'card-body' }, h('div', { class: 'card-meta' }, source, status), h('h3', { class: 'card-title', dir: 'auto' }, item.title || hostLabel(item.url)), h('div', { class: 'card-creator', dir: 'auto' }, item.creator || hostLabel(item.url)), tags);
-  const open = h('button', { class: 'card-open', type: 'button', 'aria-label': `Open ${item.title || 'saved item'}`, onClick: () => openDetail(item.id) }, makeCover(item), body);
+  const open = h('button', { class: 'card-open', type: 'button', 'aria-label': `Open ${item.title || 'saved item'}`, onClick: event => openDetail(item.id, { opener: event.currentTarget }) }, makeCover(item), body);
   const checkbox = h('input', { type: 'checkbox', class: 'card-select', checked: state.selected.has(item.id), 'aria-label': `Select ${item.title || 'saved item'}`, onChange: event => {
     if (event.target.checked && state.selected.size >= 200) { event.target.checked = false; toast('Select up to 200 saves, or use Organize to update every match.'); return; }
     event.target.checked ? state.selected.add(item.id) : state.selected.delete(item.id); renderSelection();
   } });
-  const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => busy(event.currentTarget, async () => { await api(`/items/${item.id}`, { method: 'PATCH', body: { favorite: !item.favorite } }); await refreshLibrary(); }), 'card-favorite');
+  const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => {
+    const trigger = event.currentTarget;
+    const hadFocus = document.activeElement === trigger;
+    return busy(trigger, async () => {
+      const updated = await api(`/items/${item.id}`, { method: 'PATCH', body: { favorite: !item.favorite } });
+      await refreshEditedItem(updated);
+      if (hadFocus && (document.activeElement === document.body || document.activeElement === trigger) && !document.querySelector('dialog[open]')) focusAvailable(rememberFocus(trigger)(), visibleCardControl() || dom.title);
+    });
+  }, 'card-favorite');
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
   card.append(open, checkbox, favorite); return card;
 }
@@ -374,7 +503,27 @@ function renderSelection() {
 
 async function refreshLibrary() { await refreshMetadata(); await loadItems(); }
 
-function modal(title, { detail = false, canClose, onClose } = {}) {
+async function refreshEditedItem(updated) {
+  const request = state.request;
+  const before = state.items.find(item => item.id === updated.id);
+  const affectsView = before && itemChangeAffectsView(before, updated, state.filters);
+  await refreshMetadata();
+  // A filter/search change made while saving owns the new view.
+  if (request !== state.request || !state.authenticated) return;
+  if (!before || affectsView) await loadItems(false, { preserveLoaded: true });
+  else {
+    state.items = state.items.map(item => item.id === updated.id ? updated : item);
+    renderItems({ preservePosition: true });
+  }
+}
+
+function modal(title, { detail = false, canClose, onClose, opener = document.activeElement } = {}) {
+  const openedFromCard = Boolean(opener?.closest('[data-item-id]'));
+  let returnFocus = rememberFocus(opener);
+  if (narrowLayout.matches && dom.shell?.classList.contains('menu-open')) {
+    setNavigation(false);
+    returnFocus = rememberFocus(dom.menu);
+  }
   const heading = h('h2', { id: `dialog-title-${++uid}` }, title);
   const dialog = h('dialog', { class: detail ? 'detail-dialog' : '', 'aria-labelledby': heading.id });
   const body = h('div', { class: 'dialog-body' });
@@ -384,7 +533,15 @@ function modal(title, { detail = false, canClose, onClose } = {}) {
   dialog.append(head, body);
   dialog.addEventListener('cancel', e => { if (canClose && !canClose()) e.preventDefault(); });
   dialog.addEventListener('click', e => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) close(); } });
-  dialog.addEventListener('close', () => { onClose?.(); dialog.remove(); });
+  dialog.addEventListener('close', () => {
+    onClose?.(); dialog.remove();
+    const parent = [...document.querySelectorAll('dialog[open]')].at(-1);
+    let target = returnFocus();
+    if (openedFromCard && (!target || target.getBoundingClientRect().bottom <= 0 || target.getBoundingClientRect().top >= innerHeight)) {
+      target = visibleCardControl();
+    }
+    if (!parent || parent.contains(target)) focusAvailable(target);
+  });
   document.body.append(dialog); dialog.showModal();
   return { dialog, head, body, foot, close, addFooter: (...children) => { foot.replaceChildren(...children); dialog.append(foot); } };
 }
@@ -535,11 +692,11 @@ async function openReview(filters = {}) {
   else toast('You are caught up. No saves in this scope need review.');
 }
 
-async function openDetail(id, { reviewFilters } = {}) {
+async function openDetail(id, { reviewFilters, opener } = {}) {
   if (state.detail) state.detail.close();
   let dirty = false;
   const confirmDiscard = () => !dirty || window.confirm('Discard your unsaved changes?');
-  const m = modal('A closer look', { detail: true, canClose: confirmDiscard, onClose: () => { if (state.detail === m.dialog) state.detail = null; } });
+  const m = modal('A closer look', { detail: true, opener, canClose: confirmDiscard, onClose: () => { if (state.detail === m.dialog) state.detail = null; } });
   m.confirmDiscard = confirmDiscard;
   m.reviewFilters = reviewFilters || libraryScope(state.filters, 'view');
   state.detail = m.dialog;
@@ -548,7 +705,13 @@ async function openDetail(id, { reviewFilters } = {}) {
   catch (e) { m.body.replaceChildren(h('div', { class: 'form-error', role: 'alert' }, errorMessage(e))); }
 }
 
-function renderDetail(m, item, setDirty) {
+function renderDetail(m, item, setDirty, fallbackFocus = null) {
+  if (!m.dialog.open) return;
+  const active = document.activeElement;
+  const focusKey = active?.dataset.detailFocus || ([document.body, m.dialog].includes(active) ? fallbackFocus : null);
+  const scrollTop = m.dialog.scrollTop;
+  const bodyScrollTop = m.body.scrollTop;
+  const evidenceOpen = Boolean(m.body.querySelector('details')?.open);
   m.body.replaceChildren(); setDirty(false);
   const originalURL = safeURL(item.url);
   const openOriginal = IS_DEMO ? h('span', { class: 'pill-note' }, 'Illustrative source link') : originalURL ? h('a', { href: originalURL, target: '_blank', rel: 'noopener noreferrer', class: 'btn small' }, 'Open original', icon('external')) : null;
@@ -557,7 +720,7 @@ function renderDetail(m, item, setDirty) {
     item.favorite = updated.favorite;
     const label = item.favorite ? 'Remove from favorites' : 'Add to favorites';
     favorite.setAttribute('aria-pressed', String(item.favorite)); favorite.setAttribute('aria-label', label); favorite.title = label;
-    await refreshLibrary();
+    await refreshEditedItem(updated);
   }));
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
   m.body.append(makeCover(item, true), h('div', { class: 'detail-source-row' }, h('span', { class: 'source-label' }, icon(item.platform), PLATFORM_NAMES[item.platform] || 'Web', item.creator ? ` · ${item.creator}` : ''), favorite), h('h2', { class: 'detail-title', dir: 'auto' }, item.title || hostLabel(item.url)), h('div', { class: 'detail-actions' }, openOriginal, btn('Copy link', 'copy', event => busy(event.currentTarget, () => copyText(item.url)))));
@@ -565,7 +728,7 @@ function renderDetail(m, item, setDirty) {
   if (sourceCollections.length) m.body.append(h('section', { class: 'detail-section mt-12' }, h('h3', {}, 'Original collections'), h('div', { class: 'tags' }, sourceCollections.map(c => h('span', { class: 'tag source', dir: 'auto' }, icon('folder'), c.name))), h('p', { class: 'field-help mt-12' }, 'Kept exactly as imported from the source.')));
   if (item.ai && item.needs_review) {
     const ai = item.ai;
-    m.body.append(h('section', { class: 'ai-card', 'aria-label': 'AI suggestion' }, h('h3', {}, icon('sparkles'), 'A little help organizing'), h('p', { dir: 'auto' }, ai.summary || ai.suggested_title), h('div', { class: 'tags' }, (ai.topics || []).map(x => h('span', { class: 'tag' }, x))), h('p', { class: 'field-help' }, `Based on ${String(ai.evidence_level || 'available text').replaceAll('-', ' ')}. Review suggestions before accepting.`), h('div', { class: 'flex-wrap' }, btn('Accept suggestions', 'check', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/accept`, { method: 'POST' }); renderDetail(m, updated, setDirty); await refreshLibrary(); toast('Suggestions accepted.'); }), 'primary small'), btn('Dismiss', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/dismiss`, { method: 'POST' }); renderDetail(m, updated, setDirty); await refreshLibrary(); toast('Suggestion dismissed.'); }), 'ghost small'))));
+    m.body.append(h('section', { class: 'ai-card', 'aria-label': 'AI suggestion' }, h('h3', {}, icon('sparkles'), 'A little help organizing'), h('p', { dir: 'auto' }, ai.summary || ai.suggested_title), h('div', { class: 'tags' }, (ai.topics || []).map(x => h('span', { class: 'tag' }, x))), h('p', { class: 'field-help' }, `Based on ${String(ai.evidence_level || 'available text').replaceAll('-', ' ')}. Review suggestions before accepting.`), h('div', { class: 'flex-wrap' }, btn('Accept suggestions', 'check', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/accept`, { method: 'POST' }); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Suggestions accepted.'); }), 'primary small'), btn('Dismiss', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/dismiss`, { method: 'POST' }); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Suggestion dismissed.'); }), 'ghost small'))));
   }
   const title = h('input', { type: 'text', value: item.title || '', maxlength: 500, dir: 'auto' });
   const summary = h('textarea', { value: item.summary || '', maxlength: 4000, rows: 3, placeholder: 'A short reminder of what this is about…', dir: 'auto' });
@@ -573,10 +736,11 @@ function renderDetail(m, item, setDirty) {
   const tags = h('input', { type: 'text', value: (item.tags || []).join(', '), placeholder: 'Separate topics with commas', dir: 'auto' });
   const status = optionSelect(Object.entries(STATUS_NAMES), item.status || 'inbox');
   const review = h('input', { type: 'checkbox', checked: item.needs_review });
+  for (const [key, control] of Object.entries({ title, summary, notes, tags, status, review })) control.dataset.detailFocus = key;
   const checklist = collectionChecklist((item.collections || []).filter(x => x.kind === 'local').map(x => x.id));
   const form = h('form', { class: 'detail-section' }, field('Title', title), field('Summary', summary), field('Your notes', notes), field('Topics', tags, IS_DEMO ? 'Separate topics with commas. Demo edits reset on reload.' : 'Separate topics with commas. Your edits are kept on refresh.'), field('Progress', status), h('label', { class: 'check-row' }, review, 'Keep in Needs review'), h('div', { class: 'form-field' }, h('span', { class: 'field-label' }, 'Local collections'), checklist.element));
   const error = formError(form);
-  const save = h('button', { class: 'btn primary w-full', type: 'submit' }, icon('check'), 'Save changes');
+  const save = h('button', { class: 'btn primary w-full', type: 'submit', 'data-detail-focus': 'save' }, icon('check'), 'Save changes');
   form.append(save); form.addEventListener('input', () => setDirty(true));
   form.addEventListener('submit', async event => {
     event.preventDefault(); error.clear(); save.disabled = true;
@@ -584,7 +748,7 @@ function renderDetail(m, item, setDirty) {
       const patch = buildItemPatch(item, { title: title.value.trim(), summary: summary.value, notes: notes.value, tags: parseTags(tags.value), status: status.value, needs_review: review.checked, collection_ids: checklist.values() });
       if (!Object.keys(patch).length) { setDirty(false); toast('Everything is already saved.'); return; }
       const updated = await api(`/items/${item.id}`, { method: 'PATCH', body: patch });
-      setDirty(false); renderDetail(m, updated, setDirty); await refreshLibrary(); toast('Your changes are saved.');
+      setDirty(false); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Your changes are saved.');
     } catch (e) { error.show(e); } finally { save.disabled = false; }
   });
   m.body.append(form);
@@ -597,16 +761,18 @@ function renderDetail(m, item, setDirty) {
       if (!m.confirmDiscard()) return;
       if (file.size > 8 * 1024 * 1024) throw new Error('Choose a PNG, JPEG, or WebP smaller than 8 MiB.');
       const updated = await api(`/items/${item.id}/thumbnail`, { method: 'POST', body: file, raw: true, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
-      renderDetail(m, updated, setDirty); await refreshLibrary(); toast('Local preview added.');
+      renderDetail(m, updated, setDirty, 'preview'); await refreshEditedItem(updated); toast('Local preview added.');
     });
   });
   const tools = h('section', { class: 'detail-section' }, h('h3', {}, 'A few useful extras'), h('div', { class: 'flex-wrap' }, upload, thumbnailInput));
-  if (item.thumbnail_url) tools.lastChild.append(btn('Remove preview', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/thumbnail`, { method: 'DELETE' }); renderDetail(m, updated, setDirty); await refreshLibrary(); }), 'ghost small'));
+  upload.dataset.detailFocus = 'preview';
+  if (item.thumbnail_url) tools.lastChild.append(btn('Remove preview', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/thumbnail`, { method: 'DELETE' }); renderDetail(m, updated, setDirty, 'preview'); await refreshEditedItem(updated); }), 'ghost small'));
   const aiButton = btn('Suggest topics with local AI', 'sparkles', event => busy(event.currentTarget, async () => { const result = await api('/ai/jobs', { method: 'POST', body: { ids: [item.id] } }); toast(`${result.queued} classification job queued. Check activity, then reopen this save to review.`); }), 'small');
   if (!state.settings.ai_enabled) { aiButton.disabled = true; aiButton.title = 'Configure a local Ollama model on your server to enable suggestions.'; }
   tools.append(h('div', { class: 'mt-12' }, aiButton), h('p', { class: 'field-help mt-12' }, IS_DEMO ? 'This isolated demo does not upload files or run AI. Install your own instance to use these features.' : state.settings.ai_enabled ? 'AI works from available text. A video cover is not a full video analysis.' : 'Optional local AI is not configured. Your library works without it.'));
   m.body.append(tools);
   const evidence = h('details', { class: 'detail-section' }, h('summary', {}, 'Source text & evidence'));
+  evidence.open = evidenceOpen;
   if (item.caption) evidence.append(h('div', { class: 'evidence' }, h('span', { class: 'evidence-label' }, 'Caption'), h('p', { dir: 'auto' }, item.caption)));
   for (const ev of item.evidence || []) { if (ev.kind === 'caption' && ev.text === item.caption) continue; evidence.append(h('div', { class: 'evidence' }, h('span', { class: 'evidence-label' }, String(ev.kind).replaceAll('_', ' ')), h('p', { dir: 'auto' }, ev.text))); }
   if (!item.caption && !(item.evidence || []).length) evidence.append(h('p', { class: 'field-help mt-12' }, 'This save currently has link-only evidence. Add your own notes or import more source text.'));
@@ -617,6 +783,8 @@ function renderDetail(m, item, setDirty) {
     setDirty(false); m.close(); await refreshLibrary(); await openReview(m.reviewFilters);
   }), 'soft')));
   m.body.append(btn('Delete from this archive', 'trash', () => confirmAction('Delete this saved item?', 'Its local notes, topics, and memberships will be deleted. Your save on the original platform is unaffected.', async () => { await api(`/items/${item.id}`, { method: 'DELETE' }); setDirty(false); m.close(); await refreshLibrary(); toast('Item deleted from your archive.'); }, true), 'ghost danger small'));
+  if (focusKey) m.body.querySelector(`[data-detail-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+  m.dialog.scrollTop = scrollTop; m.body.scrollTop = bodyScrollTop;
 }
 
 function openImport() {
@@ -808,10 +976,17 @@ function openActivity(initial = 'imports') {
 }
 
 document.addEventListener('keydown', event => {
-  if ((event.metaKey || event.ctrlKey) && ['k', 'f'].includes(event.key.toLowerCase()) && state.authenticated && !document.querySelector('dialog[open]')) {
-    event.preventDefault(); dom.search?.focus(); dom.search?.select();
+  const navigationOpen = narrowLayout.matches && dom.shell?.classList.contains('menu-open');
+  if (navigationOpen && event.key === 'Tab') {
+    const controls = [...dom.sidebar.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), [tabindex="0"]')].filter(node => node.getClientRects().length);
+    const first = controls[0]; const last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }
-  if (event.key === 'Escape') { dom.shell?.classList.remove('menu-open'); dom.menu?.setAttribute('aria-expanded', 'false'); }
+  if ((event.metaKey || event.ctrlKey) && ['k', 'f'].includes(event.key.toLowerCase()) && state.authenticated && !document.querySelector('dialog[open]')) {
+    event.preventDefault(); setNavigation(false, { focus: false }); dom.search?.focus(); dom.search?.select();
+  }
+  if (event.key === 'Escape' && navigationOpen) { event.preventDefault(); setNavigation(false); }
 });
 
 async function boot() {

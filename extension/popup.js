@@ -20,6 +20,13 @@ function render() {
   const active=run && ['running','paused','finishing'].includes(run.status);
   $('connection-dot').classList.toggle('connected',connected);
   $('connection-label').textContent=connected ? new URL(state.config.server).host : 'Not connected';
+  const protocol=state?.config?.protocol;
+  $('protocol-status').hidden=!connected;
+  $('protocol-status').textContent=protocol?.mode==='legacy'
+    ? 'Legacy 0.1.0 server compatibility mode. Update the server to verify its supported import capabilities. Existing scan batches keep their identity.'
+    : protocol?.mode==='negotiated'
+      ? `Import protocol ${protocol.version} verified at the last server check.`
+      : 'Server compatibility will be checked before the next import or upload.';
   $('open-app').disabled=!connected;
   $('disconnect').disabled=!connected || busy;
   $('start').disabled=busy || !connected || !context || context.isIndex || Boolean(active);
