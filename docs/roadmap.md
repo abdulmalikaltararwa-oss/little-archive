@@ -2,6 +2,8 @@
 
 Roadmap entries are intentions, not promises of a release date or current support.
 
+The [recommended v1 product and delivery plan](v1-product-plan.md) expands the target from the current explicit-view importer to a guided account-level import, consistent personal categories, easier Mac delivery, and everyday recovery. It contains a concrete implementation backlog and acceptance criteria. These proposed additions are not yet implemented or included in the current passing verification results.
+
 ## First stable release: in development
 
 The first stable release targets a private, browsable library: authentication, source and local collections, keyword search, tags, notes, progress, file imports, explicit browser imports, optional model suggestions, and portable backup/export. The current internal version remains development software until the [1.0 release gates](release-gates.md) have passing evidence.
