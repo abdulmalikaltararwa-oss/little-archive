@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Little Archive",
+  "description": "Save a selected Instagram or TikTok collection to your own Little Archive server.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "114",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_title": "Little Archive", "default_popup": "popup.html"},
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  }
+}

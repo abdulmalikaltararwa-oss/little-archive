@@ -1,0 +1,72 @@
+name: Publish synthetic demo
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Read Pages configuration
+        uses: actions/configure-pages@v5
+        with:
+          enablement: false
+      - name: Build isolated synthetic demo
+        run: python scripts/build_demo.py
+      - name: Verify the public artifact allowlist
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('dist-demo')
+          expected = {
+              'index.html', 'demo.js', 'demo-store.js', 'demo-data.js',
+              'app.js', 'utils.js', 'styles.css', 'icon.svg',
+              '.nojekyll', '.little-archive-demo-build',
+          }
+          paths = list(root.rglob('*'))
+          actual = {str(path.relative_to(root)) for path in paths}
+          if actual != expected:
+              raise SystemExit(f'Unexpected demo artifact files: {sorted(actual ^ expected)}')
+          if any(path.is_symlink() or not path.is_file() for path in paths):
+              raise SystemExit('The demo artifact must contain only regular files.')
+          print('Verified the synthetic demo artifact. No server or runtime data is included.')
+          PY
+      - name: Upload only the synthetic demo
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist-demo
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy synthetic demo
+        id: deployment
+        uses: actions/deploy-pages@v4

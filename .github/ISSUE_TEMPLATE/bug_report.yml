@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible problem using synthetic examples.
+body:
+  - type: markdown
+    attributes:
+      value: "Public issues are visible to everyone. Use invented records or the synthetic demo; never attach private platform exports, databases, backups, passwords, tokens, or account screenshots. For vulnerabilities, follow SECURITY.md."
+  - type: input
+    id: environment
+    attributes:
+      label: Version and environment
+      placeholder: "0.1.0, macOS, Docker, Chrome; self-hosted app or static demo"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include a small invented example if needed. For imports, name the format and source view.
+      placeholder: "1. Add https://example.com/synthetic-save\n2. Mark it To revisit\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+      description: Include the exact error text and a synthetic screenshot only if helpful.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public report check
+      options:
+        - label: This report contains no private exports, credentials, or personal account data.
+          required: true

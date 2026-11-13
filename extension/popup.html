@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Little Archive</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 36 36" width="32" height="32"><path d="M10 6h16v25l-8-5-8 5Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M18 10c-6-5-7 5 0 7 7-2 6-12 0-7Zm0 7v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+    <div><h1>Little Archive</h1><p>A little home for your saves.</p></div>
+    <button class="icon-button" id="open-app" title="Open your library" aria-label="Open your library">↗</button>
+  </header>
+  <main>
+    <div class="connection"><span class="dot" id="connection-dot"></span><span id="connection-label">Not connected</span><span class="pill">Experimental</span></div>
+
+    <details id="setup">
+      <summary>Server connection</summary>
+      <form id="setup-form">
+        <label for="server">Your server URL</label>
+        <input id="server" type="url" placeholder="http://localhost:8787" autocomplete="url" required>
+        <label for="token">Import token</label>
+        <input id="token" type="password" placeholder="Paste from app → Settings" autocomplete="off" maxlength="512" spellcheck="false">
+        <p class="help">Create an import token in your app settings. Leave this field blank to keep the saved token.</p>
+        <div class="button-row"><button class="primary" type="submit">Connect server</button><button class="quiet" id="disconnect" type="button">Disconnect</button></div>
+      </form>
+    </details>
+
+    <section class="source-panel" aria-labelledby="source-title">
+      <div class="eyebrow" id="platform-label">CURRENT SOURCE VIEW</div>
+      <h2 id="source-title">Bring your saves home</h2>
+      <p class="help" id="context-help">Open your Instagram Saved view or TikTok Favorites tab, then reopen this extension.</p>
+      <form id="start-form">
+        <label for="account">Source account handle</label>
+        <input id="account" type="text" autocomplete="off" spellcheck="false" maxlength="80" required placeholder="Your source account">
+        <p class="help compact">Suggested from the page URL. Verify the handle yourself.</p>
+        <div id="collection-field" hidden>
+          <label for="collection">Exact collection name</label>
+          <input id="collection" type="text" maxlength="200" placeholder="Copy the original name exactly" autocomplete="off">
+        </div>
+        <label class="check"><input id="confirm-view" type="checkbox"><span>I am viewing my saved posts, favorites, or a saved collection—not a feed or my posted videos.</span></label>
+        <button class="primary full" type="submit" id="start">Import this view <span aria-hidden="true">↗</span></button>
+      </form>
+    </section>
+
+    <section class="run-panel" id="run-panel" hidden aria-labelledby="run-title">
+      <div class="run-heading"><h2 id="run-title">Import progress</h2><span class="pill" id="run-state">Ready</span></div>
+      <p id="run-scope" class="scope"></p>
+      <div class="metrics"><div><strong id="observed">0</strong><span>observed</span></div><div><strong id="applied">0</strong><span>processed</span></div><div><strong id="pending">0</strong><span>queued</span></div></div>
+      <p class="help" id="run-message" role="status"></p>
+      <div class="button-row wrap">
+        <button id="pause" class="secondary" type="button">Pause</button>
+        <button id="resume" class="primary" type="button">Resume</button>
+        <button id="finish" class="secondary" type="button">Finish partial scan</button>
+        <button id="retry" class="secondary" type="button">Retry uploads</button>
+      </div>
+      <button class="text-button" type="button" id="forget">Forget this scan on this device</button>
+    </section>
+
+    <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+    <footer>One view at a time. Keep the source tab open. Collection coverage depends on the current platform layout. No passwords or cookies are collected.</footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "little-archive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A self-hosted home for your saved discoveries",
+  "license": "MIT",
+  "scripts": {
+    "dev": "python3 scripts/dev.py",
+    "test:web": "node --test web/*.test.mjs",
+    "build:demo": "python3 scripts/build_demo.py",
+    "test:extension": "node --test extension/tests/*.test.mjs"
+  }
+}

@@ -1,0 +1,25 @@
+services:
+  archive:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      LA_ADMIN_PASSWORD: ${LA_ADMIN_PASSWORD:?Run python3 scripts/setup.py first}
+      LA_PUBLIC_URL: ${LA_PUBLIC_URL:-http://localhost:8787}
+      LA_DATA_DIR: /data
+      LA_OLLAMA_URL: ${LA_OLLAMA_URL:-}
+      LA_OLLAMA_MODEL: ${LA_OLLAMA_MODEL:-}
+    volumes:
+      - archive-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+volumes:
+  archive-data:

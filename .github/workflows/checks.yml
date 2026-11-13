@@ -1,0 +1,42 @@
+name: Checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: node --test extension/tests/*.test.mjs
+      - run: node --test web/*.test.mjs
+      - run: python scripts/build_demo.py
+      - run: python scripts/release_check.py
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t little-archive:test .
+      - name: Container smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name archive-test -p 127.0.0.1:8787:8787 -e LA_ADMIN_PASSWORD="ci-only-$(openssl rand -hex 24)" little-archive:test
+          trap 'docker rm -f archive-test' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8787/api/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs archive-test
+          exit 1
