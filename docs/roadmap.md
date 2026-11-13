@@ -2,24 +2,25 @@
 
 Roadmap entries are intentions, not promises of a release date or current support.
 
-The [recommended v1 product and delivery plan](v1-product-plan.md) expands the target from the current explicit-view importer to a guided account-level import, consistent personal categories, easier Mac delivery, and everyday recovery. It contains a concrete implementation backlog and acceptance criteria. These proposed additions are not yet implemented or included in the current passing verification results.
+The [recommended v1 product, open-source, and delivery plan](v1-product-plan.md) is the master plan for the proposed public release. Its 22 deliverables cover guided account importing, personal categories, ordinary Mac installation, self-hosting, recovery, local AI setup, installation by a local coding assistant, English/Arabic accessibility, and a maintainable contributor/release workflow. Proposed additions are not yet implemented or included in the current passing verification results.
 
 ## First stable release: in development
 
-The first stable release targets a private, browsable library: authentication, source and local collections, keyword search, tags, notes, progress, file imports, explicit browser imports, optional model suggestions, and portable backup/export. The current internal version remains development software until the [1.0 release gates](release-gates.md) have passing evidence.
+The current foundation includes authentication, source and local collections, keyword search, topics, notes, progress, file imports, explicit-view browser imports, optional model suggestions, and portable backup/export. The broader recommended v1 completes the capture-to-recovery journey and public project experience described in the master plan. The current internal version remains development software until both the existing [technical release gates](release-gates.md) and the new agreed product/project acceptance criteria have passing evidence.
 
 ## Acceptance before 1.0
 
 The complete automated matrix has passed, including authenticated browser flows, interrupted extension imports and browser restarts, real local-model inference, both Mac architectures, both container architectures, and update/rollback recovery. See the [verification record](verification.md) for the exact candidate and scope.
 
-The remaining required acceptance connects the chosen Mac installation, normal Chrome permission consent, and real Instagram and TikTok saved-content views. Record these results without publishing private records, resolve any observed failures, then align and publish the stable package. The [Mac acceptance guide](mac-acceptance.md) gives this procedure.
+For the current explicit-view implementation, remaining direct acceptance connects the chosen Mac installation, normal Chrome permission consent, and real Instagram and TikTok saved-content views. The [Mac acceptance guide](mac-acceptance.md) gives that procedure. The broader recommended v1 also requires the additional implementation, quality evaluation, public installation, accessibility, contributor, and recovery gates in the master plan. Passing the older procedure alone will not establish those new capabilities.
 
 ## Ongoing quality work
 
 - Add sanitized source-layout fixtures as the platforms change.
-- Extend collection discovery and reconciliation where the source exposes sufficient evidence.
+- Complete the planned collection discovery and reconciliation where the source exposes sufficient evidence.
 - Gather keyboard and assistive-technology feedback beyond the existing browser tests.
 - Benchmark larger libraries and additional local text models, including multilingual examples.
+- Keep user, contributor, assistant-setup, and release instructions aligned with tested artifacts.
 
 ## Possible later features
 
@@ -28,7 +29,7 @@ The remaining required acceptance connects the chosen Mac installation, normal C
 - Local semantic search with an evaluated embedding model.
 - A mobile share extension or share-target workflow.
 - Additional source adapters built through the same explicit import contract.
-- Stronger backup encryption and configurable retention.
+- Additional backup encryption options; configurable bounded retention belongs to the recommended v1.
 - Shared collections or multiple owners, with a deliberate permissions model.
 
 ## Product principles
