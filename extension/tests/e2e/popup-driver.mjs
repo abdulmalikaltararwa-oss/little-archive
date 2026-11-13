@@ -81,12 +81,17 @@ export class PopupDriver {
   async click(id) {
     const point=await this.evaluate(`(() => {
       const element=document.getElementById(${JSON.stringify(id)});
-      if (!element || element.disabled || element.hidden) throw new Error('Control unavailable');
+      if (!element) return {unavailable:'missing'};
+      if (element.disabled) return {unavailable:'disabled'};
+      if (element.hidden) return {unavailable:'hidden'};
       element.scrollIntoView({block:'center'});
       const rect=element.getBoundingClientRect();
-      if (!rect.width || !rect.height) throw new Error('Control invisible');
+      if (!rect.width || !rect.height) return {unavailable:'invisible'};
       return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
     })()`);
+    // Only static test control IDs and state labels enter this diagnostic.
+    // Never include form values or a Runtime evaluation expression.
+    if (point.unavailable) throw new Error(`Popup control ${id} is ${point.unavailable}.`);
     await this.command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});
     await this.command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
   }

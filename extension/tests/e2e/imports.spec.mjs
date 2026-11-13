@@ -79,6 +79,7 @@ test('All posts followed by individual collections preserves overlapping preset 
   await rig.start(popup);
   await rig.waitCompleted(popup);
   const initial=await rig.items();
+  const runIds=[(await rig.state()).run.id];
   expect(initial).toHaveLength(3);
   expect(initial.every(item=>item.collections.length===0)).toBe(true);
   for (const [slug,id,name,startIndex] of [['preset-a','1234567890123456',collectionA,0],['preset-b','2234567890123456',collectionB,1]]) {
@@ -91,7 +92,9 @@ test('All posts followed by individual collections preserves overlapping preset 
     expect(await popup.value('collection')).toBe(name);
     await rig.start(popup);
     await rig.waitCompleted(popup);
+    runIds.push((await rig.state()).run.id);
   }
+  expect(new Set(runIds).size).toBe(3);
   const items=await rig.items();
   expect(items.map(item=>item.id).sort()).toEqual(initial.map(item=>item.id).sort());
   const names=index=>items.find(item=>item.url.includes(`CI_SYNTHETIC_${String(index).padStart(5,'0')}`)).collections.map(collection=>collection.name).sort();

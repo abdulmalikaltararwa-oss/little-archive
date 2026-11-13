@@ -172,9 +172,17 @@ export const test=base.extend({
         return view;
       },
       async start(view,collectionName=null) {
+        const previousRunId=(await safeState()).run?.id;
         if (collectionName!==null) await view.fill('collection',collectionName);
         if (!await view.evaluate('document.getElementById("confirm-view").checked')) await view.click('confirm-view');
         await view.click('start');
+        // A click dispatches the async submit handler; it does not await the
+        // background worker. A previous completed run must never satisfy the
+        // next import's completion check while its start is still pending.
+        await expect.poll(async () => {
+          const run=(await safeState()).run;
+          return Boolean(run?.id && run.id!==previousRunId);
+        },{message:'Starting an import must persist its new run before completion is checked.'}).toBe(true);
       },
       async items() {
         const result=[];
