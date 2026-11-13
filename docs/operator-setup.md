@@ -10,7 +10,7 @@ deliverables in the [v1 plan](v1-product-plan.md).
 Use a reviewed source revision and Python 3.12. From that checkout:
 
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
@@ -45,6 +45,11 @@ when working across directories. Fresh setup refuses a selected data directory
 that already contains a library database; use its existing configuration or the
 documented recovery flow instead.
 
+If setup uses `--config PATH`, pass that same file to subsequent commands with
+`doctor --env-file PATH`, `serve --env-file PATH`, and, when needed, the documented
+`reset-password --env-file PATH` recovery operation. The examples below assume
+the default `.env` configuration and default public origin.
+
 Open the private configuration locally in a text editor to retrieve the owner
 password. Do not paste that file or password into an assistant conversation.
 There is deliberately no password flag or secret value in setup's JSON output.
@@ -60,6 +65,9 @@ Doctor inspects Python/dependencies, configuration precedence, data-location
 access, free space, the presence of a SQLite file header, and whether initial
 owner access is configured. Environment values take precedence over the file;
 the report identifies the source of each setting without printing its value.
+Dependency checks confirm installed package metadata and report versions; they
+do not compare all packages with the dependency lock, verify transitive packages,
+or replace a successful application start using the locked requirements.
 
 Doctor does not open the database through SQLite or initialize the application's
 store. It does not migrate schemas, checkpoint WAL files, requeue jobs, reset
@@ -137,9 +145,16 @@ After resolving blocking diagnostics:
 ```
 
 Open `http://localhost:8787`, sign in with the locally retrieved password, and
-try an invented link or the explicitly loaded synthetic demo. Keep the process
-running while using the app. For Docker, continue with the separate
-[self-hosting guide](self-hosting.md); this command does not install a service.
+try an invented link or the explicitly loaded synthetic demo. These commands
+assume default setup options. For a different direct loopback origin, pass its
+port to `serve --port` and `doctor --check-port --port`, then open the exact
+configured origin. The server port is not inferred from `LA_PUBLIC_URL`;
+`localhost` and `127.0.0.1` are different origins for authenticated requests.
+
+Keep the process running while using the app. For Docker or a reverse proxy,
+continue with the separate [self-hosting guide](self-hosting.md), where the
+public origin and backend listening port can differ. This command does not
+install a service.
 
 For development, use [the isolated contributor workspace](../CONTRIBUTING.md)
 instead of a personal library. Its read-only check is:

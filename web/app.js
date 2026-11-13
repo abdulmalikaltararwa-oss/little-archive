@@ -253,7 +253,8 @@ function syncNavigation() {
     dom.sidebar.removeAttribute('aria-modal');
   }
   if (!narrow && (wasOpen || focused === dom.menu || focused?.classList.contains('navigation-close'))) {
-    dom.sidebar.querySelector('.nav-button.active, .nav-button')?.focus({ preventScroll: true });
+    const target = dom.sidebar.querySelector('.nav-button.active') || dom.sidebar.querySelector('.nav-button');
+    target?.focus({ preventScroll: true });
   }
 }
 narrowLayout.addEventListener('change', syncNavigation);
@@ -455,11 +456,13 @@ function renderItems({ preservePosition = false } = {}) {
   const loaded = new Set(state.items.map(item => item.id));
   for (const id of state.selected) if (!loaded.has(id)) state.selected.delete(id);
   renderSelection();
-  if (restoreFocus && !activeElement.isConnected) focusAvailable(restoreFocus());
   if (position) {
     const anchor = position.anchors.map(previous => ({ previous, card: dom.grid.querySelector(`[data-item-id="${CSS.escape(previous.id)}"]`) })).find(entry => entry.card);
     window.scrollTo({ left: position.x, top: anchor ? window.scrollY + anchor.card.getBoundingClientRect().top - anchor.previous.top : position.y, behavior: 'instant' });
   }
+  // A focused favorite may stay active until its card is removed. Restore that
+  // path to the same visible-card fallback as a control blurred by disabling it.
+  if (restoreFocus && !activeElement.isConnected) focusAvailable(restoreFocus(), visibleCardControl() || dom.title);
 }
 
 function renderCard(item) {

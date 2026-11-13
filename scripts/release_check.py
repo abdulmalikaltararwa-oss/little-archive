@@ -5,6 +5,8 @@ import json
 import subprocess
 import sys
 
+from package_extension import extension_files
+
 root = Path(__file__).resolve().parent.parent
 required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "web/index.html", "web/app.js", "web/styles.css", "web/icon.svg", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md"]
 errors = ["Missing required file: " + p for p in required if not (root / p).is_file()]
@@ -19,6 +21,10 @@ if manifest_path.is_file():
     for p in [manifest.get("background", {}).get("service_worker"), manifest.get("action", {}).get("default_popup")]:
         if p and not (root / "extension" / p).is_file():
             errors.append("Missing extension entry point: " + p)
+try:
+    extension_files(root)
+except (OSError, ValueError, TypeError) as exc:
+    errors.append("Extension package validation failed: " + str(exc))
 tracked = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root, capture_output=True, check=True).stdout.decode().split("\0")
 for name in filter(None, tracked):
     p = Path(name)

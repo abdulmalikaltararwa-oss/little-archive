@@ -1,6 +1,6 @@
 # Packaged extension integration tests
 
-This suite loads the unmodified `extension/` directory as a Manifest V3 extension into a new, temporary Chromium profile and communicates with the real FastAPI application. It is separate from the fast DOM/helper tests under `extension/tests/*.test.mjs`.
+This suite builds the runtime-only ZIP with `scripts/package_extension.py`, extracts that generated package into an owned temporary directory, and loads it as a Manifest V3 extension into a new Chromium profile. It communicates with the real FastAPI application and is separate from the fast DOM/helper tests under `extension/tests/*.test.mjs`.
 
 ## Run in GitHub Actions
 
@@ -12,6 +12,8 @@ xvfb-run --auto-servernum node tests/e2e/run.mjs --config extension/tests/e2e/pl
 ```
 
 The shared server harness creates a temporary data directory and a random owner password at runtime. These tests log in through the real authentication API and create a separate random import token for each browser profile. They revoke that token and remove the profile afterward. No password or token is committed to the repository.
+
+The worker-scoped package fixture uses the harness's `LA_E2E_PYTHON` interpreter (`python3` by default), with argument-array subprocess calls and no shell. It builds and extracts only its own temporary ZIP, keeps the extracted extension path unchanged during browser-restart cases, and removes that temporary package directory afterward. This makes a missing runtime dependency in the downloadable ZIP fail the same eleven browser cases; no source-folder fallback is used.
 
 Test discovery without launching Chromium:
 

@@ -39,6 +39,8 @@ The extension checks the server's versioned import capabilities before connectin
 
 An incompatibility keeps pending batch bodies, IDs and sequences unchanged. Keep the same browser profile, restore compatible software, then use **Retry uploads**. Do not forget the scan or clear extension storage as an upgrade step. Existing original checkpoints remain supported; an unknown future checkpoint format is retained without being rewritten. See [the full compatibility policy](../docs/extension-protocol.md).
 
+For an unpacked extension update, pause capture, replace the extension files in the **same folder already registered with Chrome**, then click **Reload** on that same entry in `chrome://extensions`. Reopen its popup and retry/resume. Do not remove the extension or load a different extracted folder while work is pending: a different extension identity has separate local storage. Keep both the browser profile and registered extension identity.
+
 ## Privacy and permissions
 
 - `activeTab` and `scripting`: inspect only the source tab you invoke and show progress there.
@@ -56,3 +58,11 @@ To disconnect, use the popup and revoke the corresponding import token in app Se
 Run `node --test extension/tests/*.test.mjs` from the repository root, or `npm test` from this directory. No dependency installation is needed. The tests exercise URL validation, source scoping, batching and replay boundaries, DOM adapter decisions using synthetic fixtures, and mocked extension/server message handling. They do not automate sign-in or a live social account.
 
 The server API contract is in `../API_CONTRACT.md`. Source adapters are in `adapters.js`; they read rendered DOM only. Treat source text as data, never as commands. Preserve existing safety boundaries when updating selectors.
+
+Build the runtime-only downloadable ZIP from the repository root:
+
+```sh
+python3 scripts/package_extension.py --output work/little-archive-extension.zip
+```
+
+The builder validates manifest, JavaScript and HTML dependencies, including `protocol.js`, and includes `INSTALL.md` plus the full MIT license. The ZIP has `manifest.json` at its root. Tests, fixtures, dependencies and local data are excluded by an explicit file list. File order, timestamps and permissions are fixed for reproducible builds from the same source and Python/compression environment. New runtime resource mechanisms require a packaging review. `scripts/release_check.py` uses the same validation.

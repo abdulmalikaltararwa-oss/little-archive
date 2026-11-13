@@ -4,11 +4,14 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {createFaultProxy} from './fault-proxy.mjs';
 import {PopupDriver} from './popup-driver.mjs';
 import {tabTargetForPage} from './target-selection.mjs';
 
-const extensionPath=fileURLToPath(new URL('../..',import.meta.url));
+const repositoryRoot=fileURLToPath(new URL('../../..',import.meta.url));
+const runFile=promisify(execFile);
 const storageKey='littleArchiveState';
 
 async function jsonResponse(response,label) {
@@ -17,6 +20,21 @@ async function jsonResponse(response,label) {
 }
 
 export const test=base.extend({
+  extensionPackage:[async ({},use)=>{
+    const folder=await mkdtemp(path.join(tmpdir(),'little-archive-extension-package-'));
+    const archive=path.join(folder,'extension.zip');
+    const extracted=path.join(folder,'unpacked');
+    const python=process.env.LA_E2E_PYTHON || 'python3';
+    const options={cwd:repositoryRoot,timeout:30_000,maxBuffer:64*1024};
+    try {
+      // Exercise the distributable itself. The builder validates flat, reviewed
+      // names before this owned ZIP is extracted; no user archive is accepted.
+      await runFile(python,[path.join(repositoryRoot,'scripts/package_extension.py'),'--output',archive],options);
+      await runFile(python,['-m','zipfile','-e',archive,extracted],options);
+      await use(extracted);
+    } finally { await rm(folder,{recursive:true,force:true}); }
+  },{scope:'worker'}],
+
   owner:[async ({},use) => {
     const baseURL=process.env.LA_E2E_BASE_URL;
     const password=process.env.LA_E2E_OWNER_PASSWORD;
@@ -41,7 +59,9 @@ export const test=base.extend({
     } finally { await api.dispose(); }
   },{scope:'worker'}],
 
-  rig:async ({owner},use,testInfo) => {
+  rig:async ({owner,extensionPackage},use,testInfo) => {
+    // This registered path stays fixed across every profile restart in a test.
+    const extensionPath=extensionPackage;
     const profile=await mkdtemp(path.join(tmpdir(),'little-archive-extension-e2e-'));
     const account=`synthetic_${randomUUID().replaceAll('-','').slice(0,16)}`;
     const relay=await createFaultProxy(owner.baseURL);

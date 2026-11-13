@@ -110,7 +110,8 @@ class DevelopmentWorkspaceTests(unittest.TestCase):
             self.assertEqual(os.environ["LA_FUTURE_SETTING"], "must-not-reach-app")
         self.assertEqual(result, 0)
         config = seen["config"]
-        self.assertEqual(config.data_dir, self.root / "work" / "contributor-dev" / "data")
+        # macOS temp paths may use /var while the workspace resolves /private/var.
+        self.assertEqual(config.data_dir, (self.root / "work" / "contributor-dev" / "data").resolve())
         self.assertEqual(config.public_url, "http://127.0.0.1:8788")
         self.assertEqual(config.ollama_url, "")
         self.assertEqual(config.ollama_model, "")

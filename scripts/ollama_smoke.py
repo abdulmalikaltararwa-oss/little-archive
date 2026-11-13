@@ -58,6 +58,18 @@ def main():
         env = {**os.environ, "LA_ADMIN_PASSWORD": password, "LA_PUBLIC_URL": base,
                "LA_DATA_DIR": str(Path(folder) / "data"), "LA_OLLAMA_URL": args.url,
                "LA_OLLAMA_MODEL": args.model, "PYTHONUNBUFFERED": "1"}
+        diagnostic = subprocess.run(
+            [sys.executable, "-m", "server.cli", "doctor", "--check-ai", "--json", "--env-file", str(Path(folder) / "absent.env")],
+            cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30,
+        )
+        if diagnostic.returncode != 0:
+            raise AssertionError("The real model's read-only version/inventory probe failed.")
+        report = json.loads(diagnostic.stdout)
+        probe = next(row for row in report["checks"] if row["id"] == "local_ai")
+        assert probe["code"] == "model_available" and probe["details"]["inference_tested"] is False
+        assert probe["details"]["local_processing_verified"] is False
+        assert not (Path(folder) / "data").exists(), "Model diagnosis initialized a library."
+        assert password.encode() not in diagnostic.stdout + diagnostic.stderr, "Model diagnosis disclosed a credential."
         with open(Path(folder) / "server.log", "wb") as log:
             process = subprocess.Popen([sys.executable, "-m", "server.cli", "serve", "--port", str(port)], cwd=ROOT, env=env, stdout=log, stderr=log)
             try:
@@ -108,7 +120,7 @@ def main():
                 api(f"/items/{items[1]['id']}/ai/dismiss", "POST")
                 assert api("/items/" + items[1]["id"])["ai"] is None
                 print(json.dumps({"status": "passed", "model": args.model, "real_inferences": 2,
-                                  "checks": ["real worker completion", "structured suggestions", "evidence provenance", "review before changes", "manual annotation preservation", "acceptance", "stale suggestion rejection", "dismissal"]}))
+                                  "checks": ["read-only real model inventory probe", "real worker completion", "structured suggestions", "evidence provenance", "review before changes", "manual annotation preservation", "acceptance", "stale suggestion rejection", "dismissal"]}))
             finally:
                 process.terminate()
                 try:

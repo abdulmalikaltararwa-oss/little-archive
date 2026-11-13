@@ -50,6 +50,10 @@ The suite verifies:
 - Real file upload and parsing, source collection preservation, empty local collections and colors, partial-coverage reporting, import activity, literal rendering of HTML-shaped text, actual JSON downloads, duplicate-free re-import, and invalid-file errors without data changes.
 - Real PNG upload and authenticated serving, browser image decoding, persisted thumbnails, thumbnail removal, full backup download, ZIP checksums, SQLite integrity, asset inclusion, and removal of sessions, tokens, and password hashes from the downloadable snapshot.
 - Narrow-screen navigation and editing, no horizontal page overflow, keyboard search, and remembered dark appearance.
+- Gallery continuity with 240 of 260 synthetic records loaded: favorites from both cards and details, persisted notes, unchanged card nodes and inventory, retained gallery/drawer scroll, and return focus. A search-affecting edit refetches the loaded window in two bounded requests of 200 and 40 records.
+- Removal from the current Favorites filter while retaining 120 loaded results, filling the window from the next matching record, preserving the visible scroll anchor, and moving focus to a remaining card; title edits update server-authoritative ordering without losing the loaded window.
+- Rediscover continuity when favoriting a result: the same sample of 60 out of 75 records remains in the same order and at the same reading position.
+- Closed narrow navigation is absent from keyboard and accessibility interaction; opening contains focus, close/Escape/scrim actions restore it, view selection focuses the heading, dialogs return to the menu, and resizing between narrow and desktop layouts preserves a usable keyboard target.
 
 Every page runs behind a network boundary that refuses and reports external HTTP requests; app requests still go to the real server. Uncaught browser errors fail the test. Tests execute serially, use unique synthetic identifiers, and assert only their own records. No retry hides a first-run failure.
 

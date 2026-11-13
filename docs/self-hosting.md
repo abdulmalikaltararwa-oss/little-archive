@@ -43,7 +43,7 @@ Apple Silicon uses Linux ARM64 images inside Docker Desktop. The [container veri
 Use Python 3.12, the packaged and CI runtime. Verify other Python versions separately before relying on them.
 
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 python3 scripts/setup.py
 .venv/bin/python -m server.cli serve

@@ -13,6 +13,15 @@ This package connects Chrome to a Little Archive server that you run. It contain
 
 The token is import-only. The extension does not ask for platform passwords or extract session cookies. Revoke the token in application settings when disconnecting this browser.
 
+## Update without abandoning pending work
+
+1. Pause capture and keep the existing Chrome profile and extension installed.
+2. Replace the runtime files in the **same folder already registered with Chrome** with the new package's files. Keep that folder's location unchanged.
+3. In `chrome://extensions`, click **Reload** on the same Little Archive entry.
+4. Reopen its popup, inspect the retained scan, then use **Retry uploads** or reopen the original source view and **Resume**.
+
+Do not use **Remove**, clear extension storage, or use **Load unpacked** on a different extracted folder while a scan is pending. Unpacked extension identity can change with its directory; a separate identity cannot access the old extension's stored queue. Chrome documents [extension identity](https://developer.chrome.com/docs/extensions/reference/manifest/key) and [unpacked-directory behavior](https://developer.chrome.com/docs/extensions/mv2/architecture-overview#referring-to-files). This package does not add or change a manifest key as an upgrade workaround.
+
 ## Import scope
 
 Each run scans one selected view. Scan All posts/Favorites for the broad inventory, then scan original collections separately to preserve their memberships. Repeated observations are deduplicated, and local notes and tags survive refreshes.
