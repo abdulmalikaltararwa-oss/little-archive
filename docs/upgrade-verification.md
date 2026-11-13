@@ -2,20 +2,22 @@
 
 The [upgrade harness](../scripts/upgrade_smoke.py) exercises a real Docker Compose lifecycle between two distinct application revisions. It complements the [container](container-verification.md) and [native](native-verification.md) recovery harnesses, which establish restart and recovery behavior within one revision.
 
-The recorded upgrade path starts at published source commit `85d50bf51504d047ab95fd48992d2e8589318616` and replaces it with candidate `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. Both revisions report application version `0.1.0`, so a successful health response or version string alone cannot prove an upgrade. This harness requires different full Git source refs, different inspected image IDs, and different fingerprints of the packaged `server` and `web` files. It also checks the actual running container image before accepting each phase.
+The recorded upgrade path starts at published source commit `85d50bf51504d047ab95fd48992d2e8589318616` and replaces it with candidate `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d`. Both revisions report application version `0.1.0`, so a successful health response or version string alone cannot prove an upgrade. This harness requires different full Git source refs, different inspected image IDs, and different fingerprints of the packaged `server` and `web` files. It also checks the actual running container image before accepting each phase.
 
 ## Observed candidate result
 
-**All 8 lifecycle checks and cleanup passed on 2026-11-13** in [job 131795523089](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381/job/131795523089), part of the successful 12-job [Release validation run 43398600381](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381). The real execution used Linux AMD64 on `ubuntu-24.04`, Docker Engine `28.0.4`, and Docker Compose `2.38.2`. The [retained lifecycle report](evidence/6fb4c1db/upgrade.json) and [provenance index](evidence/6fb4c1db/README.md) identify both source revisions and the exact builds.
+**All 8 lifecycle checks and cleanup passed on 2026-11-13** in [job 132089743786](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844/job/132089743786), part of the successful 12-job [Release validation run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). The real execution used Linux AMD64 on `ubuntu-24.04`, Docker Engine `28.0.4`, and Docker Compose `2.38.2`. The [retained lifecycle report](evidence/505b93b0/upgrade.json) and [provenance index](evidence/505b93b0/README.md) identify both source revisions and the exact builds.
 
 | Build | Full source revision | Inspected image ID |
 | --- | --- | --- |
-| Previous | `85d50bf51504d047ab95fd48992d2e8589318616` | `sha256:0f58d2f013b4ffff17756df535bfb46fe11c38da6e1edc1290f29aa9ca0db370` |
-| Candidate | `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6` | `sha256:def1c73d68f4ada61132403b1ef9d472945b8bb760d9e25a805c00bbfc514a93` |
+| Previous | `85d50bf51504d047ab95fd48992d2e8589318616` | `sha256:7f663bd2eba4ef7414418ab323850880de9e4d597f271f097a7ef847d648403e` |
+| Candidate | `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` | `sha256:3e01f7a0b0dab3dad104e34d4381d58b3f55964e9c2a6302a81759012c6393ba` |
 
-The packaged `server`/`web` source fingerprints also differ: previous `3d2b026b88b2a03db41b583aac4007560aa986d32d325dad30f459dbce7eb7a7`, candidate `de090c35a9f015f8debe3311f950f873085d8aa8f40622a007047943eca89b80`. The same source-project volume name and hashed actual mount source remained unchanged through replacement and `compose down`/startup. Five runtime probes passed with UID/GID `10001`, zero effective capabilities, no-new-privileges, read-only root, and `x86_64` architecture.
+The packaged `server`/`web` source fingerprints also differ: previous `3d2b026b88b2a03db41b583aac4007560aa986d32d325dad30f459dbce7eb7a7`, candidate `3db449e0124b3d10c40bc477610cb365005af9e16a3b52222a44d93c512fddd4`. The same source-project volume name and hashed actual mount source remained unchanged through replacement and `compose down`/startup. Five runtime probes passed with UID/GID `10001`, zero effective capabilities, no-new-privileges, read-only root, and `x86_64` architecture.
 
 The report confirms that the old owner cookie and CSRF token and the import token worked before any fresh login. Records, edit flags, source/local memberships, empty collections, colors, and thumbnail bytes survived. The rollback used the earlier backup and previous image on a separate volume with fresh authentication, excluded the candidate-only sentinel, and left the upgraded original container and data unchanged. This closes the update/rollback and retain-data removal gates for this revision pair and Linux environment. The physical Mac operator, native Chrome permission, and live-account checks remain separate.
+
+The [earlier `6fb4c1db` lifecycle report](evidence/6fb4c1db/upgrade.json) and its [provenance](evidence/6fb4c1db/README.md) remain historical evidence for the earlier revision pair. The current report records a fresh old-to-`505b93b0` replacement and recovery; image IDs and source fingerprints above are from this run.
 
 ## What is exercised
 

@@ -1,0 +1,56 @@
+{
+  "format": "little-archive-native-verification",
+  "started_at": "2026-11-13T18:39:01+00:00",
+  "status": "passed",
+  "system": "Linux",
+  "system_release": "7.0.0-1017-azure",
+  "macos_version": null,
+  "machine": "x86_64",
+  "python": "3.12.16",
+  "sqlite": "3.45.1",
+  "checks": [
+    {
+      "name": "clean_source_setup_private_configuration_and_overwrite_protection",
+      "status": "passed"
+    },
+    {
+      "name": "deterministic_setup_preview_and_read_only_redacted_diagnostics",
+      "status": "passed"
+    },
+    {
+      "name": "native_cli_env_loading_and_authenticated_http",
+      "status": "passed"
+    },
+    {
+      "name": "native_http_crud_import_unicode_search_and_local_image",
+      "status": "passed",
+      "items": 2,
+      "collections": 2
+    },
+    {
+      "name": "native_http_backup_integrity_assets_and_authentication_exclusion",
+      "status": "passed"
+    },
+    {
+      "name": "native_restart_retains_content_images_sessions_and_identity",
+      "status": "passed"
+    },
+    {
+      "name": "offline_cli_password_reset_revokes_old_auth_and_preserves_config",
+      "status": "passed"
+    },
+    {
+      "name": "offline_cli_restore_preserves_data_and_requires_fresh_authentication",
+      "status": "passed"
+    }
+  ],
+  "copied_source_sha256": "463542e0c3d930a818a8536cc7d217c565516cca4724888c7dc3735f8e219758",
+  "source_commit": "505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d",
+  "source_worktree_modified": false,
+  "application_version": "0.1.0",
+  "cleanup": {
+    "status": "passed",
+    "errors": []
+  },
+  "finished_at": "2026-11-13T18:39:06+00:00"
+}

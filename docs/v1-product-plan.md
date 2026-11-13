@@ -2,7 +2,7 @@
 
 **Status: v1 target in implementation; proposed scope and delivered foundations are distinguished below. No stable release has been announced.**
 
-Prepared 13 November 2026 after a read-only audit of source commit `45f04a1ef33abf9a99f634f77395b7a694e7c5b0`. The existing [verification record](verification.md) describes the passing automated matrix for `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. Those results establish the behavior that was exercised; they do not establish account-wide discovery, a consumer Mac installer, classification quality, or every live platform layout.
+Prepared 13 November 2026 after a read-only audit of source commit `45f04a1ef33abf9a99f634f77395b7a694e7c5b0`. That audit and the earlier `6fb4c1db` automated baseline are historical context. The first foundation batch subsequently passed all 12 acceptance jobs at `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d`; the [verification record](verification.md) identifies its results and retained reports. Those results establish the behavior that was exercised; they do not establish account-wide discovery, a consumer Mac installer, classification quality, or every live platform layout.
 
 This plan recommends a broader product target than the current explicit-view importer. It preserves the existing release evidence and [technical acceptance gates](release-gates.md). New work must earn its own acceptance results. No proposed capability below should be advertised as shipped until implemented and verified.
 
@@ -10,7 +10,7 @@ Expanded to include public installation, contributors and maintainers, English/A
 
 ### Implementation progress
 
-The first foundation batch implements the following subset. Its verification status is maintained in [the verification record](verification.md); implementation alone does not complete the full v1 gates.
+The first foundation batch implements the following subset and passed the recorded automated matrix. Its evidence is maintained in [the verification record](verification.md); this subset does not complete the full v1 gates.
 
 | Deliverable | Delivered foundation | Remaining acceptance or scope |
 | --- | --- | --- |

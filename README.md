@@ -14,7 +14,7 @@ Run one private instance on your Mac, Linux machine, or server. There is no proj
 
 The public demo uses synthetic content and temporary page memory. Your private library runs in your own instance.
 
-The previous full automated baseline passed all 12 acceptance jobs on [`6fb4c1db`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43398600381), covering authenticated browsers, extension scenarios, native Mac/Linux recovery, containers, local-model inference, and update/rollback. Current development adds browsing continuity, isolated contributor setup, redacted operator diagnostics, and protocol compatibility. The broader [v1 plan](docs/v1-product-plan.md) adds product and public-project acceptance beyond the existing live-account and Mac operator gates. See the verification record for exact tested revisions and limits.
+The first v1 foundation batch passed all 12 acceptance jobs on [`505b93b0`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844): 117 Python tests, 65 extension/web tests, 3 harness tests, 39 authenticated browser cases, 11 cases using the built extension ZIP, real-model integration, native Mac/Linux recovery, both container architectures, and update/rollback. This batch adds browsing continuity, isolated contributor setup, redacted operator diagnostics, and protocol compatibility. The broader [v1 plan](docs/v1-product-plan.md) still includes product and public-project work plus direct live-account and Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and limits.
 
 ![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery-current.jpg)
 

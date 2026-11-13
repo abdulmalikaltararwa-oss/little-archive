@@ -2,7 +2,7 @@
 
 ## Unreleased — Development toward 1.0
 
-The previous full automated baseline passed all 12 acceptance jobs at commit `6fb4c1dbd6caa2127910ed8ccc5d305a9ed150f6`. Current changes must pass their own acceptance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and boundaries.
+The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` in [run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). Six installation/recovery reports are retained with their provenance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence, corrected initial failures, and boundaries.
 
 ### First v1 foundations
 
@@ -13,6 +13,8 @@ The previous full automated baseline passed all 12 acceptance jobs at commit `6f
 - Add opt-in bounded Ollama version/model-inventory checks without inference or downloads; do not infer local processing from a local URL.
 - Negotiate extension/server protocol capabilities before imports and retries, preserving pending batch bodies and identities. Retain explicitly labeled compatibility with the original 0.1.0 status contract.
 - Extend native acceptance to the contributor/operator commands on Mac and Linux and add browser/extension regressions for the new behavior.
+- Fix the responsive active-navigation target and removed-favorite focus fallback found by the first browser run; preserve the existing focus assertions. Correct the contributor test's equivalent `/var` and `/private/var` path comparison on macOS.
+- Build a reproducible extension ZIP with reviewed runtime files, dependency validation, installation instructions, and the full license; run the extension browser suite against that extracted ZIP. Document updates through the same registered extension folder and identity.
 
 ### Included
 
