@@ -9,18 +9,26 @@ const call = async (api, path, method = 'GET', body) => {
   return { status: response.status, data: await response.json() };
 };
 
-test('demo starts with 15 synthetic fixtures and no real connections', async () => {
+test('demo starts with 60 synthetic fixtures and no real connections', async () => {
   const api = createDemoAPI(SYNTHETIC_RECORDS);
   const { data } = await call(api, '/api/stats');
-  assert.equal(data.total, 15);
-  assert.equal(data.favorites, 4);
-  assert.equal(data.to_revisit, 3);
-  assert.equal(data.needs_review, 2);
-  assert.deepEqual(data.platforms, { instagram: 6, tiktok: 5, web: 4 });
+  assert.equal(data.total, 60);
+  assert.equal(data.favorites, 11);
+  assert.equal(data.to_revisit, 12);
+  assert.equal(data.needs_review, 5);
+  assert.deepEqual(data.platforms, { instagram: 26, tiktok: 22, web: 12 });
   const settings = (await call(api, '/api/settings')).data;
   assert.equal(settings.remote_previews, false);
   assert.equal(settings.ai_enabled, false);
   assert.equal((await call(api, '/api/auth/me')).data.csrf_token, '');
+});
+
+test('every demo fixture ships a bundled cover image', async () => {
+  const api = createDemoAPI(SYNTHETIC_RECORDS);
+  const { data } = await call(api, '/api/items?limit=200');
+  assert.equal(data.items.length, 60);
+  for (const item of data.items) assert.match(item.thumbnail_url, /\/demo-media\/\d{3}\.webp$/);
+  assert.equal(new Set(data.items.map(item => item.thumbnail_url)).size, 60);
 });
 
 test('search and intersecting filters return appropriate demo records', async () => {
@@ -37,7 +45,7 @@ test('notes and favorite changes are in-memory and reset with a fresh demo', asy
   const edit = await call(api, `/api/items/${id}`, 'PATCH', { notes: 'My temporary note', favorite: false });
   assert.equal(edit.data.notes, 'My temporary note');
   assert.equal(edit.data.favorite, false);
-  assert.equal((await call(api, '/api/stats')).data.favorites, 3);
+  assert.equal((await call(api, '/api/stats')).data.favorites, 10);
   const reset = createDemoAPI(SYNTHETIC_RECORDS);
   assert.notEqual((await call(reset, `/api/items/${id}`)).data.notes, 'My temporary note');
 });
@@ -61,14 +69,14 @@ test('collection CRUD and membership counts behave consistently', async () => {
   assert.equal((await call(api, '/api/items/demo-item-1')).data.collections[0].name, 'Renamed ideas');
   await call(api, `/api/collections/${c.id}`, 'DELETE');
   assert.equal((await call(api, '/api/items/demo-item-1')).data.collections.length, 0);
-  assert.equal((await call(api, '/api/stats')).data.total, 15);
+  assert.equal((await call(api, '/api/stats')).data.total, 60);
 });
 
 test('archive, bulk operations, delete, and reseed work without source access', async () => {
   const api = createDemoAPI(SYNTHETIC_RECORDS);
   await call(api, '/api/items/bulk', 'POST', { ids: ['demo-item-1', 'demo-item-2'], action: 'archive' });
   assert.equal((await call(api, '/api/items?status=archived')).data.total, 2);
-  assert.equal((await call(api, '/api/stats')).data.total, 13);
+  assert.equal((await call(api, '/api/stats')).data.total, 58);
   await call(api, '/api/items/demo-item-3', 'DELETE');
   assert.equal((await call(api, '/api/demo', 'POST')).data.created, 1);
 });
@@ -102,7 +110,7 @@ test('demo exports preserve in-memory changes and identify their synthetic origi
   await call(api, '/api/items/demo-item-1', 'PATCH', { notes: 'Export this temporary edit' });
   const { data } = await call(api, '/api/export?format=json');
   assert.equal(data.demo, true);
-  assert.equal(data.items.length, 15);
+  assert.equal(data.items.length, 60);
   assert.equal(data.items[0].notes, 'Export this temporary edit');
   assert.equal(data.sessions, undefined);
   assert.equal(data.tokens, undefined);

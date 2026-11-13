@@ -21,6 +21,8 @@ def main():
         stage = Path(temporary)
         for name in files:
             shutil.copy2(web / name, stage / name)
+        shutil.copytree(web / "fonts", stage / "fonts")
+        shutil.copytree(web / "demo-media", stage / "demo-media")
         shutil.copy2(web / "demo.html", stage / "index.html")
         shutil.copy2(root / "LICENSE", stage / "LICENSE")
         (stage / ".nojekyll").write_text("")
@@ -28,7 +30,7 @@ def main():
         if output.exists():
             shutil.rmtree(output)
         shutil.copytree(stage, output)
-    print(f"Built {output} ({len(files) + 4} files). Synthetic demo only; no backend or credentials.")
+    print(f"Built {output} ({len(files) + 6} files). Synthetic demo only; no backend or credentials.")
 
 
 if __name__ == "__main__":
