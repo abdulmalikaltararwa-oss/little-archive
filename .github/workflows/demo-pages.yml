@@ -54,12 +54,18 @@ jobs:
               'index.html', 'demo.js', 'demo-store.js', 'demo-data.js',
               'app.js', 'utils.js', 'styles.css', 'icon.svg',
               '.nojekyll', '.little-archive-demo-build', 'LICENSE',
-          }
+              'fonts/fraunces-soft.woff2', 'fonts/Fraunces-OFL.txt',
+          } | {f'demo-media/{number:03d}.webp' for number in range(1, 61)}
+          expected_dirs = {'fonts', 'demo-media'}
           paths = list(root.rglob('*'))
-          actual = {str(path.relative_to(root)) for path in paths}
-          if actual != expected:
-              raise SystemExit(f'Unexpected demo artifact files: {sorted(actual ^ expected)}')
-          if any(path.is_symlink() or not path.is_file() for path in paths):
+          if any(path.is_symlink() for path in paths):
+              raise SystemExit('The demo artifact must not contain symbolic links.')
+          dirs = {str(path.relative_to(root)) for path in paths if path.is_dir()}
+          files = [path for path in paths if not path.is_dir()]
+          actual = {str(path.relative_to(root)) for path in files}
+          if actual != expected or dirs != expected_dirs:
+              raise SystemExit(f'Unexpected demo artifact files: {sorted((actual ^ expected) | (dirs ^ expected_dirs))}')
+          if any(not path.is_file() for path in files):
               raise SystemExit('The demo artifact must contain only regular files.')
           print('Verified the synthetic demo artifact. No server or runtime data is included.')
           PY
