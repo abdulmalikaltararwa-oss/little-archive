@@ -1,0 +1,56 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { test, expect, apiAction, closeDialog, download, login, openItem, saveLink, settings, uniqueName, waitForItems } from './fixtures.mjs';
+
+test('local previews persist and a downloaded backup contains verified data and assets without credentials', async ({ page, context }, testInfo) => {
+  await login(page);
+  const key = uniqueName('preview').split(' ').at(-1);
+  const title = `Local preview keepsake ${key}`;
+  const notes = `These are synthetic backup test notes ${key}.`;
+  const saved = await saveLink(page, { title, notes, url: `https://example.com/e2e/${key}/local-preview` });
+  const previewFile = fileURLToPath(new URL('./fixtures/preview.png', import.meta.url));
+  const upload = await apiAction(page, 'POST', `/api/items/${saved.item.id}/thumbnail`, () => saved.detail.getByLabel('Upload a local preview image').setInputFiles(previewFile));
+  const uploaded = await upload.json();
+  expect(uploaded.thumbnail_url).toMatch(/^\/api\/assets\/[0-9a-f]{64}$/);
+  const absoluteThumbnail = new URL(uploaded.thumbnail_url, page.url()).href;
+  const image = saved.detail.locator('.detail-preview img');
+  await expect(image).toHaveAttribute('src', absoluteThumbnail);
+  await expect.poll(() => image.evaluate(element => ({ loaded: element.complete, width: element.naturalWidth, height: element.naturalHeight })) ).toEqual({ loaded: true, width: 4, height: 4 });
+  const asset = await context.request.get(uploaded.thumbnail_url);
+  expect(asset.status()).toBe(200);
+  expect(asset.headers()['content-type']).toBe('image/png');
+  expect((await asset.body()).subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  await closeDialog(saved.detail);
+  await page.reload();
+  await waitForItems(page);
+  const persisted = await openItem(page, title);
+  await expect(persisted.locator('.detail-preview img')).toHaveAttribute('src', absoluteThumbnail);
+  await expect.poll(() => persisted.locator('.detail-preview img').evaluate(element => element.complete && element.naturalWidth === 4)).toBe(true);
+  await expect(persisted.getByLabel('Your notes', { exact: true })).toHaveValue(notes);
+  await closeDialog(persisted);
+
+  const preferences = await settings(page);
+  // Populate a real token first so the backup's credential stripping is meaningful.
+  await preferences.getByLabel('Connection name', { exact: true }).fill(`Backup test connection ${key}`);
+  await apiAction(page, 'POST', '/api/extension/tokens', () => preferences.getByRole('button', { name: 'Create import token', exact: true }).click());
+  const token = preferences.getByLabel('New import token', { exact: true });
+  await expect(token).toBeVisible();
+  expect((await token.inputValue()).length).toBeGreaterThan(32);
+  await preferences.getByRole('button', { name: 'Hide token', exact: true }).click();
+  await expect(token).toHaveCount(0);
+  const backup = await download(page, preferences.getByRole('button', { name: 'Download full backup', exact: true }), testInfo, 'verified-library-backup.zip');
+  expect(backup.file.suggestedFilename()).toMatch(/^little-archive-backup-\d{8}\.zip$/);
+  const inspection = JSON.parse(execFileSync(process.env.LA_E2E_PYTHON || 'python3', [fileURLToPath(new URL('./inspect_backup.py', import.meta.url)), backup.destination], { encoding: 'utf8' }));
+  expect(inspection).toMatchObject({ sessions: 0, tokens: 0, password_hashes: 0 });
+  expect(inspection.manifest.items).toBe(inspection.items.length);
+  const digest = uploaded.thumbnail_url.split('/').at(-1);
+  expect(inspection.members).toContain(`assets/${digest}.png`);
+  expect(inspection.manifest.files[`assets/${digest}.png`].sha256).toBe(digest);
+  expect(inspection.items).toContainEqual(expect.objectContaining({ id: saved.item.id, title, notes, asset_hash: digest }));
+  await closeDialog(preferences);
+  const detail = await openItem(page, title);
+  const removed = await apiAction(page, 'DELETE', `/api/items/${saved.item.id}/thumbnail`, () => detail.getByRole('button', { name: 'Remove preview', exact: true }).click());
+  expect((await removed.json()).thumbnail_url).toBeNull();
+  await expect(detail.locator('.detail-preview img')).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: 'Add a local preview', exact: true })).toBeVisible();
+});

@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -50,10 +50,27 @@ class CollectionPatch(StrictModel):
     color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
+class LibraryFilters(StrictModel):
+    q: str = Field(default="", max_length=500)
+    platform: Literal["", "instagram", "tiktok", "web"] = ""
+    collection_id: str = Field(default="", max_length=100)
+    tag: str = Field(default="", max_length=80)
+    status: Literal["", "inbox", "to_revisit", "done", "archived"] = ""
+    favorite: bool | None = None
+    needs_review: bool | None = None
+
+
 class BulkAction(StrictModel):
-    ids: list[str] = Field(min_length=1, max_length=200)
+    ids: list[str] | None = Field(default=None, min_length=1, max_length=200)
+    filters: LibraryFilters | None = None
     action: Literal["favorite", "unfavorite", "archive", "restore", "tag", "collection"]
     value: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def choose_one_scope(self):
+        if (self.ids is None) == (self.filters is None):
+            raise ValueError("Choose selected item IDs or a library filter, not both.")
+        return self
 
 
 class TokenInput(StrictModel):
@@ -100,4 +117,11 @@ class SettingsPatch(StrictModel):
 
 
 class AIJobs(StrictModel):
-    ids: list[str] = Field(min_length=1, max_length=200)
+    ids: list[str] | None = Field(default=None, min_length=1, max_length=200)
+    filters: LibraryFilters | None = None
+
+    @model_validator(mode="after")
+    def choose_one_scope(self):
+        if (self.ids is None) == (self.filters is None):
+            raise ValueError("Choose selected item IDs or a library filter, not both.")
+        return self

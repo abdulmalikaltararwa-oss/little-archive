@@ -1,6 +1,6 @@
 # Security
 
-Little Archive is an early self-hosted application. Treat your library, backups, owner password, and extension tokens as private data. A public source-code repository does not make a running instance safe to leave unauthenticated.
+Little Archive is in development toward its first stable release. Treat your library, backups, owner password, and extension tokens as private data. A public source-code repository does not make a running instance safe to leave unauthenticated.
 
 ## Deployment boundary
 

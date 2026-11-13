@@ -36,6 +36,22 @@ test('TikTok context supports an account Favorites view and a collection, not vi
   assert.throws(()=>sourceContext('https://www.tiktok.com/@sample_account/liked'));
 });
 
+test('Instagram slug-plus-numeric-ID collection URLs retain stable account-bound scope',()=>{
+  const original='https://www.instagram.com/sample/saved/weekend-ideas/1234567890123456/';
+  const renamed='https://www.instagram.com/sample/saved/new-display-name/1234567890123456/';
+  const scope=sourceContext(original);
+  assert.equal(scope.isCollection,true);
+  assert.equal(scope.collectionId,'1234567890123456');
+  assert.equal(scope.scopeKey,'instagram:sample:collection:1234567890123456');
+  assert.equal(sourceContext(renamed).scopeKey,scope.scopeKey);
+  assertSource(renamed,'sample',scope.scopeKey);
+  assert.throws(()=>assertSource('https://www.instagram.com/sample/saved/weekend-ideas/2234567890123456/','sample',scope.scopeKey));
+  assert.throws(()=>assertSource('https://www.instagram.com/another/saved/weekend-ideas/1234567890123456/','sample',scope.scopeKey));
+  for (const path of ['saved/audio/12345/','saved/all-posts/12345/','saved/weekend-ideas/not-numeric/','saved/weekend-ideas/12345/extra/','feed/weekend-ideas/12345/']) {
+    assert.throws(()=>sourceContext('https://www.instagram.com/sample/'+path));
+  }
+});
+
 test('canonical IDs reject foreign and short URLs and preserve supported permalink identities',()=>{
   assert.equal(canonicalPost('https://www.instagram.com/reels/Ab_C-123/?igsh=tracking','instagram').url,'https://www.instagram.com/reel/Ab_C-123/');
   assert.equal(canonicalPost('https://www.instagram.com/p/Ab_C-123/','instagram').key,'Ab_C-123');

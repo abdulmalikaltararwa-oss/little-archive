@@ -56,6 +56,14 @@ export function createQuery(filters, offset = 0, limit = 60) {
   return q.toString();
 }
 
+export function libraryScope(filters, scope = 'all') {
+  if (scope === 'all') return {};
+  if (scope === 'review') return { needs_review: true };
+  if (scope !== 'view') throw new Error('Choose a valid library scope.');
+  const allowed = new Set(['q', 'platform', 'collection_id', 'tag', 'status', 'favorite', 'needs_review']);
+  return Object.fromEntries(Object.entries(filters).filter(([key, value]) => allowed.has(key) && value !== '' && value !== false && value != null));
+}
+
 export function stableHue(text) {
   let hash = 0;
   for (const char of String(text || 'little')) hash = ((hash << 5) - hash + char.codePointAt(0)) | 0;

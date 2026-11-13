@@ -15,9 +15,12 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m unittest discover -s tests -v
 node --test extension/tests/*.test.mjs
+node --test web/*.test.mjs
 ```
 
 Run the app locally and check the affected interaction. For visual changes, include a screenshot with synthetic content, and check keyboard navigation and a narrow viewport. For a parser or security boundary, add a focused regression test that demonstrates the failure being fixed.
+
+The [manual Release validation workflow](.github/workflows/release-validation.yml) exercises authenticated browsers, the packaged extension against synthetic views, hardened containers on AMD64/ARM64, and a real local model. The [release gates](docs/release-gates.md) also require separately recorded live-platform and target-machine acceptance. Do not mark a gate complete just because its test script exists or a narrower fixture test passes.
 
 ## Pull requests
 

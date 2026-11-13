@@ -39,6 +39,22 @@ test('source login prompt stops collection',()=>{
   assert.throws(()=>api.inspect({sourceUrl:url,platform:'instagram',sourceAccount:'sample'}),/login or verification/);
 });
 
+test('Instagram collection guard accepts a changed display slug only for the same numeric identity',()=>{
+  const sourceUrl='https://www.instagram.com/sample/saved/original-name/1234567890123456/';
+  const fixture=adapter({url:'https://www.instagram.com/sample/saved/new-name/1234567890123456/'});
+  assert.equal(fixture.api.inspect({sourceUrl,platform:'instagram',sourceAccount:'sample'}),fixture.root);
+  for (const url of [
+    'https://www.instagram.com/sample/saved/new-name/2234567890123456/',
+    'https://www.instagram.com/another/saved/new-name/1234567890123456/',
+    'https://www.instagram.com/sample/saved/new-name/1234567890123456/extra/',
+    'https://www.instagram.com/sample/saved/audio/1234567890123456/',
+    'https://instagram.com/sample/saved/new-name/1234567890123456/',
+  ]) {
+    const other=adapter({url});
+    assert.throws(()=>other.api.inspect({sourceUrl,platform:'instagram',sourceAccount:'sample'}),/source page changed/);
+  }
+});
+
 test('TikTok Posted tab is rejected even when user previously confirmed Favorites',()=>{
   const url='https://www.tiktok.com/@sample';
   const {api}=adapter({url,selected:['Videos']});

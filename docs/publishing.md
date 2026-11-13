@@ -1,8 +1,8 @@
 # Publishing the source and demo
 
-This guide describes the first public release and optional synthetic demo deployment. Completing local checks does not establish that a repository, release, or Pages site is live. Verify each remote result before sharing its URL or reporting a successful CI run.
+This guide covers source publication and synthetic demo deployment. The source repository and [synthetic Pages demo](https://abdulmalikaltararwa-oss.github.io/little-archive/) are public. A stable 1.0 release is held until the [release gates](release-gates.md) pass. Verify each new remote result before sharing its URL or reporting a successful CI run.
 
-The commands use `abdulmalikaltararwa-oss/little-archive` as the intended repository. Substitute your own owner when publishing a fork.
+The commands use `abdulmalikaltararwa-oss/little-archive` as the canonical repository. Its creation steps are already complete; use them only when creating a new repository or fork, and substitute your own owner as appropriate.
 
 ## Prepare the source
 
@@ -86,7 +86,7 @@ The included [demo Pages workflow](../.github/workflows/demo-pages.yml) runs onl
 4. Wait for both the build and deployment jobs to succeed. Open the URL shown by the deployment's `github-pages` environment.
 5. Confirm the page displays the synthetic demo banner and that its styles and interactions load at the project subpath. Add this verified URL to the repository's website field and announcement drafts.
 
-For the intended repository, the expected default address after a successful deployment is `https://abdulmalikaltararwa-oss.github.io/little-archive/`. A custom domain or a renamed repository changes the address; use the actual deployment result. This guide does not claim that the expected address is already live.
+The current public demo is `https://abdulmalikaltararwa-oss.github.io/little-archive/`, verified after [Pages run 43388893222](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43388893222) succeeded. A custom domain or renamed repository changes the address; verify the actual deployment result after making such changes.
 
 The build job has read access to repository contents and Pages metadata. The separate deployment job has only the Pages write and OIDC token permissions required for deployment. It uses GitHub's official checkout, Python setup, Pages configuration, artifact upload, and deployment actions. No project secret or private application password is required. The workflow does not enable Pages on your behalf; configure its source first.
 
@@ -96,6 +96,6 @@ GitHub Pages serves the public demo, not the Python application. Never change th
 
 ## Prepare the release announcement
 
-Use [CHANGELOG.md](../CHANGELOG.md) for the release scope and [the launch kit](launch-kit.md) for draft copy. Mark the initial release as an alpha or prerelease. Keep the experimental importer and source-text-only AI limitations visible, and use synthetic screenshots. Publish only verified repository, release, and demo URLs.
+Hold the stable `1.0.0` tag, release announcement, and launch claims until every required [release gate](release-gates.md) has passing evidence for the candidate. Keep the current version marked as development while that work is incomplete. Once accepted, align version metadata and [CHANGELOG.md](../CHANGELOG.md), rerun final packaging checks, and use the conditional [launch kit](launch-kit.md). Keep the verified import scope and source-text-only AI limitations visible, use synthetic screenshots, and publish only verified repository, release, and demo URLs.
 
 Issue forms are included for bug reports and feature requests. Enable private vulnerability reporting if the repository supports it, and follow [SECURITY.md](../SECURITY.md) for sensitive reports. Announcements, paid services, and hosted subscriptions are separate maintainer actions; these files do not publish messages or create a managed service.

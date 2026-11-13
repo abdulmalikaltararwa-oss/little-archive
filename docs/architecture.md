@@ -46,6 +46,10 @@ Portable Little Archive JSON is distinguished from platform export data so the a
 
 The worker persists job state. Generated suggestions remain reviewable, and a failure must not erase existing user data. Text-only evidence cannot establish full image or video understanding.
 
+Queue scope is resolved on the server: selected IDs, all matching filters, or the whole non-archived library. Gallery pagination does not limit it. A fingerprint covers the classifier's actual bounded evidence, model, endpoint, prompt, and response schema. Identical work already queued, running, or completed is not duplicated. Job history is paginated while state counts cover the complete history.
+
+Cancellation marks queued/running jobs durably. The worker checks that a job is still active before writing its result, so a request that finishes after cancellation cannot revive it. Failed/cancelled jobs can be requeued from current item evidence. Acceptance rechecks the evidence fingerprint and rejects stale suggestions; suggestions do not become annotations merely by completing inference.
+
 ## Network destinations
 
 Ordinary app browsing uses the configured instance. Extension imports use that same instance. Optional classification uses the configured model endpoint. Optional remote previews use the browser to contact recorded media hosts. Opening an original post opens its source URL.
@@ -54,4 +58,4 @@ There is no built-in application telemetry destination. Dependency installation 
 
 ## Release verification
 
-Tests cover parser boundaries, authentication, application mutations, idempotency, and classifier validation as implemented. Pure extension tests exercise its normalization and state logic. Passing fixture tests does not establish live compatibility with every platform layout, and mocked inference tests do not benchmark model quality. Release notes should preserve that distinction.
+Tests cover parser boundaries, authentication, application mutations, idempotency, and classifier validation as implemented. Pure extension tests exercise its normalization and state logic. The [manual release-validation workflow](../.github/workflows/release-validation.yml) adds real backend browser flows, packaged-extension fixtures, hardened AMD64/ARM64 recovery, and actual model inference checks. Each must have a recorded passing execution before being counted as verified. Passing fixture tests does not establish live compatibility with every platform layout, and mocked inference tests do not benchmark model quality. The [release gates](release-gates.md) keep these scopes separate.

@@ -13,3 +13,7 @@ __pycache__
 .venv
 node_modules
 tests
+test-results
+playwright-report
+blob-report
+dist-demo

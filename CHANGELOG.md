@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0 — Initial alpha
+## Unreleased — Development toward 1.0
 
-Initial self-hosted release of Little Archive.
+The current source is a development build. A stable release will be published after the release gates are verified.
 
 ### Included
 

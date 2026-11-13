@@ -349,7 +349,9 @@ class Store:
         c.execute("DELETE FROM memberships WHERE item_id=? AND collection_id IN (SELECT id FROM collections WHERE kind='local')", (iid,))
         c.executemany("INSERT OR IGNORE INTO memberships VALUES(?,?)", [(iid, x) for x in ids])
 
-    def list_items(self, *, q="", platform="", collection_id="", tag="", status="", favorite=None, needs_review=None, sort="recent", limit=60, offset=0):
+    @staticmethod
+    def item_filter(*, q="", platform="", collection_id="", tag="", status="", favorite=None, needs_review=None):
+        """One predicate for browsing and explicit whole-library operations."""
         conditions, params = [], []
         if q.strip():
             words = re.findall(r"\w+", normalize_search(q))[:20]
@@ -375,7 +377,15 @@ class Store:
             if value is not None:
                 conditions.append(f"i.{col}=?")
                 params.append(int(value))
-        where = " WHERE " + " AND ".join(conditions) if conditions else ""
+        return (" WHERE " + " AND ".join(conditions) if conditions else ""), params
+
+    def matching_item_ids(self, **filters):
+        where, params = self.item_filter(**filters)
+        with self.transaction() as c:
+            return [row[0] for row in c.execute("SELECT i.id FROM items i" + where + " ORDER BY i.created_at,i.id", params)]
+
+    def list_items(self, *, q="", platform="", collection_id="", tag="", status="", favorite=None, needs_review=None, sort="recent", limit=60, offset=0):
+        where, params = self.item_filter(q=q, platform=platform, collection_id=collection_id, tag=tag, status=status, favorite=favorite, needs_review=needs_review)
         order = {"recent": "i.created_at DESC,i.id DESC", "oldest": "i.created_at,i.id", "title": "i.title COLLATE NOCASE,i.id", "random": "random()"}[sort]
         with self.transaction() as c:
             total = c.execute("SELECT count(*) FROM items i" + where, params).fetchone()[0]

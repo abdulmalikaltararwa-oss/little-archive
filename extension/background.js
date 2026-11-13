@@ -107,6 +107,7 @@ async function flushQueue(force = false) {
               reason:(state.run.finishReason || 'User finished this scan.').slice(0,400),
             });
             if (!result.ok) throw new Error('The server did not confirm scan completion.');
+            if (['partial','enumeration_exhausted'].includes(result.coverage)) state.run.coverage=result.coverage;
             state.run.status = 'completed';
             state.run.message = state.run.coverage === 'enumeration_exhausted'
               ? 'This view reached an observed end. Review coverage in the app; other collections were not scanned.'

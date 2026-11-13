@@ -21,7 +21,17 @@
   function inspect(run) {
     const url=new URL(location.href);
     const expected=new URL(run.sourceUrl);
-    if (url.origin!==expected.origin || url.pathname.replace(/\/$/,'')!==expected.pathname.replace(/\/$/,'')) {
+    const instagramView=value => {
+      const match=value.pathname.match(/^\/([a-zA-Z0-9._]+)\/saved\/([^/]+)(?:\/(\d{1,30}))?\/?$/);
+      if (!match || match[2]==='audio' || (match[3] && match[2]==='all-posts')) return null;
+      return {account:match[1].toLowerCase(),identity:match[3] ? `collection:${match[3]}` : `saved:${match[2]}`};
+    };
+    const currentInstagram=run.platform==='instagram' ? instagramView(url) : null;
+    const expectedInstagram=run.platform==='instagram' ? instagramView(expected) : null;
+    const samePath=run.platform==='instagram'
+      ? currentInstagram && expectedInstagram && currentInstagram.account===expectedInstagram.account && currentInstagram.identity===expectedInstagram.identity
+      : url.pathname.replace(/\/$/,'')===expected.pathname.replace(/\/$/,'');
+    if (url.origin!==expected.origin || !samePath) {
       throw new Error('The source page changed. Reopen the original saved view and resume.');
     }
     if (/\/(accounts\/login|login|challenge|checkpoint|captcha)(\/|$)/i.test(url.pathname)) {
@@ -33,8 +43,7 @@
     const root=document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
     if (!root) throw new Error('The source page has not loaded. Try again when the saved grid is visible.');
     if (run.platform==='instagram') {
-      const match=url.pathname.match(/^\/([a-zA-Z0-9._]+)\/saved\/([^/]+)\/?$/);
-      if (!match || match[1].toLowerCase()!==run.sourceAccount || match[2]==='audio') {
+      if (!currentInstagram || currentInstagram.account!==run.sourceAccount) {
         throw new Error('This is not the bound Instagram saved-post view.');
       }
     } else if (run.platform==='tiktok') {

@@ -72,6 +72,20 @@ test('unsupported real features fail clearly rather than returning simulated suc
   }
 });
 
+test('demo organization applies filters to all matches beyond a gallery page', async () => {
+  const api = createDemoAPI(SYNTHETIC_RECORDS);
+  for (let index = 0; index < 65; index++) await call(api, '/api/items', 'POST', { url: `https://example.com/demo-pagination/${index}`, title: `Pagination fixture ${index}` });
+  const visible = (await call(api, '/api/items?q=Pagination&limit=60')).data;
+  assert.equal(visible.items.length, 60);
+  assert.equal(visible.total, 65);
+  const result = await call(api, '/api/items/bulk', 'POST', { filters: { q: 'Pagination' }, action: 'tag', value: 'Organized' });
+  assert.deepEqual(result.data, { updated: 65 });
+  assert.equal((await call(api, '/api/items?tag=Organized&limit=200')).data.total, 65);
+  const original = (await call(api, '/api/items/demo-item-1')).data;
+  assert.equal(original.tags.includes('Organized'), false);
+  assert.equal((await call(api, '/api/items/bulk', 'POST', { ids: [original.id], filters: {}, action: 'favorite' })).status, 400);
+});
+
 test('demo exports preserve in-memory changes and identify their synthetic origin', async () => {
   const api = createDemoAPI(SYNTHETIC_RECORDS);
   await call(api, '/api/items/demo-item-1', 'PATCH', { notes: 'Export this temporary edit' });

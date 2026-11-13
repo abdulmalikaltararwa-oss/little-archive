@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { safeURL, parseTags, buildItemPatch, formatDate, hostLabel, countLabel, createQuery, stableHue } from './utils.js';
+import { safeURL, parseTags, buildItemPatch, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue } from './utils.js';
 
 test('untrusted links reject executable protocols and embedded credentials', () => {
   assert.equal(safeURL('javascript:alert(1)'), null);
@@ -43,6 +43,15 @@ test('unknown dates are not replaced by current dates', () => {
   assert.equal(formatDate(null), 'Unknown');
   assert.equal(formatDate('bad date'), 'Unknown');
   assert.notEqual(formatDate('2026-01-01T12:00:00Z'), 'Unknown');
+});
+
+test('whole-library operations preserve filter scope without pagination or sorting', () => {
+  const view = { q: 'weekend', platform: 'instagram', collection_id: 'original', tag: 'design', status: '', favorite: true, needs_review: false, sort: 'random', limit: 60, offset: 120 };
+  assert.deepEqual(libraryScope(view, 'all'), {});
+  assert.deepEqual(libraryScope(view, 'review'), { needs_review: true });
+  assert.deepEqual(libraryScope(view, 'view'), { q: 'weekend', platform: 'instagram', collection_id: 'original', tag: 'design', favorite: true });
+  assert.deepEqual(libraryScope({ status: 'archived' }, 'view'), { status: 'archived' });
+  assert.throws(() => libraryScope(view, 'invalid'), /scope/);
 });
 
 test('display helpers are deterministic and do not expose malformed URLs', () => {

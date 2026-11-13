@@ -33,7 +33,7 @@ Same-origin `/api`. JSON unless noted. Errors `{detail: string}`. Item IDs, coll
 - DELETE `/api/items/{id}` -> `{ok:true}`. Deletes local record only, never source save. UI confirms.
 - POST `/api/items/{id}/thumbnail` raw PNG/JPEG/WebP bytes, max 8 MiB, valid raster decoded/re-encoded. Returns full item.
 - DELETE `/api/items/{id}/thumbnail` -> full item.
-- POST `/api/items/bulk` `{ids:string[], action:'favorite'|'unfavorite'|'archive'|'restore'|'tag'|'collection', value?:string}` -> `{updated:number}`. Max 200 ids. restore -> inbox. collection requires local collection ID.
+- POST `/api/items/bulk` `{ids?:string[], filters?:{q?,platform?,collection_id?,tag?,status?,favorite?,needs_review?}, action:'favorite'|'unfavorite'|'archive'|'restore'|'tag'|'collection', value?:string}` -> `{updated:number}`. Supply exactly one of `ids` (max 200) or `filters` (all matching records, regardless of loaded gallery pages). Empty filters target the non-archived library. The operation is atomic; `restore` sets inbox, and `collection` requires a local collection ID while preserving source memberships.
 
 ### Collections, tags, stats
 
@@ -70,8 +70,10 @@ Extension popup: server URL + import token setup, open-app link, selected accoun
 
 - GET `/api/settings` -> `{remote_previews:boolean,ai_enabled:boolean,ai_model:string,ai_available:boolean}`. Ollama URL configured server-side by env, never from untrusted post data.
 - PATCH `/api/settings` `{remote_previews?:boolean}` -> settings. Explicit warning that remote previews contact original media hosts. API keys not in client responses.
-- POST `/api/ai/jobs` `{ids:string[]}` -> `{queued:number}`. Max 200. 503 if no model configured.
-- GET `/api/ai/jobs` -> `{jobs:[{id,item_id,status:'queued'|'running'|'completed'|'failed',error,created_at}]}`.
+- POST `/api/ai/jobs` accepts exactly one of `{ids:string[]}` (max 200 selected IDs) or `{filters:{q?,platform?,collection_id?,tag?,status?,favorite?,needs_review?}}`. Empty filters select the entire non-archived library; filters have the same semantics as `GET /api/items`. Returns `{queued,matched,unchanged}`. Matching is independent of gallery pagination; unchanged evidence already queued/running/completed is not charged with another inference. Returns 503 if no model is configured.
+- GET `/api/ai/jobs?limit=50&offset=0` -> `{jobs:[{id,item_id,title,status:'queued'|'running'|'completed'|'failed'|'cancelled',error,created_at,updated_at}],total,counts:{queued,running,completed,failed,cancelled},limit,offset}`. Counts describe the entire durable history, not only the current page. Limit 1–200.
+- POST `/api/ai/jobs/cancel` -> `{cancelled}`. Cancels all queued/running jobs. An in-flight model request may finish but its result is discarded.
+- POST `/api/ai/jobs/{id}/retry` -> `{queued}`. Retries a failed/cancelled job using the item's current evidence. Returns 409 for other states; unchanged work already queued or completed is not duplicated.
 - POST `/api/items/{id}/ai/accept` -> item. Accept suggested summary/title only if not manually changed; merge topics into tags, needs_review false.
 - POST `/api/items/{id}/ai/dismiss` -> item. Store dismissal fingerprint; keep manual fields.
 

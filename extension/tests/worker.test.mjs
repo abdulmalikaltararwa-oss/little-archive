@@ -7,6 +7,7 @@ let stored={};
 let capturedRequests=[];
 let loseFirstBatchResponse=true;
 let committed=new Map();
+let finishExpectedBatches=1;
 const event=name=>({addListener:handler=>{events[name]=handler;}});
 const tab={id:9,url:'https://www.instagram.com/sample/saved/all-posts/'};
 globalThis.chrome={
@@ -35,8 +36,8 @@ globalThis.fetch=async(url,options)=>{
   }
   if(path.endsWith('/finish')) {
     const body=JSON.parse(options.body);
-    assert.equal(body.expected_batches,1);
-    return Response.json({ok:true,created:1,updated:0,skipped:0});
+    assert.equal(body.expected_batches,finishExpectedBatches);
+    return Response.json({ok:true,created:finishExpectedBatches,updated:0,skipped:0,coverage:'partial'});
   }
   throw new Error('Unexpected endpoint '+path);
 };
@@ -93,4 +94,14 @@ test('a page cannot invoke privileged popup commands',async()=>{
   const result=await send({type:'configure',server:'https://attacker.example.test',token:'synthetic-private-import-token'},source);
   assert.equal(result.ok,false);
   assert.equal(state().config.server,'https://archive.example.test');
+});
+
+test('the completion display honors a server downgrade of empty-scan coverage',async()=>{
+  finishExpectedBatches=0;
+  assert.equal((await send({type:'start',sourceAccount:'sample',collectionName:'',confirmed:true})).ok,true);
+  assert.equal((await send({type:'scan-finished',runId:'run-one',coverage:'enumeration_exhausted',reason:'Synthetic explicit empty state.'},source)).ok,true);
+  await until(()=>state().run.status==='completed');
+  assert.equal(state().run.coverage,'partial');
+  assert.match(state().run.message,/Partial scan saved/);
+  assert.equal(state().run.discovered,0);
 });

@@ -231,8 +231,13 @@ def create_app(config: Config | None = None):
 
     @app.post("/api/items/bulk")
     def bulk(data: BulkAction, auth=Depends(owner)):
-        ids = list(dict.fromkeys(data.ids))
+        tag = clean_tags([data.value])[0] if data.action == "tag" else None
         with store.transaction() as c:
+            if data.ids is not None:
+                ids = list(dict.fromkeys(data.ids))
+            else:
+                where, params = store.item_filter(**data.filters.model_dump())
+                ids = [row[0] for row in c.execute("SELECT i.id FROM items i" + where, params)]
             for iid in ids:
                 must_item(iid, c)
             if data.action == "collection":
@@ -245,7 +250,6 @@ def create_app(config: Config | None = None):
                 elif data.action in {"archive", "restore"}:
                     c.execute("UPDATE items SET status=?,updated_at=? WHERE id=?", ("archived" if data.action == "archive" else "inbox", now(), iid))
                 elif data.action == "tag":
-                    tag = clean_tags([data.value])[0]
                     current = json.loads(c.execute("SELECT tags FROM items WHERE id=?", (iid,)).fetchone()[0])
                     c.execute("UPDATE items SET tags=?,updated_at=? WHERE id=?", (json_text(clean_tags(current + [tag])), now(), iid))
                     store.index_item(c, iid)
@@ -557,12 +561,39 @@ def create_app(config: Config | None = None):
     def queue_ai(data: AIJobs, auth=Depends(owner)):
         if not config.ollama_url or not config.ollama_model:
             raise HTTPException(503, "Configure LA_OLLAMA_URL and LA_OLLAMA_MODEL on your server to enable local AI.")
-        return {"queued": worker.enqueue(data.ids)}
+        # Resolve the complete filtered inventory on the server, independent of
+        # which gallery pages happen to have loaded in the browser.
+        with store.lock:
+            ids = list(dict.fromkeys(data.ids)) if data.ids is not None else store.matching_item_ids(**data.filters.model_dump())
+            queued = worker.enqueue(ids)
+        return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued}
 
     @app.get("/api/ai/jobs")
-    def ai_jobs(auth=Depends(owner)):
+    def ai_jobs(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000), auth=Depends(owner)):
         with store.transaction() as c:
-            return {"jobs": [dict(x) for x in c.execute("SELECT id,item_id,status,error,created_at FROM ai_jobs ORDER BY created_at DESC,id DESC LIMIT 100")]}
+            counts = {state: 0 for state in ("queued", "running", "completed", "failed", "cancelled")}
+            counts.update({row["status"]: row["count"] for row in c.execute("SELECT status,count(*) AS count FROM ai_jobs GROUP BY status")})
+            jobs = [dict(row) for row in c.execute("SELECT j.id,j.item_id,i.title,j.status,j.error,j.created_at,j.updated_at FROM ai_jobs j JOIN items i ON i.id=j.item_id ORDER BY j.updated_at DESC,j.id DESC LIMIT ? OFFSET ?", (limit, offset))]
+            return {"jobs": jobs, "total": sum(counts.values()), "counts": counts, "limit": limit, "offset": offset}
+
+    @app.post("/api/ai/jobs/cancel")
+    def cancel_ai_jobs(auth=Depends(owner)):
+        with store.transaction() as c:
+            count = c.execute("UPDATE ai_jobs SET status='cancelled',error='',updated_at=? WHERE status IN ('queued','running')", (now(),)).rowcount
+        return {"cancelled": count}
+
+    @app.post("/api/ai/jobs/{jid}/retry")
+    def retry_ai_job(jid: str, auth=Depends(owner)):
+        if not config.ollama_url or not config.ollama_model:
+            raise HTTPException(503, "Configure LA_OLLAMA_URL and LA_OLLAMA_MODEL on your server to enable local AI.")
+        with store.lock:
+            with store.transaction() as c:
+                job = c.execute("SELECT item_id,status FROM ai_jobs WHERE id=?", (jid,)).fetchone()
+            if not job:
+                raise HTTPException(404, "This classification job was not found.")
+            if job["status"] not in {"failed", "cancelled"}:
+                raise HTTPException(409, "Only failed or cancelled jobs can be retried.")
+            return {"queued": worker.enqueue([job["item_id"]])}
 
     @app.post("/api/items/{iid}/ai/accept")
     def accept_ai(iid: str, auth=Depends(owner)):

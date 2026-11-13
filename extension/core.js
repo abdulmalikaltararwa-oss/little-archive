@@ -37,13 +37,19 @@ export function sourceContext(value) {
   try { url = new URL(value); } catch { throw new Error('Open a supported Saved or Favorites page first.'); }
   if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Open the source platform over HTTPS.');
   if (['www.instagram.com', 'instagram.com'].includes(url.hostname)) {
-    const match = url.pathname.match(/^\/([a-zA-Z0-9._]+)\/saved(?:\/([^/]+))?\/?$/);
+    const match = url.pathname.match(/^\/([a-zA-Z0-9._]+)\/saved(?:\/([^/]+)(?:\/(\d{1,30}))?)?\/?$/);
     if (!match) throw new Error('Open your Instagram Saved view or a saved collection. Feed and individual-post pages are not supported.');
     const account = normalizeAccount(match[1]);
     const slug = match[2] || '';
+    const collectionId = match[3] || null;
     const isCollection = Boolean(slug && slug !== 'all-posts');
     if (slug === 'audio') throw new Error('Saved audio is outside this post importer. Open All posts or a post collection.');
-    return {platform:'instagram', account, isCollection, scopeKey:`instagram:${account}:saved:${slug || 'index'}`, url:url.origin + url.pathname, isIndex:!slug};
+    if (collectionId && slug === 'all-posts') throw new Error('Open the supported All posts view or an individual saved collection.');
+    // Current Instagram collections contain a display slug followed by a
+    // numeric identity. Bind the identity so renaming a collection does not
+    // split its memberships or invalidate a resumable checkpoint.
+    const scopeKey=collectionId ? `instagram:${account}:collection:${collectionId}` : `instagram:${account}:saved:${slug || 'index'}`;
+    return {platform:'instagram', account, isCollection, collectionId, scopeKey, url:url.origin + url.pathname, isIndex:!slug};
   }
   if (['www.tiktok.com', 'tiktok.com'].includes(url.hostname)) {
     const match = url.pathname.match(/^\/@([a-zA-Z0-9._]+)(?:\/(favorites|favourites|collection)(?:\/([^/]+))?)?\/?$/);

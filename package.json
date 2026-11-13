@@ -8,6 +8,11 @@
     "dev": "python3 scripts/dev.py",
     "test:web": "node --test web/*.test.mjs",
     "build:demo": "python3 scripts/build_demo.py",
-    "test:extension": "node --test extension/tests/*.test.mjs"
+    "test:extension": "node --test extension/tests/*.test.mjs",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:extension:e2e": "node tests/e2e/run.mjs --config extension/tests/e2e/playwright.config.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
   }
 }

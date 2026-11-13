@@ -8,7 +8,15 @@ Little Archive is an open-source, self-hosted library for saved posts, videos, a
 
 Run one private instance on your Mac, Linux machine, or server. There is no project-operated account service, analytics endpoint, or required AI subscription.
 
-**Release:** `0.1.0` alpha · **License:** MIT · **Architecture:** Python + SQLite + buildless web UI
+**Status:** Development toward 1.0; no stable release published · **License:** MIT · **Architecture:** Python + SQLite + buildless web UI
+
+**[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Install your own instance](#quick-start-with-docker) · [Verification](docs/verification.md)
+
+The public demo uses synthetic content and temporary page memory. Your private library runs in your own instance.
+
+![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery.jpg)
+
+*The interface shown above uses synthetic demo content. Read the [verification results and limits](docs/verification.md) for the tested release scope.*
 
 ## What you can do
 
@@ -24,9 +32,9 @@ Run one private instance on your Mac, Linux machine, or server. There is no proj
 
 ### Current boundaries
 
-This is an early release, not a universal social-account synchronization service. The extension is **experimental** and scans a source view you explicitly select. It does not promise to discover every collection, overcome a login challenge, recover deleted posts, or keep importing after Chrome closes. Platform layouts can change.
+Development is continuing toward the first stable 1.0 release, with acceptance tracked in the [release gates](docs/release-gates.md). The extension is **experimental** and scans a source view you explicitly select. It does not promise to discover every collection, overcome a login challenge, recover deleted posts, or keep importing after Chrome closes. Platform layouts can change.
 
-Link import is distinct from media understanding. A caption-based suggestion is based on the available caption; the application does not claim to have watched a video. Full video downloads, speech transcription, OCR, mobile share extensions, and semantic search are not included in this release.
+Link import is distinct from media understanding. A caption-based suggestion is based on the available caption; the application does not claim to have watched a video. Full video downloads, speech transcription, OCR, mobile share extensions, and semantic search are not included in the current build.
 
 The instance has **one owner account**. It can organize multiple source-account labels, but it is not a multi-user hosted service. Keep the instance private unless you deliberately deploy it behind HTTPS and suitable access controls.
 
@@ -80,7 +88,9 @@ AI is optional. Search, browsing, manual organization, imports, and exports work
 
 Configure both `LA_OLLAMA_URL` and `LA_OLLAMA_MODEL` on the server to enable text suggestions. Use a model already downloaded into your own Ollama service. Nothing is sent to a model automatically just because it is configured; categorization is an explicit action.
 
-Generated suggestions stay in a review flow. They cannot change source collections, run tools, follow instructions embedded in a post, or overwrite your notes. An accepted suggestion remains a source-limited interpretation, not an independent fact check.
+Classification supports individual saves, all saves matching a filter, or the entire non-archived library. The server resolves the full matching inventory independently of which gallery pages have loaded. Unchanged work already queued, running, or completed is not duplicated. Queued/running work can be cancelled, and failed or cancelled jobs can be retried using current item evidence. Cancelling an in-flight model request discards its eventual result; the model may continue computing until that request finishes.
+
+Generated suggestions stay in a review flow. They have no tools or authority to change source collections or overwrite your notes. Review their interpretation of untrusted source text before accepting it. An accepted suggestion remains a source-limited interpretation, not an independent fact check.
 
 ## Your data
 

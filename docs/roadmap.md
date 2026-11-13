@@ -2,11 +2,11 @@
 
 Roadmap entries are intentions, not promises of a release date or current support.
 
-## Initial release
+## First stable release: in development
 
-The initial alpha focuses on a private, browsable library: authentication, source and local collections, keyword search, tags, notes, progress, file imports, explicit browser imports, optional model suggestions, and portable backup/export.
+The first stable release targets a private, browsable library: authentication, source and local collections, keyword search, tags, notes, progress, file imports, explicit browser imports, optional model suggestions, and portable backup/export. The current internal version remains development software until the [1.0 release gates](release-gates.md) have passing evidence.
 
-## Next validation work
+## Validation before 1.0
 
 - Expand sanitized Instagram and TikTok layout fixtures.
 - Record live adapter checks against specific platform layouts without publishing private records.

@@ -1,4 +1,4 @@
-import { PLATFORM_NAMES, STATUS_NAMES, safeURL, parseTags, buildItemPatch, formatDate, hostLabel, countLabel, createQuery, stableHue, errorMessage } from './utils.js';
+import { PLATFORM_NAMES, STATUS_NAMES, safeURL, parseTags, buildItemPatch, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage } from './utils.js';
 
 const app = document.getElementById('app');
 const IS_DEMO = document.documentElement.dataset.demo === 'true';
@@ -189,7 +189,9 @@ function renderShell() {
   const title = h('h2', {}, 'All saves');
   const count = h('span', {}, 'Opening your library…');
   const selectButton = btn('Select', 'checkcircle', () => { state.selecting = !(state.selecting || state.selected.size > 0); if (!state.selecting) state.selected.clear(); renderSelection(); }, 'ghost small');
-  const heading = h('div', { class: 'library-heading' }, h('div', { class: 'library-title' }, title, count), selectButton);
+  const organize = btn('Organize', 'sparkles', () => openOrganize(), 'soft small');
+  organize.setAttribute('aria-label', 'Organize library');
+  const heading = h('div', { class: 'library-heading' }, h('div', { class: 'library-title' }, title, count), h('div', { class: 'flex-wrap' }, organize, selectButton));
   const search = h('input', { type: 'search', placeholder: 'Find something you saved…', 'aria-label': 'Search titles, captions, tags, and notes', autocomplete: 'off', spellcheck: false });
   let searchTimer;
   search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.filters.q = search.value.trim(); loadItems(); }, 250); });
@@ -247,7 +249,7 @@ function renderSidebar() {
       sources.append(h('button', { class: `nav-button source-collection${state.filters.collection_id === collection.id ? ' active' : ''}`, onClick: () => setView(`collection:${collection.id}`, { collection_id: collection.id, platform }), title: `${collection.name} · original source collection`, type: 'button' }, icon('folder'), h('span', { class: 'nav-label' }, collection.name), h('span', { class: 'nav-count' }, collection.count || 0)));
     }
   }
-  const bottom = h('div', { class: 'sidebar-bottom' }, navButton('Archived', 'archive', 'archived', state.stats.archived, { status: 'archived' }), h('button', { class: 'nav-button', type: 'button', onClick: openActivity }, icon('activity'), 'Import activity'), h('button', { class: 'nav-button', type: 'button', onClick: openSettings }, icon('settings'), 'Settings & connections'), h('p', { class: 'sidebar-note' }, icon('shield'), h('span', {}, 'Self-hosted & open source', h('br'), 'A small place of your own.')));
+  const bottom = h('div', { class: 'sidebar-bottom' }, navButton('Archived', 'archive', 'archived', state.stats.archived, { status: 'archived' }), h('button', { class: 'nav-button', type: 'button', onClick: () => openActivity() }, icon('activity'), 'Import activity'), h('button', { class: 'nav-button', type: 'button', onClick: openSettings }, icon('settings'), 'Settings & connections'), h('p', { class: 'sidebar-note' }, icon('shield'), h('span', {}, 'Self-hosted & open source', h('br'), 'A small place of your own.')));
   dom.sidebar.replaceChildren(brand(), primary, collections, sources, h('div', { class: 'sidebar-spacer' }), bottom);
 }
 
@@ -346,7 +348,10 @@ function renderCard(item) {
   const tags = h('div', { class: 'tags' }, (item.tags || []).slice(0, 2).map(tag => h('span', { class: 'tag', dir: 'auto' }, tag)), item.needs_review && h('span', { class: 'tag review' }, 'To review'));
   const body = h('div', { class: 'card-body' }, h('div', { class: 'card-meta' }, source, status), h('h3', { class: 'card-title', dir: 'auto' }, item.title || hostLabel(item.url)), h('div', { class: 'card-creator', dir: 'auto' }, item.creator || hostLabel(item.url)), tags);
   const open = h('button', { class: 'card-open', type: 'button', 'aria-label': `Open ${item.title || 'saved item'}`, onClick: () => openDetail(item.id) }, makeCover(item), body);
-  const checkbox = h('input', { type: 'checkbox', class: 'card-select', checked: state.selected.has(item.id), 'aria-label': `Select ${item.title || 'saved item'}`, onChange: event => { event.target.checked ? state.selected.add(item.id) : state.selected.delete(item.id); renderSelection(); } });
+  const checkbox = h('input', { type: 'checkbox', class: 'card-select', checked: state.selected.has(item.id), 'aria-label': `Select ${item.title || 'saved item'}`, onChange: event => {
+    if (event.target.checked && state.selected.size >= 200) { event.target.checked = false; toast('Select up to 200 saves, or use Organize to update every match.'); return; }
+    event.target.checked ? state.selected.add(item.id) : state.selected.delete(item.id); renderSelection();
+  } });
   const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => busy(event.currentTarget, async () => { await api(`/items/${item.id}`, { method: 'PATCH', body: { favorite: !item.favorite } }); await refreshLibrary(); }), 'card-favorite');
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
   card.append(open, checkbox, favorite); return card;
@@ -362,7 +367,7 @@ function renderSelection() {
   for (const card of dom.grid.querySelectorAll('[data-item-id]')) { card.classList.toggle('selected', state.selected.has(card.dataset.itemId)); const c = card.querySelector('input[type=checkbox]'); if (c) c.checked = state.selected.has(card.dataset.itemId); }
   if (!count) { dom.bulk.replaceChildren(); return; }
   const action = optionSelect([['favorite', 'Add to favorites'], ['unfavorite', 'Remove from favorites'], ['tag', 'Add a topic'], ['collection', 'Add to a collection'], ['archive', 'Archive'], ['restore', 'Move to inbox']], 'favorite', { 'aria-label': 'Bulk action' });
-  const all = btn('Select visible', null, () => { state.items.slice(0, 200).forEach(x => state.selected.add(x.id)); renderSelection(); }, 'ghost small');
+  const all = btn('Select visible', null, () => { for (const item of state.items) { if (state.selected.size >= 200) break; state.selected.add(item.id); } renderSelection(); }, 'ghost small');
   const apply = btn('Apply', 'check', () => openBulkAction(action.value), 'primary small');
   dom.bulk.replaceChildren(h('span', {}, `${count} selected`), all, action, apply, iconBtn('Clear selection', 'x', () => { state.selected.clear(); state.selecting = false; renderSelection(); }));
 }
@@ -468,12 +473,75 @@ function openBulkAction(action) {
   form.addEventListener('submit', async event => { event.preventDefault(); error.clear(); save.disabled = true; try { await commit(input.value.trim()); m.close(); } catch (e) { error.show(e); } finally { save.disabled = false; } });
 }
 
-async function openDetail(id) {
+function openOrganize() {
+  const m = modal('Organize your library');
+  const viewFilters = { ...state.filters };
+  const scope = optionSelect([['all', 'Whole active library'], ['view', 'Current view'], ['review', 'Needs review']], 'all');
+  const scopeSummary = h('p', { class: 'field-help', role: 'status' });
+  const currentScope = () => libraryScope(viewFilters, scope.value);
+  const updateSummary = () => {
+    const count = scope.value === 'all' ? state.stats.total : scope.value === 'review' ? state.stats.needs_review : state.total;
+    scopeSummary.textContent = `${countLabel(count, 'save')} in this scope. Every matching page is included, even if you have not loaded it.`;
+  };
+  scope.addEventListener('change', updateSummary); updateSummary();
+  m.body.append(h('p', { class: 'dialog-description' }, 'Keep your original collections, then add topics and local collections that make the saves useful to you.'), field('Organization scope', scope), scopeSummary);
+  const feedback = h('p', { class: 'organize-result', role: 'status', hidden: true });
+  const updateMatches = async (action, value) => {
+    const result = await api('/items/bulk', { method: 'POST', body: { filters: currentScope(), action, value } });
+    await refreshLibrary(); updateSummary();
+    feedback.textContent = `${countLabel(result.updated, 'save')} updated. Original source collections are preserved.`;
+    feedback.hidden = false;
+  };
+  const topic = h('input', { type: 'text', required: true, maxlength: 80, placeholder: 'e.g. Recipes to try', dir: 'auto' });
+  const topicForm = h('form', { class: 'setting-section' }, h('h3', {}, 'Add a topic'), field('Topic to add', topic));
+  const topicError = formError(topicForm);
+  const addTopic = h('button', { class: 'btn soft', type: 'submit' }, icon('plus'), 'Add topic to matching saves');
+  topicForm.append(addTopic);
+  topicForm.addEventListener('submit', async event => {
+    event.preventDefault(); topicError.clear(); addTopic.disabled = true;
+    try { if (!topic.value.trim()) throw new Error('Enter a topic.'); await updateMatches('tag', topic.value.trim()); }
+    catch (error) { topicError.show(error); } finally { addTopic.disabled = false; }
+  });
+  const locals = state.collections.filter(collection => collection.kind === 'local');
+  const collection = optionSelect([['', 'Choose a local collection'], ...locals.map(c => [c.id, c.name])], ''); collection.required = true;
+  const collectionForm = h('form', { class: 'setting-section' }, h('h3', {}, 'Collect matching saves'), field('Local collection to add', collection));
+  const collectionError = formError(collectionForm);
+  const addCollection = h('button', { class: 'btn soft', type: 'submit', disabled: !locals.length }, icon('folder'), 'Add matches to collection');
+  collectionForm.append(addCollection);
+  if (!locals.length) collectionForm.append(h('p', { class: 'field-help mt-12' }, 'Make a local collection first.'), btn('Create a collection', 'plus', () => { m.close(); openCollection(); }, 'ghost small'));
+  collectionForm.addEventListener('submit', async event => {
+    event.preventDefault(); collectionError.clear(); addCollection.disabled = true;
+    try { if (!collection.value) throw new Error('Choose a local collection.'); await updateMatches('collection', collection.value); }
+    catch (error) { collectionError.show(error); } finally { addCollection.disabled = !locals.length; }
+  });
+  const ai = h('section', { class: 'setting-section' }, h('h3', {}, 'Let local AI suggest topics'), h('p', {}, 'Queue the complete scope. Suggestions use available titles, captions, notes, and collection names. You review them before they change your organization.'));
+  const queue = btn('Queue topic suggestions', 'sparkles', event => busy(event.currentTarget, async () => {
+    const result = await api('/ai/jobs', { method: 'POST', body: { filters: currentScope() } });
+    toast(`${result.queued} queued · ${result.unchanged} already current · ${result.matched} matched.`);
+    m.close(); openActivity('ai');
+  }), 'primary');
+  if (IS_DEMO || !state.settings.ai_enabled) {
+    queue.disabled = true;
+    ai.append(h('p', { class: 'field-help' }, IS_DEMO ? 'Local AI is unavailable in the synthetic demo. Manual topics and collections work in memory.' : 'Local AI is not configured. Manual topics and collections work now; your server can optionally connect a local Ollama model.'));
+  }
+  ai.append(h('div', { class: 'flex-wrap mt-12' }, queue, btn('View job progress', 'activity', () => { m.close(); openActivity('ai'); }, 'small')));
+  m.body.append(topicForm, collectionForm, feedback, ai);
+  m.addFooter(btn('Review matching saves', 'checkcircle', event => busy(event.currentTarget, async () => { const filters = currentScope(); m.close(); await openReview(filters); }), 'soft'), btn('Done', 'check', m.close, 'primary'));
+}
+
+async function openReview(filters = {}) {
+  const result = await api(`/items?${createQuery({ ...filters, needs_review: true, sort: 'oldest' }, 0, 1)}`);
+  if (result.items.length) await openDetail(result.items[0].id, { reviewFilters: filters });
+  else toast('You are caught up. No saves in this scope need review.');
+}
+
+async function openDetail(id, { reviewFilters } = {}) {
   if (state.detail) state.detail.close();
   let dirty = false;
   const confirmDiscard = () => !dirty || window.confirm('Discard your unsaved changes?');
   const m = modal('A closer look', { detail: true, canClose: confirmDiscard, onClose: () => { if (state.detail === m.dialog) state.detail = null; } });
   m.confirmDiscard = confirmDiscard;
+  m.reviewFilters = reviewFilters || libraryScope(state.filters, 'view');
   state.detail = m.dialog;
   m.body.append(h('p', { class: 'loading-line' }, 'Opening your save…'));
   try { const item = await api(`/items/${id}`); if (m.dialog.open) renderDetail(m, item, value => { dirty = value; }); }
@@ -486,7 +554,10 @@ function renderDetail(m, item, setDirty) {
   const openOriginal = IS_DEMO ? h('span', { class: 'pill-note' }, 'Illustrative source link') : originalURL ? h('a', { href: originalURL, target: '_blank', rel: 'noopener noreferrer', class: 'btn small' }, 'Open original', icon('external')) : null;
   const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => busy(event.currentTarget, async () => {
     const updated = await api(`/items/${item.id}`, { method: 'PATCH', body: { favorite: !item.favorite } });
-    item.favorite = updated.favorite; favorite.setAttribute('aria-pressed', String(item.favorite)); favorite.title = item.favorite ? 'Remove from favorites' : 'Add to favorites'; await refreshLibrary();
+    item.favorite = updated.favorite;
+    const label = item.favorite ? 'Remove from favorites' : 'Add to favorites';
+    favorite.setAttribute('aria-pressed', String(item.favorite)); favorite.setAttribute('aria-label', label); favorite.title = label;
+    await refreshLibrary();
   }));
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
   m.body.append(makeCover(item, true), h('div', { class: 'detail-source-row' }, h('span', { class: 'source-label' }, icon(item.platform), PLATFORM_NAMES[item.platform] || 'Web', item.creator ? ` · ${item.creator}` : ''), favorite), h('h2', { class: 'detail-title', dir: 'auto' }, item.title || hostLabel(item.url)), h('div', { class: 'detail-actions' }, openOriginal, btn('Copy link', 'copy', event => busy(event.currentTarget, () => copyText(item.url)))));
@@ -540,11 +611,17 @@ function renderDetail(m, item, setDirty) {
   for (const ev of item.evidence || []) { if (ev.kind === 'caption' && ev.text === item.caption) continue; evidence.append(h('div', { class: 'evidence' }, h('span', { class: 'evidence-label' }, String(ev.kind).replaceAll('_', ' ')), h('p', { dir: 'auto' }, ev.text))); }
   if (!item.caption && !(item.evidence || []).length) evidence.append(h('p', { class: 'field-help mt-12' }, 'This save currently has link-only evidence. Add your own notes or import more source text.'));
   m.body.append(evidence, h('dl', { class: 'detail-meta detail-section' }, h('div', {}, h('dt', {}, 'Added to archive'), h('dd', {}, formatDate(item.created_at))), h('div', {}, h('dt', {}, 'Saved on source'), h('dd', {}, formatDate(item.saved_at))), h('div', {}, h('dt', {}, 'Last observed'), h('dd', {}, formatDate(item.last_seen_at))), h('div', {}, h('dt', {}, 'Content type'), h('dd', {}, item.content_type || 'link'))));
+  m.body.append(h('section', { class: 'detail-section' }, h('h3', {}, 'Keep reviewing'), h('p', { class: 'field-help' }, 'Move through every save needing review in this scope, including unloaded pages.'), btn(item.needs_review ? 'Mark reviewed & next' : 'Next save to review', 'arrow', event => busy(event.currentTarget, async () => {
+    if (!m.confirmDiscard()) return;
+    if (item.needs_review) await api(`/items/${item.id}`, { method: 'PATCH', body: { needs_review: false } });
+    setDirty(false); m.close(); await refreshLibrary(); await openReview(m.reviewFilters);
+  }), 'soft')));
   m.body.append(btn('Delete from this archive', 'trash', () => confirmAction('Delete this saved item?', 'Its local notes, topics, and memberships will be deleted. Your save on the original platform is unaffected.', async () => { await api(`/items/${item.id}`, { method: 'DELETE' }); setDirty(false); m.close(); await refreshLibrary(); toast('Item deleted from your archive.'); }, true), 'ghost danger small'));
 }
 
 function openImport() {
-  const m = modal('Bring your saves home');
+  let importing = false;
+  const m = modal('Bring your saves home', { canClose: () => { if (importing) toast('Please wait for this import to finish.'); return !importing; } });
   if (IS_DEMO) {
     m.body.append(h('div', { class: 'notice' }, h('strong', {}, 'You are exploring synthetic content.'), h('p', {}, 'Real file imports and browser connections are available in a self-hosted instance. This public demo has no backend, account, or social connection and does not read your files.')), h('h3', {}, 'What you can explore here'), h('p', { class: 'dialog-description' }, 'Try searching, filtering, editing notes, favoriting saves, and making collections. You can also add a link as an in-memory demo record. Everything resets when you reload.'));
     m.addFooter(btn('Save a demo link', 'plus', () => { m.close(); openAdd(); }, 'soft'), btn('Keep exploring', 'arrow', m.close, 'primary'));
@@ -555,16 +632,19 @@ function openImport() {
   const form = h('form', {}, h('p', { class: 'dialog-description' }, 'Import an account export, bookmarks, or a previous Little Archive export. Files are processed by your own server.'), h('div', { class: 'upload-box' }, icon('upload'), h('h3', {}, 'A fresh start for your saved things'), h('p', {}, 'JSON, CSV, bookmarks HTML, or ZIP · up to 16 MiB'), input), h('p', { class: 'field-help mt-12' }, 'Supported archive sections are read selectively. Missing collections or unavailable media are reported, not invented.'));
   const error = formError(form);
   const submit = h('button', { class: 'btn primary mt-12', type: 'submit' }, icon('upload'), 'Import file');
-  form.append(submit, result);
+  const progress = h('div', { class: 'import-progress', role: 'status', hidden: true }, h('progress', { 'aria-label': 'Import progress' }), h('p', {}, 'Uploading and processing your file. Keep this window open until your results are ready.'));
+  form.append(submit, progress, result);
   form.addEventListener('submit', async event => {
     event.preventDefault(); error.clear(); const file = input.files?.[0]; if (!file) return;
-    submit.disabled = true; result.hidden = true;
+    importing = true; submit.disabled = true; input.disabled = true; result.hidden = true; progress.hidden = false;
+    submit.replaceChildren(icon('upload'), 'Importing…');
     try {
       if (file.size > 16 * 1024 * 1024) throw new Error('This file exceeds 16 MiB. Use a smaller export or split it into supported saved-content sections.');
       const data = await api(`/imports/file?filename=${encodeURIComponent(file.name)}`, { method: 'POST', body: file, raw: true, headers: { 'Content-Type': 'application/octet-stream' } });
       result.className = 'import-result'; result.replaceChildren(h('h3', {}, 'Your import is ready'), h('p', {}, `${data.created} new · ${data.updated} updated · ${data.skipped} skipped`), h('p', {}, data.coverage === 'enumeration_exhausted' ? 'The supplied file was processed. This does not establish a complete platform archive.' : 'Coverage is partial. Your existing saves have been preserved.'), (data.errors || []).length ? h('details', {}, h('summary', {}, `${data.errors.length} import notes`), h('ul', {}, data.errors.slice(0, 30).map(x => h('li', {}, String(x))))) : null);
+      result.append(btn('Organize your library', 'sparkles', () => { m.close(); openOrganize(); }, 'soft small'));
       result.hidden = false; await refreshLibrary(); toast(`${countLabel(data.created, 'new save')} added.`);
-    } catch (e) { error.show(e); } finally { submit.disabled = false; }
+    } catch (e) { error.show(e); } finally { importing = false; submit.disabled = false; input.disabled = false; progress.hidden = true; submit.replaceChildren(icon('upload'), 'Import file'); }
   });
   m.body.append(form, h('section', { class: 'setting-section' }, h('h3', {}, 'Import from your browser'), h('p', {}, 'The companion extension can collect the saved or collection view you open on Instagram or TikTok. Browser adapters are experimental and report their observed coverage.'), btn('Set up a connection', 'link', () => { m.close(); openSettings('connections'); }, 'soft')));
 }
@@ -647,7 +727,7 @@ function openSettings(section = '') {
     exports.lastChild.textContent = 'A full database-and-assets backup is available in your own instance. This public demo has no database or server to back up.';
   }
   m.body.append(exports, h('section', { class: 'setting-section' }, h('h3', {}, 'Take a little look around'), h('p', {}, 'Add clearly labeled synthetic demo saves to explore the interface. This does not connect a real social account.'), btn('Add demo collection', 'sparkles', event => addDemo(event.currentTarget), 'small')));
-  m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Little Archive'), h('p', {}, 'Version 0.1.0 alpha · Open source under the MIT license. Browser adapters are experimental; check import activity for observed coverage.'), IS_DEMO ? btn('Reset demo', 'arrow', () => location.reload(), 'ghost') : btn('Sign out', 'logout', event => busy(event.currentTarget, async () => { await api('/auth/logout', { method: 'POST' }); m.close(); state.authenticated = false; state.csrf = ''; state.items = []; renderLogin(); }), 'ghost')));
+  m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Little Archive'), h('p', {}, 'Development toward 1.0 · Open source under the MIT license. Check import activity for observed coverage.'), IS_DEMO ? btn('Reset demo', 'arrow', () => location.reload(), 'ghost') : btn('Sign out', 'logout', event => busy(event.currentTarget, async () => { await api('/auth/logout', { method: 'POST' }); m.close(); state.authenticated = false; state.csrf = ''; state.items = []; renderLogin(); }), 'ghost')));
   m.addFooter(btn('Done', 'check', m.close, 'primary'));
   if (section === 'connections') setTimeout(() => connectionSection.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50);
 }
@@ -657,8 +737,9 @@ function addDemo(button) {
 }
 
 function openActivity(initial = 'imports') {
-  const m = modal('A little activity');
-  let active = initial;
+  const m = modal('A little activity', { onClose: () => { if (state.authenticated) refreshLibrary().catch(error => toast(errorMessage(error), true)); } });
+  let active = initial === 'ai' ? 'ai' : 'imports';
+  let offset = 0;
   let timer;
   let refreshSequence = 0;
   const tabs = h('div', { class: 'activity-tabs' });
@@ -666,19 +747,39 @@ function openActivity(initial = 'imports') {
   const refresh = async () => {
     const refreshId = ++refreshSequence;
     const kind = active;
-    content.setAttribute('aria-busy', 'true');
+    clearTimeout(timer); content.setAttribute('aria-busy', 'true');
     try {
-      const result = await api(kind === 'ai' ? '/ai/jobs' : '/imports');
+      const result = await api(kind === 'ai' ? `/ai/jobs?limit=25&offset=${offset}` : '/imports');
       if (!m.dialog.open || refreshId !== refreshSequence || kind !== active) return;
-      const rows = active === 'ai' ? result.jobs || [] : result.imports || [];
+      const rows = kind === 'ai' ? result.jobs || [] : result.imports || [];
       content.replaceChildren();
-      if (!rows.length) content.append(h('p', { class: 'dialog-description' }, active === 'ai' ? 'No classification jobs yet. Open a saved item to request a local AI suggestion.' : 'No imports yet. Bring in an export file or use the companion extension.'));
+      let running = false;
+      if (kind === 'ai') {
+        const counts = result.counts || { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0 };
+        const total = Number(result.total) || 0;
+        running = counts.queued + counts.running > 0;
+        const summary = h('section', { class: 'job-summary', 'aria-label': 'Classification progress', role: 'status' }, h('h3', {}, 'All classification jobs'), h('div', { class: 'job-counts' }, ...[['queued', 'Queued'], ['running', 'Running'], ['completed', 'Completed'], ['failed', 'Failed'], ['cancelled', 'Cancelled']].map(([key, label]) => h('span', {}, h('strong', {}, String(counts[key] || 0)), label))));
+        if (total) summary.append(h('progress', { max: total, value: counts.completed + counts.failed + counts.cancelled, 'aria-label': 'Classification jobs finished' }), h('p', { class: 'field-help' }, `${total} jobs in total. ${running ? 'Progress refreshes automatically.' : 'No jobs are running.'}`));
+        if (running) summary.append(btn('Cancel pending jobs', 'x', () => confirmAction('Cancel pending classification?', 'Queued and running jobs will be cancelled. Existing saves and accepted topics stay in your library. Cancelled jobs can be retried.', async () => { const result = await api('/ai/jobs/cancel', { method: 'POST' }); toast(`${result.cancelled} jobs cancelled.`); await refresh(); }), 'ghost small'));
+        summary.append(btn('Review your saves', 'checkcircle', event => busy(event.currentTarget, async () => { m.close(); await openReview(); }), 'soft small'));
+        content.append(summary);
+      } else {
+        running = rows.some(row => row.status === 'running');
+        content.append(h('p', { class: 'field-help' }, running ? 'An import is running. Counts refresh automatically as batches arrive.' : 'Showing the most recent imports. Coverage describes only the supplied file or observed source view.'));
+      }
+      if (!rows.length) content.append(h('p', { class: 'dialog-description' }, kind === 'ai' ? 'No classification jobs yet. Use Organize to queue your library or a filtered view.' : 'No imports yet. Bring in an export file or use the companion extension.'));
       for (const row of rows) {
-        const top = h('div', { class: 'activity-top' }, h('strong', {}, active === 'ai' ? 'Local classification' : `${PLATFORM_NAMES[row.source] || row.source || 'File'} import`), h('span', { class: `status-pill ${row.status}` }, row.status || 'unknown'));
+        const top = h('div', { class: 'activity-top' }, h('strong', { dir: 'auto' }, kind === 'ai' ? row.title || 'Local classification' : `${PLATFORM_NAMES[row.source] || row.source || 'File'} import`), h('span', { class: `status-pill ${row.status}` }, row.status || 'unknown'));
         const item = h('article', { class: 'activity-row' }, top, h('p', {}, formatDate(row.started_at || row.created_at)));
-        if (active === 'ai') {
+        if (kind === 'ai') {
           if (row.error) item.append(h('p', { class: 'form-error' }, row.error));
-          if (row.item_id) item.append(btn('Open save', 'arrow', () => { m.close(); openDetail(row.item_id); }, 'ghost small'));
+          const actions = h('div', { class: 'flex-wrap' });
+          if (row.item_id) actions.append(btn('Open save', 'arrow', () => { m.close(); openDetail(row.item_id); }, 'ghost small'));
+          if (['failed', 'cancelled'].includes(row.status)) {
+            const retry = btn('Retry with current text', 'arrow', event => busy(event.currentTarget, async () => { const result = await api(`/ai/jobs/${row.id}/retry`, { method: 'POST' }); toast(result.queued ? 'Fresh suggestions queued.' : 'A matching job is already current.'); await refresh(); }), 'soft small');
+            retry.disabled = IS_DEMO || !state.settings.ai_enabled; actions.append(retry);
+          }
+          item.append(actions);
         } else {
           item.append(h('p', {}, `${row.created || 0} new · ${row.updated || 0} updated · ${row.skipped || 0} skipped`), h('p', {}, `Coverage: ${String(row.coverage || 'partial').replaceAll('_', ' ')}`));
           if (row.source_account && row.source_account !== 'default') item.append(h('p', { dir: 'auto' }, `Source account: ${row.source_account}`));
@@ -686,19 +787,24 @@ function openActivity(initial = 'imports') {
         }
         content.append(item);
       }
-      if (active === 'ai' && rows.some(x => ['queued', 'running'].includes(x.status))) { clearTimeout(timer); timer = setTimeout(refresh, 4000); }
+      if (kind === 'ai' && result.total > 25) {
+        const previous = btn('Previous jobs', 'arrow', () => { offset = Math.max(0, offset - 25); refresh(); }, 'small'); previous.disabled = offset === 0;
+        const next = btn('Next jobs', 'arrow', () => { offset += 25; refresh(); }, 'small'); next.disabled = offset + rows.length >= result.total;
+        content.append(h('div', { class: 'activity-pagination' }, h('p', { class: 'field-help' }, `${offset + 1}–${offset + rows.length} of ${result.total} jobs`), h('div', { class: 'flex-wrap' }, previous, next)));
+      }
+      if (running) timer = setTimeout(refresh, 3000);
     } catch (e) { if (refreshId === refreshSequence) content.replaceChildren(h('div', { class: 'form-error', role: 'alert' }, errorMessage(e))); }
     finally { if (refreshId === refreshSequence) content.removeAttribute('aria-busy'); }
   };
   const renderTabs = () => {
     tabs.replaceChildren(...[['imports', 'Imports', 'upload'], ['ai', 'AI jobs', 'sparkles']].map(([value, label, name]) => {
-      const b = btn(label, name, () => { active = value; clearTimeout(timer); renderTabs(); refresh(); }, active === value ? 'soft small' : 'ghost small'); b.setAttribute('aria-pressed', String(active === value)); return b;
+      const button = btn(label, name, () => { active = value; offset = 0; clearTimeout(timer); renderTabs(); refresh(); }, active === value ? 'soft small' : 'ghost small'); button.setAttribute('aria-pressed', String(active === value)); return button;
     }));
   };
   renderTabs(); m.body.append(h('p', { class: 'dialog-description' }, 'See what arrived, what changed, and anything that needs another look.'), tabs, content);
   if (IS_DEMO) m.body.prepend(h('div', { class: 'notice' }, 'This public demo does not run real imports or AI jobs. These activity lists are empty by design.'));
   m.addFooter(btn('Refresh', 'activity', event => busy(event.currentTarget, refresh)), btn('Done', 'check', m.close, 'primary'));
-  m.dialog.addEventListener('close', () => clearTimeout(timer), { once: true }); refresh();
+  m.dialog.addEventListener('close', () => { clearTimeout(timer); refreshSequence++; }, { once: true }); refresh();
 }
 
 document.addEventListener('keydown', event => {

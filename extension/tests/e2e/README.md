@@ -1,0 +1,57 @@
+# Packaged extension integration tests
+
+This suite loads the unmodified `extension/` directory as a Manifest V3 extension into a new, temporary Chromium profile and communicates with the real FastAPI application. It is separate from the fast DOM/helper tests under `extension/tests/*.test.mjs`.
+
+## Run in GitHub Actions
+
+Use Node.js 22 or 24 and Python 3.12, install the root Python requirements and run `npm ci` at the repository root. The shared test dependency is pinned to `@playwright/test` **1.65.0** in the root package and lock file. Then run:
+
+```sh
+npx playwright install --with-deps chromium
+xvfb-run --auto-servernum node tests/e2e/run.mjs --config extension/tests/e2e/playwright.config.mjs
+```
+
+The shared server harness creates a temporary data directory and a random owner password at runtime. These tests log in through the real authentication API and create a separate random import token for each browser profile. They revoke that token and remove the profile afterward. No password or token is committed to the repository.
+
+Test discovery without launching Chromium:
+
+```sh
+npx playwright test --config extension/tests/e2e/playwright.config.mjs --list
+```
+
+The suite uses a headed bundled Chromium under Xvfb so the real toolbar popup exists. It does not connect to any installed browser, existing profile, or real platform account. No extension source or manifest is patched for testing. `Extensions.triggerAction` opens the actual toolbar action and obtains Chrome's normal `activeTab` grant. The popup's real sender identity, script injection, service-worker messages, durable storage and HTTP requests all remain in the production path.
+
+## Cases
+
+| Case | Observable assertion |
+| --- | --- |
+| Instagram image grid | Twenty-one synthetic image links with alternative text and no figcaptions become twenty-one database items; exact Unicode collection names survive. |
+| Duplicate refresh | A second real popup import updates those same item IDs, retains personal edits, and preserves one source collection. |
+| Incremental scrolling | Scrolling adds two cards to an initial fifty-one; the worker sends batches of 50, 1 and 2 with consecutive zero-based sequences, each within 256 KiB. |
+| Preset collection workflow | All posts followed by two source collection views preserves exact names and overlapping memberships without duplicating posts or removing an earlier membership. |
+| TikTok Favorites | Video and photo URLs produce separate items with caption and thumbnail-alt provenance; a duplicate video link is ignored. |
+| Login guard | A visible password prompt stops the scanner before it sends saved-card batches. |
+| Favorites guard | A selected Posts tab remains rejected even when the user confirms the popup checkbox. |
+| Pause and resume | A different collection cannot resume a bound run; the original view reopens at the top, traverses twelve already-known virtualized cards, imports the next new card, and finishes with partial coverage. |
+| Durable network recovery | A loopback relay drops a batch response after the real server commits it. The same disk-backed outbox survives a full Chromium restart and sends the identical batch again; the real server reports an idempotent replay. |
+
+All Instagram and TikTok navigation responses are fulfilled with handwritten HTML. Every other web request is blocked, except the single ephemeral loopback relay. Host resolution is also disabled for external names. Images use inline data URLs. The relay forwards only `/api/extension/*` to the real local backend and changes no successful response except when the lost-response case intentionally closes the socket.
+
+## Boundaries of the evidence
+
+The 21-card Instagram fixture mirrors **structural observations only** from a read-only check of a rendered Saved All Posts grid: `main`, post-shaped anchor URLs, descendant images with alternative text, and zero figcaptions. Its accounts, post IDs, text, collection names and HTML are entirely synthetic. Its explicit end marker and incremental-loading behavior are controlled test cases, not claims about Instagram's current pagination UI.
+
+The browser's native optional-host consent bubble is **not automated**. In the fresh test profile, Chromium's own Extensions settings API grants exactly `http://127.0.0.1/*` before the real popup runs its unchanged `permissions.request()` flow. This avoids broad host grants and avoids faking the Chrome APIs. Source-host access still comes from the real toolbar action. A manual release check must still cover the native consent prompt.
+
+The restart test proves durable recovery across a complete browser process restart. It does not claim to reproduce every idle-suspension timing or operating-system crash. These fixtures also do not establish live account access, automatic discovery of all collections, current TikTok layout compatibility, or complete enumeration of any real saved library.
+
+Passing CI is required before describing these cases as verified. Adding this suite or passing test discovery alone is not an executed browser test result. CI retains list/JUnit results and synthetic diagnostics on failure, with the connection configuration omitted. Browser profiles, authentication state, request traces, videos and credentials must not be uploaded as artifacts. The shared harness sanitizes results before generating its HTML overview; the extension configuration does not enable Playwright's raw HTML reporter.
+
+## Primary references
+
+- [Playwright extension guide](https://playwright.dev/docs/chrome-extensions): persistent Chromium contexts, unpacked extensions and service workers.
+- [Playwright 1.65 release notes](https://playwright.dev/docs/release-notes#version-165): pinned runner release and supported Node versions.
+- [Chrome DevTools Protocol definitions](https://github.com/ChromeDevTools/devtools-protocol/blob/master/json/browser_protocol.json): `Extensions.triggerAction`, `Target`, `Runtime` and `Input` commands.
+- [Chromium extension management implementation](https://chromium.googlesource.com/chromium/src/+/HEAD/chrome/browser/extensions/api/developer_private/developer_private_functions.cc): the test profile's exact-host permission setup.
+
+References were checked on 2026-11-13. Pin upgrades deliberately and rerun the complete browser suite; Chromium's extension automation and platform DOM layouts can change independently.

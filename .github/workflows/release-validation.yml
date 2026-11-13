@@ -1,0 +1,198 @@
+name: Release validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: node --test extension/tests/*.test.mjs web/*.test.mjs
+      - run: python scripts/build_demo.py
+      - run: python scripts/release_check.py
+
+  browsers:
+    name: Browser (${{ matrix.browser }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: pip install -r requirements.txt
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps ${{ matrix.browser }}
+      - name: Exercise the authenticated application
+        run: npm run test:e2e -- --project=${{ matrix.browser }}
+      - name: Retain synthetic test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-${{ matrix.browser }}-${{ github.sha }}
+          path: |
+            playwright-report/index.html
+            test-results/*.xml
+            test-results/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  extension:
+    name: Packaged Chrome extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: pip install -r requirements.txt
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Exercise the actual extension against synthetic source views
+        run: xvfb-run --auto-servernum npm run test:extension:e2e
+      - name: Retain synthetic extension test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: extension-${{ github.sha }}
+          path: |
+            test-results/extension-results.xml
+            test-results/e2e-server.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  containers:
+    name: Container (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the packaged application
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          tags: little-archive:ci-${{ matrix.arch }}
+          load: true
+          push: false
+      - name: Verify authentication, persistence, and offline recovery
+        run: python scripts/container_smoke.py --image little-archive:ci-${{ matrix.arch }} --platform linux/${{ matrix.arch }} --startup-timeout 180 --report work/container-verification-${{ matrix.arch }}.json
+      - name: Retain the credential-free container report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-${{ matrix.arch }}-${{ github.sha }}
+          path: work/container-verification-${{ matrix.arch }}.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  native-install:
+    name: Native install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, macos-15-intel]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install into a clean native environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+      - name: Verify native setup, restart, password reset, and recovery
+        run: .venv/bin/python scripts/native_smoke.py --report work/native-verification-${{ matrix.os }}.json
+      - name: Retain the credential-free native report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.os }}-${{ github.sha }}
+          path: work/native-verification-${{ matrix.os }}.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  local-model:
+    name: Real local model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Start a disposable CPU inference service
+        run: docker run -d --name archive-model-check -p 127.0.0.1:11434:11434 ollama/ollama:0.40.16
+      - name: Pull the supported small text model
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:11434/api/version; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec archive-model-check ollama pull qwen3:0.6b
+          docker exec archive-model-check ollama list
+      - name: Verify real worker inference and review
+        run: python scripts/ollama_smoke.py --url http://127.0.0.1:11434 --model qwen3:0.6b --timeout 360
+      - name: Remove the disposable model service
+        if: always()
+        run: docker rm -f archive-model-check

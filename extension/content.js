@@ -33,12 +33,20 @@
   async function scan(current) {
     let scrolls=0;
     let stagnant=0;
+    // A resumed view can reopen at the top. Existing checkpoint identities
+    // still count as traversal progress, even though they must not upload
+    // again. Otherwise a large checkpoint stops after eight known screens.
+    const traversed=new Set();
     const started=Date.now();
     const adapter=window.__littleArchiveAdapters;
     try {
       while (!current.cancelled) {
         const root=adapter.inspect(current.run);
         const {records,lastLink}=adapter.collect(root,current.run.platform);
+        let progressed=false;
+        for (const item of records) {
+          if (!traversed.has(item._key)) { traversed.add(item._key); progressed=true; }
+        }
         const fresh=records.filter(item => !current.seen.has(item._key));
         for (let i=0;i<fresh.length && !current.cancelled;i+=50) {
           const group=fresh.slice(i,i+50);
@@ -48,7 +56,7 @@
         if (current.cancelled) break;
         if (!fresh.length) await send(current,'capture',{items:[],scrolls});
         current.ui.info.textContent=`${current.seen.size.toLocaleString()} unique posts observed. Scanning this view only.`;
-        stagnant=fresh.length ? 0 : stagnant+1;
+        stagnant=progressed ? 0 : stagnant+1;
         const end=adapter.endStatus(root,records.length);
         if (end) {
           await send(current,'scan-finished',{coverage:'enumeration_exhausted',reason:end==='empty'?'The source displayed an explicit empty saved-view state.':'The source displayed an explicit end marker.'});

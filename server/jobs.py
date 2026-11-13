@@ -79,6 +79,11 @@ class ClassificationWorker:
                 result = classify_item(item, self.config.ollama_url, self.config.ollama_model)
                 result.update(created_at=now(), input_hash=job["input_hash"], evidence_snapshot=item.get("evidence", []))
                 with self.store.transaction() as c:
+                    # Cancellation is durable. A model request already in flight
+                    # may finish, but must never revive a cancelled/requeued job.
+                    active = c.execute("SELECT status FROM ai_jobs WHERE id=?", (job["id"],)).fetchone()
+                    if not active or active["status"] != "running":
+                        continue
                     current = self.store.get_item(item["id"], c)
                     if current and self.fingerprint(current) == job["input_hash"]:
                         dismissed = c.execute("SELECT ai_dismissed FROM items WHERE id=?", (item["id"],)).fetchone()[0]
@@ -90,4 +95,4 @@ class ClassificationWorker:
             except Exception:
                 # Avoid returning model text, URLs, credentials, or stack traces to clients/logs.
                 with self.store.transaction() as c:
-                    c.execute("UPDATE ai_jobs SET status='failed',error='Classification failed. Check the configured local model and try again.',updated_at=? WHERE id=?", (now(), job["id"]))
+                    c.execute("UPDATE ai_jobs SET status='failed',error='Classification failed. Check the configured local model and try again.',updated_at=? WHERE id=? AND status='running'", (now(), job["id"]))

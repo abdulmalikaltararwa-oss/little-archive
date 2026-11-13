@@ -22,7 +22,9 @@ The server does not use saved URLs as arbitrary fetch instructions. A local thum
 
 ## AI
 
-AI is optional and invoked by an explicit user action. The server sends the selected item's bounded text evidence and collection labels to the Ollama origin configured by the operator. There is no automatic hosted-model fallback in the application.
+AI is optional and invoked by an explicit user action. The chosen scope can be individual saves, a complete filtered set, or the entire non-archived library. The server sends each matched item's bounded text evidence and collection labels to the Ollama origin configured by the operator. Whole-library processing includes matching items beyond the currently loaded gallery page. There is no automatic hosted-model fallback in the application.
+
+Cancelling work prevents queued jobs and cancelled results from updating the library. A request already sent to the model service can continue computing there until it finishes; cancellation cannot retract text that the service has already received. Retrying failed or cancelled work uses current item evidence and sends it to the configured model service again.
 
 If your configured model service forwards requests elsewhere, that behavior belongs to the model service's configuration. To keep processing local, use a downloaded local model and an endpoint on hardware or a private network you control.
 

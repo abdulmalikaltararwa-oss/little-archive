@@ -96,6 +96,19 @@ export function createDemoAPI(fixtures, { clock = () => new Date().toISOString()
     updated.updated_at = clock(); return updated;
   }
 
+  function matchingItems(parameters) {
+    const words = normalize(parameters.get('q') || '').split(/\s+/).filter(Boolean);
+    return [...items.values()].filter(item => {
+      if (parameters.get('status') ? item.status !== parameters.get('status') : item.status === 'archived') return false;
+      if (parameters.get('platform') && item.platform !== parameters.get('platform')) return false;
+      if (parameters.get('collection_id') && !item.collections.some(c => c.id === parameters.get('collection_id'))) return false;
+      if (parameters.get('tag') && !item.tags.includes(parameters.get('tag'))) return false;
+      for (const key of ['favorite', 'needs_review']) if (parameters.has(key) && item[key] !== (parameters.get(key) === 'true')) return false;
+      const text = normalize([item.title, item.caption, item.summary, item.notes, item.creator, ...item.tags].join(' '));
+      return words.every(word => text.includes(word));
+    });
+  }
+
   return async (path, init = {}) => {
     const url = new URL(path, 'http://demo.invalid');
     const route = url.pathname;
@@ -140,17 +153,7 @@ export function createDemoAPI(fixtures, { clock = () => new Date().toISOString()
       }
       if (route === '/api/items' && method === 'GET') {
         const p = url.searchParams;
-        const words = normalize(p.get('q') || '').split(/\s+/).filter(Boolean);
-        let result = [...items.values()].filter(item => {
-          if (p.get('status') ? item.status !== p.get('status') : item.status === 'archived') return false;
-          if (p.get('platform') && item.platform !== p.get('platform')) return false;
-          if (p.get('collection_id') && !item.collections.some(c => c.id === p.get('collection_id'))) return false;
-          if (p.get('tag') && !item.tags.includes(p.get('tag'))) return false;
-          if (p.get('favorite') === 'true' && !item.favorite) return false;
-          if (p.get('needs_review') === 'true' && !item.needs_review) return false;
-          const text = normalize([item.title, item.caption, item.summary, item.notes, item.creator, ...item.tags].join(' '));
-          return words.every(word => text.includes(word));
-        });
+        const result = matchingItems(p);
         const sort = p.get('sort') || 'recent';
         if (sort === 'random') for (let i = result.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [result[i], result[j]] = [result[j], result[i]]; }
         else result.sort(sort === 'title' ? (a, b) => a.title.localeCompare(b.title) : sort === 'oldest' ? (a, b) => a.created_at.localeCompare(b.created_at) : (a, b) => b.created_at.localeCompare(a.created_at));
@@ -165,8 +168,10 @@ export function createDemoAPI(fixtures, { clock = () => new Date().toISOString()
         const updated = edit(item, patch); items.set(id, updated); return json(clone(updated));
       }
       if (route === '/api/items/bulk' && method === 'POST') {
-        if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 200) throw new Error('Select between 1 and 200 saves.');
-        const selected = [...new Set(body.ids)].map(mustItem);
+        if ((body.ids == null) === (body.filters == null)) throw new Error('Choose selected IDs or a library filter.');
+        if (body.ids != null && (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 200)) throw new Error('Select between 1 and 200 saves.');
+        if (body.filters != null && (typeof body.filters !== 'object' || Array.isArray(body.filters))) throw new Error('Use a valid library filter.');
+        const selected = body.ids != null ? [...new Set(body.ids)].map(mustItem) : matchingItems(new URLSearchParams(Object.entries(body.filters).filter(([, value]) => value != null).map(([key, value]) => [key, String(value)])));
         const updates = selected.map(item => {
           if (body.action === 'favorite' || body.action === 'unfavorite') return edit(item, { favorite: body.action === 'favorite' });
           if (body.action === 'archive' || body.action === 'restore') return edit(item, { status: body.action === 'archive' ? 'archived' : 'inbox' });
@@ -184,7 +189,7 @@ export function createDemoAPI(fixtures, { clock = () => new Date().toISOString()
         if (method === 'DELETE') { items.delete(item.id); return json({ ok: true }); }
       }
       if (route === '/api/imports' && method === 'GET') return json({ imports: [] });
-      if (route === '/api/ai/jobs' && method === 'GET') return json({ jobs: [] });
+      if (route === '/api/ai/jobs' && method === 'GET') return json({ jobs: [], total: 0, counts: { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0 }, limit: 25, offset: 0 });
       if (route === '/api/extension/tokens' && method === 'GET') return json({ tokens: [] });
       if (route === '/api/demo' && method === 'POST') return json({ created: seed() });
       if (route === '/api/export' && method === 'GET') {
