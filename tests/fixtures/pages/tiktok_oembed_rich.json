@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "type": "video",
+  "title": "Three-ingredient flatbread, no yeast #flatbread #quickrecipes",
+  "author_url": "https://www.tiktok.com/@example_cook",
+  "author_name": "Example Cook",
+  "width": "100%",
+  "height": "100%",
+  "html": "<blockquote class=\"tiktok-embed\" cite=\"https://www.tiktok.com/@example_cook/video/7000000000000000001\" data-video-id=\"7000000000000000001\"><section><script>alert('synthetic markup that must never be kept')</script></section></blockquote>",
+  "thumbnail_width": 576,
+  "thumbnail_height": 1024,
+  "thumbnail_url": "https://p16-sign.tiktokcdn-us.com/synthetic/example-thumb.jpeg",
+  "provider_url": "https://www.tiktok.com",
+  "provider_name": "TikTok",
+  "embed_product_id": "7000000000000000001"
+}
