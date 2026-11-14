@@ -79,8 +79,13 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
       await archive.refreshMetadata();
       setVersion(value => value + 1);
     } else if (result.kind === 'cancelled') toast('No purchase was made.');
+    else if (result.kind === 'waiting') toast('Your purchase is waiting to be approved.');
     else if (result.kind === 'nothing-to-restore') toast('This store account has no Little Archive unlock to restore.');
   }, [archive]);
+
+  // An unlock that arrives without a button press (an approval that came through, a purchase left from the last start):
+  // the app has already refreshed what the account may use; this screen only has to look again.
+  useEffect(() => store?.onUnlocked?.(() => { setOutcome(null); setVersion(value => value + 1); }), [store]);
 
   const purchase = () => runBuy(async () => {
     if (!store) return;
@@ -91,7 +96,7 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
   });
   const bringBack = () => runRestore(async () => { if (store) await finish(await restore(store, archive.api.submitPurchase)); });
   const checkAgain = () => runCheck(async () => {
-    if (outcome?.kind === 'pending') await finish(await settle(outcome.proof, archive.api.submitPurchase));
+    if (outcome?.kind === 'pending') await finish(await settle(outcome.proof, archive.api.submitPurchase, store ?? undefined));
     else { await archive.refreshMetadata(); setVersion(value => value + 1); }
   });
 
@@ -170,6 +175,12 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
             <strong className="font-semibold">The store is still completing the payment.</strong>
             <p className="mt-1 text-ink-soft">Nothing more is needed from you. When the payment goes through, the unlock follows; you can check again in a little while.</p>
             <Button size="sm" className="mt-3" aria-busy={checking || undefined} disabled={checking} onClick={() => void checkAgain()}><RotateCw />Check again</Button>
+          </Notice>
+        ) : null}
+        {outcome?.kind === 'waiting' ? (
+          <Notice tone="petal" className="mt-4">
+            <strong className="font-semibold">Your purchase is waiting for the store.</strong>
+            <p className="mt-1 text-ink-soft">It is held until someone approves it (Ask to Buy) or the payment clears. Nothing more is needed from you. When it completes, the unlock arrives by itself, here or the next time Little Archive opens.</p>
           </Notice>
         ) : null}
         {refusal ? (
