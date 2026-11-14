@@ -83,6 +83,8 @@ For an isolated setup-and-recovery rehearsal, use the [native verification harne
 | `LA_OLLAMA_URL` | Optional operator-controlled Ollama origin. Set together with the model name. |
 | `LA_OLLAMA_MODEL` | Name of a model available in that Ollama instance. |
 
+The optional understanding layer (reading public pages, transcripts, a hosted model provider, the shared cache) has its own settings, all off by default. They are listed in [Understanding saves](understanding.md#settings).
+
 The initial password initializes the owner record. Use the local CLI's `reset-password` command when deliberately changing an existing owner's password; consult `python -m server.cli reset-password --help` for the supported invocation. Changing an environment file is not a substitute for verifying the existing account's password state.
 
 ## Password recovery

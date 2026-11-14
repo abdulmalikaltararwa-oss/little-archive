@@ -165,6 +165,7 @@ class Store:
         self.assets.mkdir(exist_ok=True, mode=0o700)
         self.path = self.root / "library.sqlite3"
         self.lock = RLock()
+        self.item_hooks = []
         with self.transaction() as c:
             c.executescript(SCHEMA)
             version = c.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
@@ -228,7 +229,11 @@ class Store:
 
     def get_item(self, item_id, c=None):
         if c is not None:
-            return self.decode_item(c, c.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone())
+            item = self.decode_item(c, c.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone())
+            # Optional decorators (see server/enrich) add derived fields to single-item reads.
+            for hook in self.item_hooks if item else ():
+                hook(c, item)
+            return item
         with self.transaction() as conn:
             return self.get_item(item_id, conn)
 
@@ -274,7 +279,7 @@ class Store:
             evidence.append({"kind": "thumbnail_alt", "text": str(data["thumbnail_alt"])[:20000]})
         if portable:
             for e in data.get("evidence", [])[:16]:
-                if isinstance(e, dict) and e.get("kind") in {"caption", "thumbnail_alt", "user_text"} and isinstance(e.get("text"), str):
+                if isinstance(e, dict) and e.get("kind") in {"caption", "thumbnail_alt", "user_text", "transcript"} and isinstance(e.get("text"), str):
                     clean = {"kind": e["kind"], "text": e["text"][:20000]}
                     if clean not in evidence:
                         evidence.append(clean)
@@ -300,7 +305,9 @@ class Store:
             if caption:
                 updates["caption"] = caption
             if evidence:
-                updates["evidence"] = json_text(evidence[:16])
+                # A refresh replaces what the source says, never a transcript that was added later.
+                kept = [e for e in json.loads(row["evidence"]) if e.get("kind") == "transcript" and not any(x["kind"] == "transcript" for x in evidence)]
+                updates["evidence"] = json_text((evidence[:15] + kept)[:16])
             if preview:
                 updates["preview_url"] = preview
             if parse_date(data.get("saved_at")):

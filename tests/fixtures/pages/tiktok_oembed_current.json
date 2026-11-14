@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "type": "video",
+  "width": 325,
+  "height": 578,
+  "html": "<iframe height=\"578\" width=\"325\" src=\"https://www.tiktok.com/player/v1/7000000000000000001?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=1\" frameborder=\"0\" allowfullscreen loading=\"lazy\"></iframe>",
+  "provider_url": "https://www.tiktok.com",
+  "provider_name": "TikTok",
+  "embed_product_id": "7000000000000000001",
+  "embed_type": "video"
+}

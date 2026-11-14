@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from server.app import create_app
 from server.config import Config
+from server.enrich.understanding import AnalysisOutcome, ProviderUsage
 from server.storage import Store
 
 
@@ -128,14 +129,16 @@ class LibraryClassificationTests(unittest.TestCase):
         entered, release = Event(), Event()
         worker = self.app.state.worker
 
-        def inference(*args):
+        def inference(batch):
+            # The worker reaches the model through the provider interface (server/enrich).
             entered.set()
             if not release.wait(5):
                 raise AssertionError("Controlled inference was not released.")
-            return {"suggested_title": "Synthetic suggestion", "summary": "Synthetic summary.",
-                    "topics": ["example"], "needs_review": True}
+            result = {"suggested_title": "Synthetic suggestion", "summary": "Synthetic summary.", "topics": ["example"],
+                      "content_type": "link", "needs_review": True, "category": "Other", "collection": ""}
+            return [AnalysisOutcome(batch[0].key, result=result)], ProviderUsage(1)
 
-        with patch("server.classifier.classify_item", side_effect=inference):
+        with patch("server.enrich.understanding.OllamaProvider.analyze", autospec=True, side_effect=lambda self, batch: inference(batch)):
             thread = Thread(target=worker.run, daemon=True)
             thread.start()
             try:

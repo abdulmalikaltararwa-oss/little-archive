@@ -27,7 +27,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import __version__
 from .backups import create_backup
 from .config import Config
-from .jobs import ClassificationWorker
+from .enrich.build import build_enrichment
+from .enrich.images import reencode_image, write_asset
+from .enrich.routes import install_routes as install_enrichment_routes
+from .enrich.search import annotate_matches
 from .models import AIJobs, BulkAction, CollectionInput, CollectionPatch, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput
 from .security import RateLimiter, token_hash, verify_password
 from .storage import Store, clean_tags, json_text, normalize_url, now
@@ -53,6 +56,8 @@ class BodyLimitMiddleware:
             maximum = 8 * 1024
         elif path.endswith("/thumbnail"):
             maximum = 8 * 1024 * 1024
+        elif path.endswith("/page") or path.endswith("/transcript"):
+            maximum = 3 * 1024 * 1024
         headers = dict(scope.get("headers", []))
         try:
             declared = int(headers.get(b"content-length", b"0"))
@@ -89,7 +94,8 @@ def create_app(config: Config | None = None):
     config = config or Config.from_env()
     config.validate()
     store = Store(config)
-    worker = ClassificationWorker(store, config)
+    enrichment = build_enrichment(store, config)
+    worker = enrichment.worker
     limiter = RateLimiter()
 
     @asynccontextmanager
@@ -99,7 +105,7 @@ def create_app(config: Config | None = None):
         worker.stop()
 
     app = FastAPI(title="Little Archive", version=__version__, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.state.store, app.state.config, app.state.worker = store, config, worker
+    app.state.store, app.state.config, app.state.worker, app.state.enrichment = store, config, worker, enrichment
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
 
@@ -222,7 +228,10 @@ def create_app(config: Config | None = None):
 
     @app.get("/api/items")
     def list_items(q: str = Query("", max_length=500), platform: Literal["", "instagram", "tiktok", "web"] = "", collection_id: str = "", tag: str = "", status: Literal["", "inbox", "to_revisit", "done", "archived"] = "", favorite: bool | None = None, needs_review: bool | None = None, sort: Literal["recent", "oldest", "title", "random"] = "recent", limit: int = Query(60, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000), auth=Depends(owner)):
-        return store.list_items(q=q, platform=platform, collection_id=collection_id, tag=tag, status=status, favorite=favorite, needs_review=needs_review, sort=sort, limit=limit, offset=offset)
+        result = store.list_items(q=q, platform=platform, collection_id=collection_id, tag=tag, status=status, favorite=favorite, needs_review=needs_review, sort=sort, limit=limit, offset=offset)
+        if q.strip():
+            annotate_matches(result["items"], q)  # where in each item the words were found
+        return result
 
     @app.post("/api/items")
     def add_item(data: NewItem, auth=Depends(owner)):
@@ -296,34 +305,11 @@ def create_app(config: Config | None = None):
 
     @app.post("/api/items/{iid}/thumbnail")
     async def upload_thumbnail(iid: str, request: Request, auth=Depends(owner)):
-        from PIL import Image, ImageOps, UnidentifiedImageError
         must_item(iid)
         raw = await request.body()
-        try:
-            with Image.open(io.BytesIO(raw)) as im:
-                if im.format not in {"PNG", "JPEG", "WEBP"} or im.width * im.height > 20000000:
-                    raise ValueError("Use a PNG, JPEG, or WebP image under 20 megapixels.")
-                im = ImageOps.exif_transpose(im).convert("RGB")
-                im.thumbnail((1600, 1600))
-                output = io.BytesIO()
-                im.save(output, format="PNG", optimize=True)
-                blob = output.getvalue()
-        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-            raise ValueError("That file could not be decoded as a safe image.")
-        digest = hashlib.sha256(blob).hexdigest()
-        target = store.assets / (digest + ".png")
+        # The validation, re-encoding and storage are shared with the stored cover copy (server/enrich/images.py).
+        digest = write_asset(store, reencode_image(raw))
         with store.lock:
-            if not target.exists():
-                temporary = store.assets / ("." + secrets.token_hex(16) + ".tmp")
-                try:
-                    with open(temporary, "xb") as f:
-                        f.write(blob)
-                        f.flush()
-                        os.fsync(f.fileno())
-                    temporary.chmod(0o600)
-                    os.replace(temporary, target)
-                finally:
-                    temporary.unlink(missing_ok=True)
             with store.transaction() as c:
                 must_item(iid, c)
                 c.execute("UPDATE items SET asset_hash=?,updated_at=? WHERE id=?", (digest, now(), iid))
@@ -566,8 +552,7 @@ def create_app(config: Config | None = None):
             return {"ok": True, "created": run["created"], "updated": run["updated"], "skipped": run["skipped"], "coverage": coverage}
 
     def current_settings():
-        enabled = bool(config.ollama_url and config.ollama_model)
-        return {"remote_previews": store.meta("remote_previews") == "true", "ai_enabled": enabled, "ai_available": enabled, "ai_model": config.ollama_model}
+        return {"remote_previews": store.meta("remote_previews") == "true", **enrichment.public_settings()}
 
     @app.get("/api/settings")
     def settings(auth=Depends(owner)):
@@ -580,8 +565,8 @@ def create_app(config: Config | None = None):
 
     @app.post("/api/ai/jobs")
     def queue_ai(data: AIJobs, auth=Depends(owner)):
-        if not config.ollama_url or not config.ollama_model:
-            raise HTTPException(503, "Configure LA_OLLAMA_URL and LA_OLLAMA_MODEL on your server to enable local AI.")
+        if not enrichment.ai_ready():
+            raise HTTPException(503, "Configure an AI provider on your server to enable suggestions (Ollama, or Gemini as described in docs/understanding.md).")
         # Resolve the complete filtered inventory on the server, independent of
         # which gallery pages happen to have loaded in the browser.
         with store.lock:
@@ -605,8 +590,8 @@ def create_app(config: Config | None = None):
 
     @app.post("/api/ai/jobs/{jid}/retry")
     def retry_ai_job(jid: str, auth=Depends(owner)):
-        if not config.ollama_url or not config.ollama_model:
-            raise HTTPException(503, "Configure LA_OLLAMA_URL and LA_OLLAMA_MODEL on your server to enable local AI.")
+        if not enrichment.ai_ready():
+            raise HTTPException(503, "Configure an AI provider on your server to enable suggestions (Ollama, or Gemini as described in docs/understanding.md).")
         with store.lock:
             with store.transaction() as c:
                 job = c.execute("SELECT item_id,status FROM ai_jobs WHERE id=?", (jid,)).fetchone()
@@ -629,6 +614,7 @@ def create_app(config: Config | None = None):
             tags = clean_tags(json.loads(row["tags"]) + ai.get("topics", []))
             c.execute("UPDATE items SET title=?,summary=?,tags=?,needs_review=0,updated_at=? WHERE id=?", (row["title"] if row["manual_title"] else ai.get("suggested_title") or row["title"], row["summary"] if row["manual_summary"] else ai.get("summary") or row["summary"], json_text(tags), now(), iid))
             store.index_item(c, iid)
+            enrichment.apply_suggested_folder(c, iid, ai)
             return store.get_item(iid, c)
 
     @app.post("/api/items/{iid}/ai/dismiss")
@@ -648,6 +634,8 @@ def create_app(config: Config | None = None):
                 _, new = store.apply_item(c, record, account="demo", portable=True)
                 created += int(new)
         return {"created": created}
+
+    install_enrichment_routes(app, enrichment, owner=owner)
 
     web = Path(__file__).resolve().parent.parent / "web"
 
