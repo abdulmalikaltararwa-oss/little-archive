@@ -7,6 +7,7 @@ import hmac
 import html
 import io
 import json
+import mimetypes
 import os
 from pathlib import Path
 import re
@@ -33,6 +34,8 @@ from .storage import Store, clean_tags, json_text, normalize_url, now
 
 
 COOKIE = "little_archive_session"
+# Browsers only accept an installable app's manifest with this type. Some systems' MIME tables lack it.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 class BodyLimitMiddleware:
@@ -647,5 +650,13 @@ def create_app(config: Config | None = None):
         return {"created": created}
 
     web = Path(__file__).resolve().parent.parent / "web"
+
+    # The installed app's share target (web/manifest.webmanifest) opens /share?title=&text=&url=. This is the
+    # ordinary static app: the server neither reads nor echoes those values, and a GET never saves anything.
+    # The page itself prefills the save dialog and waits for the owner to tap Save.
+    @app.api_route("/share", methods=["GET", "HEAD"], include_in_schema=False)
+    def share_target():
+        return FileResponse(web / "index.html", media_type="text/html")
+
     app.mount("/", StaticFiles(directory=web, html=True), name="web")
     return app
