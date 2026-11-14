@@ -29,7 +29,7 @@ Covered by automated tests only; not yet run against a live Supabase project, a 
 
 ### iOS and Android app (in development)
 
-A Capacitor app in `mobile/` that runs the existing interface against a self-hosted server or the hosted service. See [the mobile app guide](docs/mobile-app.md). Run on the iOS simulator against local servers; the Android debug build compiles but was not run.
+A Capacitor app in `mobile/` that runs the existing interface against a self-hosted server or the hosted service. See [the mobile app guide](docs/mobile-app.md). Run on the iOS simulator and an Android emulator against local servers; not run on a physical phone, a real Supabase project or a store build.
 
 - First launch chooses a server (the hosted service or a typed address) after asking `/api/discovery`; sign-in exchanges the owner password for a device token, or uses Supabase email and password with token refresh. Credentials live in the Keychain or an Android Keystore-backed store.
 - A transport in `web/transport.js` (bearer token, native HTTP, `/api` paths only, thumbnails through blob URLs) used only inside the app; `web/app.js` keeps its browser behaviour, and no server change or CORS allowance was needed.

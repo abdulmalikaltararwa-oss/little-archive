@@ -85,7 +85,7 @@ JAVA_HOME=/path/to/jdk21 ANDROID_HOME=~/Library/Android/sdk ./gradlew assembleDe
 # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-In an emulator, the computer is `http://10.0.2.2:PORT` (debug builds allow plain http to that and to `localhost`, nothing else).
+In an emulator, run `adb reverse tcp:PORT tcp:PORT` and use `http://localhost:PORT`. (`http://10.0.2.2:PORT` also reaches the computer and debug builds allow it, but the server then sees the host `10.0.2.2` and refuses it unless `LA_PUBLIC_URL` is set to that address; the app shows that explanation.) Debug builds allow plain http to `localhost`, `127.0.0.1` and `10.0.2.2`, nothing else.
 
 ### Trying it against a server on this computer
 
@@ -165,12 +165,12 @@ The URL scheme `littlearchive` is in `Info.plist` and `ShareViewController.swift
 - **Hosted flow against local stand-ins** (not Supabase): the app discovered a hosted-mode server, checked the Supabase pin, created an account and signed in through `mobile/dev/stub_supabase.py`; the server created that account's empty library on the first authenticated request. The stand-in signs HS256 tokens that the server's verifier accepts. With 90-second tokens the library kept working past expiry, which means the refresh ran. "Delete my account" (typing DELETE) removed the account's directory on the hosted-mode server, signed the app out and said so; the stand-in's user was, as documented below, not removed. The hosted account screen hid the browser-extension section.
 - 64 node tests (shell, transport, build) and the existing web, Python and demo checks.
 
-**Compiled only:** the Android debug APK (`./gradlew assembleDebug`, JDK 21); its merged manifest has the `SEND` intent filter, `allowBackup=false` and the network security config. It was **not run**: see below.
+**Android, in an emulator** (a Pixel 7, API 36, started read-only and headless): the debug APK (`./gradlew assembleDebug`, JDK 21) installed and launched; the first-launch screen showed; entering `http://10.0.2.2:PORT` produced the "does not recognise this address, set `LA_PUBLIC_URL`" explanation (the native client reached the server and the server refused the host, which is what a real server does), and with `adb reverse` and `http://localhost:PORT` the owner password was exchanged for a device token, kept in Android's secure storage, and the library loaded with its thumbnail. A text share with a subject and a link in the text, delivered to the running app as an `ACTION_SEND` intent, opened the save dialog with the link, title and note filled in and a "Shared with Little Archive" note; the server had saved nothing. The package manager lists the app among the `text/plain` share targets. The merged manifest has `allowBackup=false` and the network security config. Not exercised on Android: sign-out, hosted sign-in, a cold start from a share, the real share sheet's chooser.
 
 **Not verified:**
 
-- Android at run time: the share intent, secure storage on Android, native HTTP on Android, and the layout under edge-to-edge system bars. Nothing was run on an Android emulator or device.
-- Any physical iPhone or Android phone. The simulator has no real Keychain hardware protection, and Apple signing, the App Group on a device, TestFlight and Play Console were not touched.
+- Android beyond the emulator run above: a physical device, TalkBack, and everything listed as not exercised there.
+- Any physical iPhone or Android phone. The simulator and emulator have no real hardware-backed key protection, and Apple signing, the App Group on a device, TestFlight and Play Console were not touched.
 - The real Supabase project and the placeholder hosted server (neither was contacted; no user was created in the real project).
 - Export and backup download through the share sheet; picking an image for a local preview; large imports over the bridge; "Open original" leaving the app for the browser; the Switch server button in Settings (its code path is the sign-out one plus forgetting the server); the iOS share extension opening the app on a real device (it did in the simulator).
 - Account deletion against a real Supabase project (see the gap below).
