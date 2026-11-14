@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f8f3ea">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="A quiet home for your saved posts, links, and little discoveries. Open source and self-hosted.">
+    <meta name="application-name" content="Little Archive">
+    <meta name="apple-mobile-web-app-title" content="Little Archive">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Little Archive — Your saves, together</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <!-- Sets the theme before first paint. A file, not an inline script: the server's policy allows scripts from 'self' only. -->
+    <script src="./theme-init.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <div id="app">
+      <main id="main" style="min-height:100dvh;display:grid;place-items:center;text-align:center;font-family:system-ui,sans-serif">
+        <div>
+          <img src="./icon.svg" alt="" width="56" height="56">
+          <h1 style="font-size:1.6rem;margin:.8rem 0 .3rem">Little Archive</h1>
+          <p>Opening your little corner of the internet…</p>
+        </div>
+      </main>
+    </div>
+    <noscript><p style="padding:30px">Little Archive needs JavaScript to browse and organize your library. Please enable it and reload.</p></noscript>
+  </body>
+</html>

@@ -1,0 +1,106 @@
+/* The tiled map's own paper. Leaflet's stylesheet is imported beside this one by map.tsx, so both load with the
+   map's chunk and never with the library. Colours are the product's tokens, so the frame, the markers and the
+   controls follow the theme; the tiles themselves are somebody else's picture and are never recoloured. */
+
+.la-map.leaflet-container {
+  background: var(--card-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The container is keyboard-focusable (arrows pan, + and - zoom); its ring sits inside, where the frame cannot clip it. */
+.la-map.leaflet-container:focus-visible {
+  outline-offset: -3px;
+}
+
+.la-marker {
+  background: transparent;
+  border: 0;
+}
+
+/* A place: a pressed flower on a stem, with a paper edge so it reads on any tile. */
+.la-pin {
+  position: relative;
+  line-height: 0;
+  filter: drop-shadow(0 2px 2.5px color-mix(in srgb, var(--ink) 40%, transparent));
+  transform-origin: 50% 94%;
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+.la-pin.is-area {
+  transform-origin: 50% 50%;
+}
+.la-pin svg {
+  display: block;
+  overflow: visible;
+}
+.la-pin .petal {
+  fill: var(--petal);
+  stroke: var(--card);
+  stroke-width: 1.3;
+}
+.la-pin .heart {
+  fill: var(--butter);
+  stroke: var(--card);
+  stroke-width: 1;
+}
+.la-pin .stem {
+  fill: none;
+  stroke: var(--sage);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.la-pin .leaf {
+  fill: var(--sage);
+  stroke: var(--card);
+  stroke-width: 0.8;
+}
+.la-pin .ground {
+  fill: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+/* An area is the middle of a district or a city. The dashed ring says so; it is not a spot. */
+.la-pin .ring {
+  fill: color-mix(in srgb, var(--petal) 24%, transparent);
+  stroke: var(--petal-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 3.5 3;
+}
+
+/* The place you are looking at: larger, and in sage. */
+.la-pin.is-selected {
+  transform: scale(1.22);
+}
+.la-pin.is-selected .petal {
+  fill: var(--sage);
+}
+.la-pin.is-selected .ring {
+  fill: color-mix(in srgb, var(--sage) 22%, transparent);
+  stroke: var(--sage);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .leaflet-marker-icon:hover .la-pin {
+    transform: translateY(-3px) scale(1.1);
+  }
+  .leaflet-marker-icon:hover .la-pin.is-selected {
+    transform: translateY(-3px) scale(1.3);
+  }
+  .leaflet-marker-icon:hover .la-cluster {
+    transform: scale(1.08);
+  }
+}
+
+/* Several places in one spot. */
+.la-cluster {
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--sage);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-2);
+  font: 500 12px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--dur-2) var(--ease-spring);
+}

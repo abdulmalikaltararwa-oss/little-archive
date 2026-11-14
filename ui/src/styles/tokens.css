@@ -1,0 +1,117 @@
+/* Design tokens. One name per decision, two values per name (light and dark). Components never name a
+   colour, radius, duration or font directly: they name a token. src/styles/tokens.test.ts reads this file
+   and checks every text/background pairing below against WCAG AA, so keep one declaration per line. */
+
+:root {
+  color-scheme: light;
+
+  /* Paper: the surfaces things sit on, lightest card to deepest well. */
+  --paper: #f8f3ea;
+  --paper-deep: #f1eadc;
+  --card: #fffdf8;
+  --card-2: #f4eee2;
+  --card-3: #ebe4d3;
+
+  /* Ink: what is written on the paper. */
+  --ink: #27302a;
+  --ink-soft: #5c665f;
+  --line: #e6decd;
+  --line-strong: #cbc1aa;
+
+  /* Sage: the one working colour. Actions, selection, focus. */
+  --sage: #4b6f56;
+  --sage-deep: #3a5a45;
+  --sage-pale: #e1ecdc;
+  --on-sage: #fffdf8;
+
+  /* Petal, butter, sky, lilac: the flower's colours. Decoration and gentle status, never the only signal. */
+  --petal: #e9a3b0;
+  --petal-pale: #f6dcdf;
+  --petal-ink: #98394f;
+  --butter: #f3ce6e;
+  --butter-pale: #f7e9b8;
+  --butter-ink: #6b5417;
+  --sky-pale: #dcebee;
+  --sky-ink: #37606b;
+  --lilac-pale: #e7e1f1;
+  --lilac-ink: #5b4a72;
+  --clay-pale: #f5e3cf;
+  --clay-ink: #74552f;
+
+  --danger: #a3383a;
+  --danger-pale: #f9e4e1;
+
+  /* The island: the dark pill that reports what just happened. */
+  --island: #232b26;
+  --on-island: #f6f2e7;
+  --on-island-soft: #b9c2b8;
+
+  --shadow-1: 0 1px 2px #3b3a2a14;
+  --shadow-2: 0 10px 24px -14px #3b3a2a4d, 0 2px 6px #3b3a2a12;
+  --shadow-3: 0 28px 60px -24px #2a2a1c66, 0 6px 16px #3b3a2a14;
+  --scrim: #1a241d70;
+  --dot: #4b6f5624;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #1a211d;
+  --paper-deep: #151b17;
+  --card: #242d27;
+  --card-2: #2c362f;
+  --card-3: #354038;
+
+  --ink: #f4f1e6;
+  --ink-soft: #b4bdb3;
+  --line: #36423a;
+  --line-strong: #4d5b51;
+
+  --sage: #bfd6b6;
+  --sage-deep: #d6e6cf;
+  --sage-pale: #2f4036;
+  --on-sage: #17201a;
+
+  --petal: #e9a3b0;
+  --petal-pale: #4f3a3f;
+  --petal-ink: #f7c7d0;
+  --butter: #f3ce6e;
+  --butter-pale: #4a4226;
+  --butter-ink: #f3dc9a;
+  --sky-pale: #2b3d43;
+  --sky-ink: #b9d9e1;
+  --lilac-pale: #3a3447;
+  --lilac-ink: #d5c8ea;
+  --clay-pale: #453829;
+  --clay-ink: #ecd0ab;
+
+  --danger: #ffb4ae;
+  --danger-pale: #4a2c2b;
+
+  --island: #f4f1e6;
+  --on-island: #1c241f;
+  --on-island-soft: #566058;
+
+  --shadow-1: 0 1px 2px #0006;
+  --shadow-2: 0 10px 24px -14px #000c, 0 2px 6px #0005;
+  --shadow-3: 0 28px 60px -24px #000e, 0 6px 16px #0006;
+  --scrim: #05090799;
+  --dot: #bfd6b61c;
+}
+
+/* Type, shape and easing live in the @theme block of index.css, because Tailwind owns those names. */
+:root {
+  /* Motion lengths. Anything longer than --dur-4 is a moment, not an interaction. */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 520ms;
+
+  /* Layout. */
+  --sidebar: 264px;
+  --dock: 68px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-start: env(safe-area-inset-left, 0px);
+  --safe-end: env(safe-area-inset-right, 0px);
+}

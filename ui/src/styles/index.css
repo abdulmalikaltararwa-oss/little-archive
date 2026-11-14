@@ -1,0 +1,330 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/figtree/index.css';
+@import '@fontsource/dm-mono/400.css';
+@import '@fontsource/dm-mono/500.css';
+@import './tokens.css';
+
+/* Fraunces is the project's own display face; the file is shared with the buildless interface. */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../../../web/fonts/fraunces-soft.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+/* The theme is a data attribute on <html>, set before first paint by public/theme-init.js. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+/* Hover styles only where a pointer can hover; touch gets the pressed state instead. */
+@custom-variant hov {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+@custom-variant coarse (@media (pointer: coarse));
+
+@theme {
+  /* Type. Fraunces speaks, Figtree works, DM Mono whispers (labels, counts and the ASCII accents). */
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Shape. */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-2xl: 36px;
+
+  /* Two curves: one that settles, one that overshoots a little. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.3, 1.45, 0.5, 1);
+
+  /* Type scale: a 15px working size, a 13px supporting size and an 11px mono whisper. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.7rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.9rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.2rem;
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 1.08;
+  --text-5xl: 3.25rem;
+  --text-5xl--line-height: 1.04;
+  --text-6xl: 4.25rem;
+  --text-6xl--line-height: 1;
+
+  --animate-bob: bob 2.4s ease-in-out infinite;
+  --animate-sway: sway 6s ease-in-out infinite;
+  --animate-pop: pop 0.42s var(--ease-spring);
+  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-caret: caret 1s steps(1) infinite;
+  --animate-welcome: welcome 2.2s ease-out 1;
+
+  @keyframes bob {
+    50% { transform: translateY(-6px) rotate(-4deg); }
+  }
+  @keyframes sway {
+    50% { transform: rotate(7deg); }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.6); }
+    60% { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+  @keyframes caret {
+    50% { opacity: 0; }
+  }
+  @keyframes welcome {
+    0% { box-shadow: 0 0 0 0 var(--petal); }
+    35% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--petal) 55%, transparent); }
+    100% { box-shadow: 0 0 0 16px transparent; }
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-card: var(--card);
+  --color-card-2: var(--card-2);
+  --color-card-3: var(--card-3);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-sage: var(--sage);
+  --color-sage-deep: var(--sage-deep);
+  --color-sage-pale: var(--sage-pale);
+  --color-on-sage: var(--on-sage);
+  --color-petal: var(--petal);
+  --color-petal-pale: var(--petal-pale);
+  --color-petal-ink: var(--petal-ink);
+  --color-butter: var(--butter);
+  --color-butter-pale: var(--butter-pale);
+  --color-butter-ink: var(--butter-ink);
+  --color-sky-pale: var(--sky-pale);
+  --color-sky-ink: var(--sky-ink);
+  --color-lilac-pale: var(--lilac-pale);
+  --color-lilac-ink: var(--lilac-ink);
+  --color-clay-pale: var(--clay-pale);
+  --color-clay-ink: var(--clay-ink);
+  --color-danger: var(--danger);
+  --color-danger-pale: var(--danger-pale);
+  --color-island: var(--island);
+  --color-on-island: var(--on-island);
+  --color-on-island-soft: var(--on-island-soft);
+  --color-scrim: var(--scrim);
+
+  /* The names shadcn components expect, pointed at the tokens above. */
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--sage);
+  --color-primary-foreground: var(--on-sage);
+  --color-secondary: var(--card-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--card-2);
+  --color-muted-foreground: var(--ink-soft);
+  --color-accent: var(--sage-pale);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--danger);
+  --color-border: var(--line);
+  --color-input: var(--line-strong);
+  --color-ring: var(--sage);
+
+  --shadow-xs: var(--shadow-1);
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--line);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    font-size: 100%;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+    /* The dialogs and the island are positioned against the visual viewport; nothing scrolls sideways. */
+    overflow-x: clip;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--paper);
+    /* Dotted paper. One fixed-size gradient, painted once; it does not move with effects. */
+    background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: var(--butter-pale);
+    color: var(--ink);
+  }
+
+  /* One focus treatment everywhere: a sage ring with a paper gap, only for keyboard focus. */
+  :focus-visible {
+    outline: 2.5px solid var(--sage);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  button,
+  [role='button'],
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* iOS zooms into any field whose text is under 16px. On touch, fields are 16px. */
+  @media (pointer: coarse) {
+    input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']),
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+}
+
+@layer components {
+  /* The mono whisper: section labels, counts, evidence. Always paired with real text nearby. */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    line-height: 1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .display {
+    font-family: var(--font-display);
+    font-weight: 540;
+    letter-spacing: -0.02em;
+    font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  }
+
+  /* ASCII art is drawn in the mono face and hidden from assistive technology by the component that renders it. */
+  .ascii {
+    font-family: var(--font-mono);
+    white-space: pre;
+    line-height: 1.15;
+    letter-spacing: 0;
+    font-variant-ligatures: none;
+    user-select: none;
+  }
+
+  /* A finger-sized target around a small control, without changing how the control looks. */
+  .hit-44 {
+    position: relative;
+  }
+  .hit-44::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inline-size: max(100%, 44px);
+    block-size: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  [dir='rtl'] .hit-44::after {
+    transform: translate(50%, -50%);
+  }
+
+  /* The hero's paper: sage fading to oat, with a butter sun in one corner and a petal blush in the other. */
+  .hero-paper {
+    background:
+      radial-gradient(circle 220px at 100% 0, color-mix(in srgb, var(--butter-pale) 85%, transparent), transparent 70%),
+      radial-gradient(circle 260px at 76% 125%, color-mix(in srgb, var(--petal-pale) 90%, transparent), transparent 70%),
+      linear-gradient(115deg, var(--sage-pale), var(--card-2));
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Shared-element movement between a card and its detail. The browser animates; nothing is measured in JS. */
+::view-transition-group(save-cover) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--ease-out);
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+/* Reduced motion: movement stops, state changes stay. Canvas effects also check this in script. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
