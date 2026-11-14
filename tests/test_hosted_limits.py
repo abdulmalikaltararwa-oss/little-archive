@@ -146,24 +146,29 @@ class HostedLimitCase(unittest.TestCase):
         user = str(uuid4())
         return user, bearer(self.key.sign(claims(user, **changes)))
 
-    def call_asgi(self, method, path, headers, body=b"", declared=None):
-        """One request straight to the application. Returns (status, json, how many times the body was asked for)."""
-        asked, sent = [], []
-        chunks = [body]
+    def call_asgi(self, method, path, headers, body=b"", declared=None, chunk=None):
+        """One request straight to the application. Returns (status, json, how many times the body was asked for, bytes of it handed over)."""
+        asked, handed, sent = [], [], []
+        size = body if isinstance(body, int) else len(body)  # an int is a body of that many bytes, made a piece at a time so a test does not hold it either
+        left = [size]
 
         async def receive():
             asked.append(1)
-            return {"type": "http.request", "body": chunks.pop(0) if chunks else b"", "more_body": False}
+            take = min(chunk or size, left[0])
+            piece = body[size - left[0]:size - left[0] + take] if isinstance(body, bytes) else b"x" * take
+            left[0] -= take
+            handed.append(len(piece))
+            return {"type": "http.request", "body": piece, "more_body": left[0] > 0}
 
         async def send(message):
             sent.append(message)
         scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method, "path": path, "raw_path": path.encode(), "query_string": b"",
-                 "headers": [(b"host", b"testserver"), (b"content-length", str(len(body) if declared is None else declared).encode()), *[(k.lower().encode(), v.encode()) for k, v in headers.items()]],
+                 "headers": [(b"host", b"testserver"), (b"content-length", str(size if declared is None else declared).encode()), *[(k.lower().encode(), v.encode()) for k, v in headers.items()]],
                  "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http", "root_path": ""}
         asyncio.run(self.app(scope, receive, send))
         status = next(m["status"] for m in sent if m["type"] == "http.response.start")
         raw = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
-        return status, json.loads(raw) if raw else None, len(asked)
+        return status, json.loads(raw) if raw else None, len(asked), sum(handed)
 
 
 class AddressBudgetTests(HostedLimitCase):
@@ -273,22 +278,34 @@ class SignInFailureTests(HostedLimitCase):
 
 
 class BeforeTheBodyTests(HostedLimitCase):
-    def test_a_request_with_a_body_is_not_read_unless_it_is_signed_in(self):
+    def test_a_request_with_a_body_is_refused_before_the_body_is_kept_unless_it_is_signed_in(self):
+        import tracemalloc
         user, auth = self.account()
         big = 6 * 1024 * 1024
         for label, headers in (("no credential", {}), ("a forged token", {"Authorization": "Bearer " + SigningKey().sign(claims(str(uuid4())))}),
                                ("malformed", {"Authorization": "Bearer nonsense"}), ("another scheme", {"Authorization": "Basic Zm9vOmJhcg=="}),
                                ("two bearer values", {"Authorization": "Bearer a, Bearer b"})):
             with self.subTest(label):
-                status, body, asked = self.call_asgi("POST", "/api/imports/file", headers, declared=big)
-                self.assertEqual(status, 401)
-                self.assertEqual(asked, 0, "the body of a request that is not signed in was never read")
-        status, body, asked = self.call_asgi("POST", "/api/items", {**auth, "Content-Type": "application/json"}, body=json.dumps({"url": "https://example.com/signed-in"}).encode())
+                tracemalloc.start()
+                try:
+                    status, body, asked, handed = self.call_asgi("POST", "/api/imports/file", headers, body=big, chunk=64 * 1024)
+                    peak = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+                self.assertEqual(status, 401, label)
+                self.assertLess(peak, 2 * 1024 * 1024, "six megabytes were read and dropped, not held (the body list alone would have been six)")
+        # What the client was still sending was read and dropped (so a client mid-upload gets its 401 rather than a reset) but only up to what the route may take.
+        status, body, asked, handed = self.call_asgi("POST", "/api/imports/file", {}, body=big, chunk=64 * 1024)
+        self.assertEqual((status, handed <= 8 * 1024 + 64 * 1024), (401, True), "with no credential at all, no more than a form's worth is even read")
+        forged = {"Authorization": "Bearer " + SigningKey().sign(claims(str(uuid4())))}
+        status, body, asked, handed = self.call_asgi("POST", "/api/imports/file", forged, body=big, chunk=64 * 1024)
+        self.assertEqual((status, handed <= 8 * 1024 * 1024 + 64 * 1024), (401, True))
+        status, body, asked, handed = self.call_asgi("POST", "/api/items", {**auth, "Content-Type": "application/json"}, body=json.dumps({"url": "https://example.com/signed-in"}).encode())
         self.assertEqual((status, asked > 0), (200, True))
 
     def test_the_routes_that_answer_404_in_hosted_mode_still_do(self):
         for path in ("/api/auth/login", "/api/auth/devices", "/api/extension/imports"):
-            status, body, asked = self.call_asgi("POST", path, {}, body=b"{}")
+            status, body, asked, handed = self.call_asgi("POST", path, {}, body=b"{}")
             self.assertEqual(status, 404, path)
 
     def test_a_signed_in_request_is_verified_once(self):

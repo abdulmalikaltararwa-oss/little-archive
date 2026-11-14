@@ -72,6 +72,38 @@ class Principal:
     user_id: str | None = None   # verified hosted account id
 
 
+def body_maximum(path, headers, hosted):
+    """The most a request to this path may carry: what the route allows, less what a request with no credential may bring.
+
+    `headers` is a dict of lower-case byte names; `hosted` is the hosted byte limits (or None).
+    """
+    maximum = 16 * 1024 * 1024
+    if path.endswith("/batches"):
+        maximum = 256 * 1024
+    elif path.startswith("/api/auth/"):
+        maximum = 8 * 1024
+    elif path.startswith("/api/purchases/"):
+        maximum = 128 * 1024  # a store's signed proof or notification is a few kilobytes
+    elif path.endswith("/thumbnail"):
+        maximum = 8 * 1024 * 1024
+    elif path.endswith("/page") or path.endswith("/transcript"):
+        maximum = 3 * 1024 * 1024
+    if hosted:
+        if path.endswith("/thumbnail"):
+            maximum = hosted["thumbnail"]
+        elif path == "/api/imports/file":
+            maximum = hosted["upload"]
+        elif path.endswith("/page") or path.endswith("/transcript"):
+            maximum = min(maximum, hosted["upload"])
+        else:
+            maximum = min(maximum, hosted["json"])
+    if b"authorization" not in headers and b"cookie" not in headers and not path.startswith("/api/purchases/"):
+        # Nothing that could be a credential came with this request, so there is no reason to hold more than a sign-in
+        # form's worth of it in memory.
+        maximum = min(maximum, 8 * 1024)
+    return maximum
+
+
 class BodyLimitMiddleware:
     def __init__(self, app, hosted=None):
         self.app = app
@@ -81,31 +113,8 @@ class BodyLimitMiddleware:
         if scope["type"] != "http" or scope.get("method") not in {"POST", "PUT", "PATCH"}:
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
-        maximum = 16 * 1024 * 1024
-        if path.endswith("/batches"):
-            maximum = 256 * 1024
-        elif path.startswith("/api/auth/"):
-            maximum = 8 * 1024
-        elif path.startswith("/api/purchases/"):
-            maximum = 128 * 1024  # a store's signed proof or notification is a few kilobytes
-        elif path.endswith("/thumbnail"):
-            maximum = 8 * 1024 * 1024
-        elif path.endswith("/page") or path.endswith("/transcript"):
-            maximum = 3 * 1024 * 1024
-        if self.hosted:
-            if path.endswith("/thumbnail"):
-                maximum = self.hosted["thumbnail"]
-            elif path == "/api/imports/file":
-                maximum = self.hosted["upload"]
-            elif path.endswith("/page") or path.endswith("/transcript"):
-                maximum = min(maximum, self.hosted["upload"])
-            else:
-                maximum = min(maximum, self.hosted["json"])
         headers = dict(scope.get("headers", []))
-        if b"authorization" not in headers and b"cookie" not in headers and not path.startswith("/api/purchases/"):
-            # Nothing that could be a credential came with this request, so there is no reason to hold more than a sign-in
-            # form's worth of it in memory.
-            maximum = min(maximum, 8 * 1024)
+        maximum = body_maximum(path, headers, self.hosted)
         try:
             declared = int(headers.get(b"content-length", b"0"))
         except ValueError:
@@ -199,7 +208,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     app.add_middleware(BodyLimitMiddleware, hosted=limits)
     if hosted:
         # Around the body reader: address budget first, then sign-in, both before a request body is read.
-        app.add_middleware(HostedGuard, limits=hosted_limits, authenticate=lambda values, address: authenticate(values, address))
+        app.add_middleware(HostedGuard, limits=hosted_limits, authenticate=lambda values, address: authenticate(values, address),
+                           drain_limit=lambda scope: body_maximum(scope.get("path", ""), dict(scope.get("headers", [])), limits))
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
 
     @app.middleware("http")

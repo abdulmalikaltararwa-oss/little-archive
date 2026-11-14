@@ -19,6 +19,7 @@ Four things, none of which a client can switch off or choose:
 from __future__ import annotations
 
 from collections import OrderedDict
+import asyncio
 import ipaddress
 import re
 from threading import Lock
@@ -216,8 +217,8 @@ class HostedGuard:
     3. Whatever the routes take (a concurrency place) is given back when the response is finished.
     """
 
-    def __init__(self, app, limits, authenticate):
-        self.app, self.limits, self.authenticate = app, limits, authenticate
+    def __init__(self, app, limits, authenticate, drain_limit=None):
+        self.app, self.limits, self.authenticate, self.drain_limit = app, limits, authenticate, drain_limit
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -235,8 +236,30 @@ class HostedGuard:
                 try:
                     scope[IDENTITY] = await run_in_threadpool(self.authenticate, values, address)
                 except HTTPException as exc:
+                    if self.drain_limit is not None:
+                        # Read what the client is still sending, and drop it, so the refusal reaches a client that is mid-upload
+                        # as an answer instead of a reset connection (an expired token on a large upload must be a 401 it can act on).
+                        await discard_body(receive, self.drain_limit(scope))
                     return await refusal_response(exc)(scope, receive, send)
             await self.app(scope, receive, send)
         finally:
             for release in scope[RELEASES]:
                 release()
+
+
+async def discard_body(receive, maximum, idle=30.0, overall=300.0):
+    """Read and drop the rest of a request body, keeping none of it: up to `maximum` bytes, as long as it keeps arriving.
+
+    Stops quietly at the first sign that the client is done, gone, too slow or sending more than it may.
+    """
+    deadline, seen = time.monotonic() + overall, 0
+    while True:
+        try:
+            message = await asyncio.wait_for(receive(), timeout=max(0.001, min(idle, deadline - time.monotonic())))
+        except asyncio.TimeoutError:
+            return
+        if message["type"] != "http.request":
+            return
+        seen += len(message.get("body", b""))
+        if seen > maximum or not message.get("more_body"):
+            return
