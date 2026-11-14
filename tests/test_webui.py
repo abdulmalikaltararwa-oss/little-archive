@@ -181,5 +181,45 @@ class PublicDirectoryTests(unittest.TestCase):
         self.assertFalse(webui.is_public(root / "data"))
 
 
+class ImageRecipeTests(unittest.TestCase):
+    """The image is built in CI and by operators, not here. These pin the shape of its recipe."""
+
+    def setUp(self):
+        self.root = Path(__file__).resolve().parents[1]
+        self.dockerfile = (self.root / "Dockerfile").read_text(encoding="utf-8")
+        stages = re.split(r"(?m)^FROM ", self.dockerfile)[1:]
+        self.assertEqual(len(stages), 2)
+        self.build, self.final = stages
+
+    def test_the_interface_is_built_in_a_node_stage_from_web_and_ui_only(self):
+        self.assertRegex(self.build, r"^node:24\S* AS interface")
+        for line in ("COPY web ./web", "npm --prefix ui ci", "npm --prefix ui run build"):
+            self.assertIn(line, self.build)
+        self.assertEqual(re.findall(r"(?m)^COPY (?!--)(\S+)", self.build), ["web", "ui/package.json", "ui"])
+
+    def test_only_the_built_files_reach_the_final_image_which_stays_non_root(self):
+        self.assertTrue(self.final.startswith("python:3.12-slim"))
+        self.assertIn(f"COPY --from=interface --chown=archive:archive /build/ui/dist ./{webui.PACKAGED.name}", self.final)
+        self.assertEqual(re.findall(r"(?m)^COPY (?:--chown=\S+ )?(?!--)(\S+)", self.final), ["requirements.txt", "server", "LICENSE"])
+        self.assertNotRegex(self.final, r"\b(npm|node)\b")
+        self.assertIn("rm -rf ui/dist/.vite", self.build)
+        self.assertRegex(self.final, r"(?m)^USER archive$")
+        self.assertIn("/app", self.final)
+
+    def test_the_build_context_keeps_what_the_interface_build_needs_and_drops_the_rest(self):
+        lines = {line.strip() for line in (self.root / ".dockerignore").read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")}
+        for dropped in ("**/node_modules", "ui/dist", "mobile", "tests", "data"):
+            self.assertIn(dropped, lines)
+        for needed in ("web", "ui", "ui/src", "ui/src/data", "server", "LICENSE"):
+            self.assertNotIn(needed, lines)
+        self.assertTrue((self.root / "ui" / "src" / "data" / "archive.ts").is_file())
+
+    def test_compose_runs_the_image_read_only_without_a_writable_interface_folder(self):
+        for name in ("compose.yaml", "compose.image.yaml"):
+            text = (self.root / name).read_text(encoding="utf-8")
+            self.assertIn("read_only: true", text)
+            self.assertNotIn("webui", text)
+
+
 if __name__ == "__main__":
     unittest.main()
