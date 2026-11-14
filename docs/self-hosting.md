@@ -14,6 +14,24 @@ docker compose version
 python3 --version
 ```
 
+### Run the published image
+
+A development image is published for `linux/amd64` and `linux/arm64` at `ghcr.io/abdulmalikaltararwa-oss/little-archive`. It needs no checkout and no Python on the host. Each build passes the container smoke check on both architectures before it is published.
+
+1. Save [`compose.image.yaml`](../compose.image.yaml) as `compose.yaml` in an empty folder.
+2. Beside it, create `.env` containing `LA_ADMIN_PASSWORD=` followed by a unique password of at least 12 characters. Restrict the file to your own account.
+3. Start it:
+
+```sh
+docker compose up -d
+```
+
+Open `http://localhost:8787` and sign in with that password. Update with `docker compose pull && docker compose up -d`; download a backup first.
+
+The `edge` tag follows the main branch and is development software: it can change without notice, and no stable release has been published. Each build also has an immutable `sha-` tag for pinning. `latest` and version tags will exist only once a stable release is tagged. The hardening, volume, port, and origin notes below apply to this file as well.
+
+### Build from a checkout
+
 From a clean checkout of the version you intend to run:
 
 ```sh

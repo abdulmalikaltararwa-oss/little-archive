@@ -50,7 +50,9 @@ The instance has **one owner account**. It can organize multiple source-account 
 
 ## Quick start with Docker
 
-Requirements: Docker with Compose, and Python 3 for the setup helper.
+To run the published development image without cloning, save [`compose.image.yaml`](compose.image.yaml) as `compose.yaml`, set `LA_ADMIN_PASSWORD` in a `.env` file beside it, and run `docker compose up -d`. See [self-hosting](docs/self-hosting.md#run-the-published-image).
+
+To build from source instead: Docker with Compose, and Python 3 for the setup helper.
 
 ```sh
 git clone https://github.com/abdulmalikaltararwa-oss/little-archive.git
