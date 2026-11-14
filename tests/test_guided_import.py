@@ -341,6 +341,44 @@ class GuidedScenarios:
         done = wait_for(lambda: (v := self.a.ok("GET", f"/api/imports/archives/{view['id']}"))["state"] == "completed" and v)
         self.assertEqual((done["progress"]["processed"], done["progress"]["created"], self.items()["total"]), (6, 6, 6))
 
+    def test_two_runners_for_one_job_never_save_a_batch_twice(self):
+        """A second caller is turned away while one runs, and a runner that finds the stored cursor ahead of its own catches up
+        instead of repeating work (as when another process, or a reopened library, has been working on the same job)."""
+        self.guided.limits = replace(self.guided.limits, batch_size=2)
+        view = self.previewed(instagram_zip(), platform="instagram")
+        self.a.ok("POST", f"/api/imports/archives/{view['id']}/commit", json={"digest": view["preview"]["digest"]})
+        inner = []
+
+        def second_runner_arrives(job_id, cursor):
+            if cursor == 2:
+                inner.append(self.guided.run(job_id))      # the same engine, while the job is running: returns at once
+
+        self.guided.on_batch = second_runner_arrives
+        self.guided.drain()
+        self.assertEqual(inner, [None])
+        rival = GuidedImports(self.a.library, replace(self.guided.limits, batch_size=2), background=False)
+        view2 = self.previewed(instagram_zip("instagram_saved_posts_older.json", None), platform="instagram")
+        self.a.ok("POST", f"/api/imports/archives/{view2['id']}/commit", json={"digest": view2["preview"]["digest"]})
+
+        def die(job_id, cursor):
+            raise KeyboardInterrupt
+
+        def rival_gets_ahead(job_id, cursor):
+            if cursor == 2:                                # another process commits the next batch while this one is between batches
+                self.guided.on_batch = None
+                rival.on_batch = die
+                with self.assertRaises(KeyboardInterrupt):
+                    rival.run(job_id)
+                ahead.append(self.a.ok("GET", f"/api/imports/archives/{job_id}")["progress"]["processed"])
+
+        ahead = []
+        self.guided.on_batch = rival_gets_ahead
+        self.guided.drain()
+        self.assertEqual(ahead, [3], "the other runner had moved the stored cursor past this one's")
+        done = self.a.ok("GET", f"/api/imports/archives/{view2['id']}")
+        self.assertEqual((done["state"], done["progress"]["processed"], done["progress"]["created"], done["progress"]["updated"]), ("completed", 3, 3, 0), "each save was applied and counted once")
+        self.assertEqual(self.items()["total"], 6 + 3)
+
     def test_progress_can_be_watched_while_the_job_runs_in_the_background(self):
         self.guided.limits = replace(self.guided.limits, batch_size=2)
         self.guided.background = True

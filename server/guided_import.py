@@ -167,6 +167,7 @@ class GuidedImports:
         self.store, self.limits, self.background = store, limits, background
         self.threads: dict[str, threading.Thread] = {}
         self.on_batch = None          # test hook: called after each committed batch with (job id, cursor)
+        self._guard, self._active = threading.Lock(), set()
 
     # -- paths
     def _dir(self, jid: str) -> Path:
@@ -388,7 +389,19 @@ class GuidedImports:
             self.run(jid)
 
     def run(self, jid: str) -> None:
-        """Process the job from its cursor until it is done, cancelled or stopped. Safe to call again at any time."""
+        """Process the job from its cursor until it is done, cancelled or stopped. Safe to call again at any time: a second
+        caller while one is running returns at once, and each batch checks the stored cursor before it writes."""
+        with self._guard:
+            if jid in self._active:
+                return
+            self._active.add(jid)
+        try:
+            self._run(jid)
+        finally:
+            with self._guard:
+                self._active.discard(jid)
+
+    def _run(self, jid: str) -> None:
         try:
             with self.store.transaction() as c:
                 row = self._row(c, jid)
@@ -407,30 +420,38 @@ class GuidedImports:
             created, updated, skipped = row["created"], row["updated"], row["skipped"]
             while cursor < len(records):
                 batch = records[cursor:cursor + self.limits.batch_size]
+                resync = None
                 with self.store.lock:
                     with self.store.transaction() as c:
-                        state = c.execute("SELECT state FROM guided_imports WHERE id=?", (jid,)).fetchone()
-                        if state is None or state[0] != "importing":
+                        state = c.execute("SELECT state,cursor,created,updated,skipped FROM guided_imports WHERE id=?", (jid,)).fetchone()
+                        if state is None or state["state"] != "importing":
                             return                                          # cancelled while working
-                        b_created = b_updated = b_skipped = 0
-                        for offset, record in enumerate(batch):
-                            payload = {k: v for k, v in record.items() if k != "collection_only"}
-                            c.execute("SAVEPOINT guided_item")
-                            try:
-                                _, new = self.store.apply_item(c, payload, account=row["source_account"], file_input=True)
-                                b_created += int(new)
-                                b_updated += int(not new)
-                                c.execute("RELEASE guided_item")
-                            except (ValueError, TypeError, sqlite3.IntegrityError) as exc:
-                                c.execute("ROLLBACK TO guided_item")
-                                c.execute("RELEASE guided_item")
-                                b_skipped += 1
-                                if len(errors) < 20:
-                                    errors.append(f"Save {cursor + offset + 1}: {str(exc)[:160]}")
-                        cursor += len(batch)
-                        created, updated, skipped = created + b_created, updated + b_updated, skipped + b_skipped
-                        self._set(c, jid, cursor=cursor, created=created, updated=updated, skipped=skipped)
-                        c.execute("UPDATE import_runs SET created=?,updated=?,skipped=? WHERE id=?", (created, updated, skipped, row["run_id"]))
+                        if state["cursor"] != cursor:
+                            # Another runner (another process, or this library reopened) already committed past here.
+                            resync = (state["cursor"], state["created"], state["updated"], state["skipped"])
+                        else:
+                            b_created = b_updated = b_skipped = 0
+                            for offset, record in enumerate(batch):
+                                payload = {k: v for k, v in record.items() if k != "collection_only"}
+                                c.execute("SAVEPOINT guided_item")
+                                try:
+                                    _, new = self.store.apply_item(c, payload, account=row["source_account"], file_input=True)
+                                    b_created += int(new)
+                                    b_updated += int(not new)
+                                    c.execute("RELEASE guided_item")
+                                except (ValueError, TypeError, sqlite3.IntegrityError) as exc:
+                                    c.execute("ROLLBACK TO guided_item")
+                                    c.execute("RELEASE guided_item")
+                                    b_skipped += 1
+                                    if len(errors) < 20:
+                                        errors.append(f"Save {cursor + offset + 1}: {str(exc)[:160]}")
+                            cursor += len(batch)
+                            created, updated, skipped = created + b_created, updated + b_updated, skipped + b_skipped
+                            self._set(c, jid, cursor=cursor, created=created, updated=updated, skipped=skipped)
+                            c.execute("UPDATE import_runs SET created=?,updated=?,skipped=? WHERE id=?", (created, updated, skipped, row["run_id"]))
+                if resync is not None:
+                    cursor, created, updated, skipped = resync
+                    continue
                 if self.on_batch is not None:
                     self.on_batch(jid, cursor)
             with self.store.lock:
