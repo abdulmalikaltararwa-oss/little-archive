@@ -49,4 +49,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The one-time unlock is bought through Google Play Billing. The library declares this too; it is stated here so the
+         app's permissions can be read in one place. -->
+    <uses-permission android:name="com.android.vending.BILLING" />
 </manifest>

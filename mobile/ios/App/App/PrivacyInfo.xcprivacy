@@ -8,12 +8,25 @@
 	<array/>
 	<!-- A starting point, to be checked against the App Store privacy answers before submission (docs/mobile-app.md).
 	     Data goes only to the server the person chose: the operator's hosted service (an email address for the account,
-	     and what they save) or their own. Nothing is used for tracking or advertising. -->
+	     what they save, and, once they buy the one-time unlock, the App Store's signed receipt for it) or their own server
+	     (which is sent no purchase). Nothing is used for tracking or advertising. -->
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>

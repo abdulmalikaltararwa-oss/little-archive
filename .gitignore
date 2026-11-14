@@ -25,3 +25,6 @@ work/
 /blob-report/
 /dist-mac/
 /.mac-build/
+
+# ui/src/data is source (the React data layer), not runtime data
+!ui/src/data/
