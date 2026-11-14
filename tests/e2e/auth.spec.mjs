@@ -1,4 +1,4 @@
-import { test, expect, apiAction, login, settings, uniqueName, waitForItems } from './fixtures.mjs';
+import { test, expect, apiAction, login, saveButton, settings, uniqueName, waitForItems } from './fixtures.mjs';
 
 test('owner sign-in, strict session cookies, CSRF defenses, reload and sign-out use the real server', async ({ page, context, browser, baseURL }) => {
   await page.goto('/');
@@ -75,7 +75,7 @@ test('a revoked session returns the browser to sign-in without committing an edi
   const revoked = await context.request.post('/api/auth/logout', { headers: { 'X-CSRF-Token': auth.csrf_token, Origin: baseURL } });
   expect(revoked.status()).toBe(200);
   // The page still has its previous in-memory session state. Exercise a real UI write.
-  await page.locator('.topbar').getByRole('button', { name: 'Save a link', exact: true }).click();
+  await saveButton(page).click();
   const dialog = page.getByRole('dialog', { name: 'Save a little discovery', exact: true });
   const title = uniqueName('Expired session must not save');
   await dialog.getByLabel('Link', { exact: true }).fill(`https://example.com/${title.replaceAll(' ', '-')}`);

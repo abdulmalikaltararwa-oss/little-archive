@@ -1,4 +1,4 @@
-import { test, expect, chooseSource, closeDialog, download, importJSON, login, openItem, search, settings, uniqueName } from './fixtures.mjs';
+import { test, expect, cards, cardTitles, chooseSource, closeDialog, download, importJSON, login, navigation, openItem, search, settings, uniqueName } from './fixtures.mjs';
 
 test('portable JSON imports, source collections and exports round-trip through the real UI', async ({ page, context }, testInfo) => {
   await login(page);
@@ -34,27 +34,29 @@ test('portable JSON imports, source collections and exports round-trip through t
   expect(imported.result).toMatchObject({ created: 2, updated: 0, skipped: 0, coverage: 'partial', errors: [] });
   await closeDialog(imported.dialog);
   await search(page, key);
-  await expect(page.locator('article.card')).toHaveCount(2);
+  await expect(cards(page)).toHaveCount(2);
   await chooseSource(page, 'TikTok', 'tiktok');
-  await expect(page.locator('.card-title')).toHaveText(`A tiny studio tour ${key}`);
+  await expect(cardTitles(page)).toHaveText(`A tiny studio tour ${key}`);
   await chooseSource(page, 'Instagram', 'instagram');
-  await expect(page.locator('.card-title')).toHaveText(unsafeText);
+  await expect(cardTitles(page)).toHaveText(unsafeText);
   await expect(page.locator('img[src="x"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__archiveInjected)).toBeUndefined();
   const detail = await openItem(page, unsafeText);
   await expect(detail.getByLabel('Your notes', { exact: true })).toHaveValue(notes);
-  await expect(detail.getByRole('heading', { name: 'Original collections', exact: true })).toBeVisible();
-  await expect(detail.locator('.tag.source')).toHaveText(sourceName);
+  await expect(detail.getByRole('heading', { name: 'original collections', exact: true })).toBeVisible();
+  // The source collection is shown as it was imported, apart from the local collections the save can be checked into.
+  await expect(detail.getByText(sourceName, { exact: true })).toBeVisible();
+  await expect(detail.getByLabel(sourceName, { exact: true })).toHaveCount(0);
   await expect(detail.getByLabel(localName, { exact: true })).toBeChecked();
-  await expect(detail.getByLabel('Progress', { exact: true })).toHaveValue('to_revisit');
-  await detail.getByText('Source text & evidence', { exact: true }).click();
+  await expect(detail.getByLabel('Progress', { exact: true })).toHaveText('To revisit');
+  await detail.locator('summary').filter({ hasText: 'Source text & evidence' }).click();
   await expect(detail.getByText(archive.items[0].caption, { exact: true })).toBeVisible();
   await closeDialog(detail);
 
-  await page.getByRole('button', { name: 'Import activity', exact: true }).click();
+  await (await navigation(page)).getByRole('button', { name: 'Import activity', exact: true }).click();
   const activity = page.getByRole('dialog', { name: 'A little activity', exact: true });
-  await expect(activity.getByRole('button', { name: 'Imports', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  const latestImport = activity.locator('.activity-row').filter({ hasText: '2 new · 0 updated · 0 skipped' }).first();
+  await expect(activity.getByRole('radio', { name: 'Imports', exact: true })).toBeChecked();
+  const latestImport = activity.getByRole('article').filter({ hasText: '2 new · 0 updated · 0 skipped' }).first();
   await expect(latestImport).toContainText('completed');
   await expect(latestImport).toContainText('Coverage: partial');
   await closeDialog(activity);
@@ -92,7 +94,7 @@ test('portable JSON imports, source collections and exports round-trip through t
 test('an invalid JSON file reports a real error and leaves the library unchanged', async ({ page, context }) => {
   await login(page);
   const before = await (await context.request.get('/api/stats')).json();
-  await page.locator('.topbar').getByRole('button', { name: 'Import', exact: true }).click();
+  await page.getByRole('banner').getByRole('button', { name: 'Import', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Bring your saves home', exact: true });
   await dialog.getByLabel('Choose an export file').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{"items": [this is not JSON]}') });
   const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/imports/file');
