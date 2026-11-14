@@ -18,8 +18,9 @@ from .configuration import read_env_values
 from .security import validate_password
 
 
-CONFIG_KEYS = ("LA_ADMIN_PASSWORD", "LA_DATA_DIR", "LA_PUBLIC_URL", "LA_OLLAMA_URL", "LA_OLLAMA_MODEL")
+CONFIG_KEYS = ("LA_ADMIN_PASSWORD", "LA_DATA_DIR", "LA_PUBLIC_URL", "LA_OLLAMA_URL", "LA_OLLAMA_MODEL", "LA_MODE", "LA_SUPABASE_URL")
 DEPENDENCIES = ("fastapi", "uvicorn", "httpx", "Pillow")
+HOSTED_DEPENDENCIES = ("PyJWT", "cryptography")
 
 
 def check(identifier, status, code, summary, next_action=None, **details):
@@ -47,6 +48,22 @@ def _response_json(client, url, limit, deadline):
         return json.loads(b"".join(chunks))
     except (ValueError, UnicodeError, RecursionError) as exc:
         raise ProbeFailure("invalid_response", "The model service returned an unsupported health response.") from exc
+
+
+def _hosted_checks(database):
+    """Hosted mode has no owner library or password; accounts are never opened here."""
+    rows = []
+    if database.exists() or database.is_symlink():
+        rows.append(check("database", "failed", "single_owner_library_present", "The data location holds a single-owner library, which hosted mode refuses to start beside.", "Choose a separate data directory for hosted mode."))
+    else:
+        rows.append(check("database", "passed", "per_account_libraries", "Hosted mode keeps one library per account. Diagnostics did not open or count them."))
+    rows.append(check("owner_access", "passed", "identity_provider_sign_in", "Hosted mode verifies identity-provider access tokens; there is no owner password. Signing keys were not requested."))
+    for name in HOSTED_DEPENDENCIES:
+        try:
+            rows.append(check("dependency_" + name.lower(), "passed", "dependency_installed", "A package required for hosted sign-in is installed.", package=name, version=metadata.version(name)))
+        except metadata.PackageNotFoundError:
+            rows.append(check("dependency_" + name.lower(), "failed", "dependency_missing", "A package required for hosted sign-in is missing.", "Install requirements.txt using the selected Python environment.", package=name))
+    return rows
 
 
 class ProbeFailure(ValueError):
@@ -149,7 +166,7 @@ def diagnose(*, env_file=Path(".env"), environment=None, check_ai=False, check_p
             # The messages name settings, never their values.
             checks.append(check("understanding", "failed", "understanding_configuration_invalid", "An optional understanding setting is invalid.", str(exc)))
     except (ValueError, OSError, RuntimeError, TypeError):
-        checks.append(check("configuration", "failed", "configuration_invalid", "An origin, model setting, or data location is invalid.", "Use an HTTP loopback or HTTPS public origin, keep data outside web, and configure both model fields or neither.", sources=sources))
+        checks.append(check("configuration", "failed", "configuration_invalid", "An origin, model setting, mode setting, or data location is invalid.", "Use an HTTP loopback or HTTPS public origin, keep data outside web, and configure both model fields or neither. Hosted mode also needs its identity-provider settings and no owner password.", sources=sources))
         config = None
     if config is not None:
         data = config.data_dir
@@ -167,7 +184,9 @@ def diagnose(*, env_file=Path(".env"), environment=None, check_ai=False, check_p
                 checks.append(check("data_directory", "passed" if writable else "failed", "data_location_accessible" if writable else "data_location_not_writable", "The data location or nearest existing parent is accessible." if writable else "The data location cannot be written by this process.", "The library directory will be created only when the server starts." if writable and not data.exists() else None, exists=data.exists()))
                 free = shutil.disk_usage(nearest).free
                 checks.append(check("disk_space", "warning" if free < 256 * 1024 * 1024 else "passed", "disk_space_low" if free < 256 * 1024 * 1024 else "disk_space_available", "Less than 256 MiB is free at the data location." if free < 256 * 1024 * 1024 else "Free disk space is available at the data location.", "Model downloads and backups need additional space; this is not a capacity guarantee.", free_bytes=free))
-            if database.is_symlink():
+            if config.hosted:
+                checks.extend(_hosted_checks(database))
+            elif database.is_symlink():
                 checks.append(check("database", "failed", "database_symlink", "The database path is a symbolic link; diagnostics did not follow it.", "Review the data location before starting the application."))
             elif database.exists():
                 if not database.is_file():
@@ -179,7 +198,9 @@ def diagnose(*, env_file=Path(".env"), environment=None, check_ai=False, check_p
             else:
                 checks.append(check("database", "passed", "library_not_initialized", "No library database exists. Diagnostics did not create one."))
             password = config.admin_password
-            if password:
+            if config.hosted:
+                pass  # Reported above: accounts sign in through the identity provider.
+            elif password:
                 try:
                     validate_password(password)
                     checks.append(check("owner_access", "passed", "owner_password_configured", "An owner password is configured and passes startup validation."))

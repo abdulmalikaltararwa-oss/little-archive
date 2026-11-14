@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import secrets
@@ -156,10 +157,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(item_id UNINDEXED,titl
 """
 
 
+class LibraryClosed(RuntimeError):
+    """The library was deleted while a request or background job still held it."""
+
+
+class LibraryFull(ValueError):
+    """Storing this would take a hosted account's library past its storage quota."""
+
+
 class Store:
-    def __init__(self, config):
+    def __init__(self, config, root=None, tenant=None, quota_bytes=None):
+        """One library. `tenant` is a verified hosted account id; such a library
+        has no owner password, `root` is its own directory, and `quota_bytes`
+        bounds its database plus thumbnails."""
         self.config = config
-        self.root = Path(config.data_dir)
+        self.tenant = tenant
+        self.quota_bytes = quota_bytes
+        self.closed = False
+        self.asset_bytes = None
+        self.page_size = None
+        self.enrichment = None  # this library's understanding service, attached by whoever builds it
+        self.root = Path(config.data_dir if root is None else root)
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.assets = self.root / "assets"
         self.assets.mkdir(exist_ok=True, mode=0o700)
@@ -173,7 +191,7 @@ class Store:
                 raise ValueError("Unsupported library schema. Use a compatible application version.")
             for k, v in {"schema_version": "1", "instance_id": str(uuid4()), "remote_previews": "false"}.items():
                 c.execute("INSERT OR IGNORE INTO meta VALUES(?,?)", (k, v))
-            if not c.execute("SELECT 1 FROM meta WHERE key='password_hash'").fetchone():
+            if tenant is None and not c.execute("SELECT 1 FROM meta WHERE key='password_hash'").fetchone():
                 if not config.admin_password:
                     raise ValueError("Set LA_ADMIN_PASSWORD to a strong password before the first start. Run scripts/setup.py for guided setup.")
                 c.execute("INSERT INTO meta VALUES('password_hash',?)", (hash_password(config.admin_password),))
@@ -186,16 +204,45 @@ class Store:
     @contextmanager
     def transaction(self):
         with self.lock:
+            if self.closed:
+                raise LibraryClosed("This library was deleted.")
             conn = sqlite3.connect(self.path, timeout=15)
             conn.row_factory = sqlite3.Row
+            if self.tenant is not None:
+                # Takes effect only while the file is new and empty: freed pages are
+                # then returned to the disk, so an account's file tracks its content.
+                conn.execute("PRAGMA auto_vacuum=FULL")
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=15000")
+            if self.quota_bytes is not None:
+                # SQLite itself refuses growth past the ceiling, whatever a request
+                # expands into and however many requests arrive at once.
+                self.page_size = self.page_size or conn.execute("PRAGMA page_size").fetchone()[0]
+                conn.execute("PRAGMA max_page_count=%d" % max(1, (self.ceiling_bytes - self.assets_size()) // self.page_size))
             try:
                 with conn:
                     yield conn
             finally:
                 conn.close()
+
+    @property
+    def ceiling_bytes(self):
+        """The hard limit: the quota plus room for the write that crosses it and for clean-up."""
+        return self.quota_bytes + max(256 * 1024, self.quota_bytes // 16)
+
+    def assets_size(self):
+        with self.lock:
+            if self.asset_bytes is None:
+                self.asset_bytes = sum(entry.stat(follow_symlinks=False).st_size for entry in os.scandir(self.assets) if entry.is_file(follow_symlinks=False))
+            return self.asset_bytes
+
+    def used_bytes(self):
+        """Live database pages plus local thumbnails; freed pages are reusable, so not counted."""
+        with self.lock:
+            with self.transaction() as c:
+                pages, free, size = (c.execute("PRAGMA " + name).fetchone()[0] for name in ("page_count", "freelist_count", "page_size"))
+            return (pages - free) * size + self.assets_size()
 
     def meta(self, key):
         with self.transaction() as c:

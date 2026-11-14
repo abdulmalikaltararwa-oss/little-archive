@@ -22,7 +22,9 @@ flowchart TD
 
 ## Server
 
-Python/FastAPI serves both static frontend assets and `/api`. The application owns the database and performs authenticated, bounded operations. SQLite is appropriate for this one-owner instance; a public multi-user service would require a separate design and security review.
+Python/FastAPI serves both static frontend assets and `/api`. The application owns the database and performs authenticated, bounded operations. SQLite is appropriate for this one-owner instance.
+
+Every owner route resolves one library from the request's credential: the cookie session, a full-access device token for native clients, or, in the opt-in [hosted mode](hosted-mode.md), a verified identity-provider token. Hosted mode gives each account its own SQLite file and thumbnail folder rather than sharing tables, so the queries below are the same in both modes. That design has automated tests but no independent security review yet.
 
 The storage layer separates source relationships, editable annotations, import receipts, and AI suggestions. A source refresh must not overwrite notes or remove a saved item merely because a scan missed it. Batch identity and payload checks make retries idempotent.
 

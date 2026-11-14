@@ -17,6 +17,16 @@ An optional layer that turns a saved link into a title, summary, topics, a sugge
 - A usage hook and local counters for model calls, tokens, audio seconds, bytes and cache hits, for metering.
 - New routes: `POST /api/items/{id}/page`, `POST|DELETE /api/items/{id}/transcript`, `POST /api/items/{id}/deep-read`, `GET /api/enrichment/status`, `GET /api/enrichment/usage`. New additive tables `item_enrichment` and `enrich_usage`. Suggestions created before this change must be generated again before they can be accepted, because the suggestion fingerprint now includes the provider and prompt.
 
+### Native clients and hosted mode
+
+Covered by automated tests only; not yet run against a live Supabase project, a mobile client, or a container build. See [hosted mode](docs/hosted-mode.md) for the exact boundaries.
+
+- Exchange the owner password for named, revocable, hashed full-access device tokens, so a native app can use every owner route without the cookie and CSRF flow. Extension import tokens keep their import-only scope.
+- Add a public discovery route naming the server's mode and sign-in methods, and an account summary route.
+- Add an opt-in hosted multi-user mode on the same server and routes: Supabase access tokens verified per request, one SQLite library and thumbnail folder per account, per-account storage quota and request-size limits, in-app account deletion, and an unlock/deep-read allowance interface with no payment provider attached.
+- In hosted mode the understanding layer runs once per account library, with one worker thread serving every account's queue in turn. A closer read is the metered deep read; automatic transcription is off.
+- Add PyJWT and cryptography as pinned dependencies for token verification.
+
 ### First v1 foundations
 
 - Retain loaded gallery pages, scroll position, and useful keyboard focus after item edits and favorites; keep random samples stable when the edit does not change search/filter membership.

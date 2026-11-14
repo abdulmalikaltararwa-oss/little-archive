@@ -2,16 +2,29 @@
 
 Independent self-hosted saved-content library. Single owner per instance, multiple source accounts. Backend Python 3.12+, FastAPI, sqlite3; frontend buildless ES modules, HTML/CSS; Chrome MV3 extension. Public fixtures and screenshots use synthetic content.
 
+The same server has an opt-in hosted mode (`LA_MODE=hosted`): many accounts, one private library each, identical routes and JSON. Everything below applies to both modes unless a line says otherwise; the differences are collected under **Hosted mode**.
+
 ## Conventions
 
 Same-origin `/api`. JSON unless noted. Errors `{detail: string}`. Item IDs, collection IDs and run IDs are server UUID strings. All timestamps UTC ISO8601. Lists use `{items:[], total:0, limit:60, offset:0}`; collections/tags use their named arrays. Unknown fields rejected on mutations. Authenticated web writes require session cookie + `X-CSRF-Token` from `/api/auth/me` or login. Requests use credentials same-origin. Extension uses bearer token, restricted to extension endpoints. Never put tokens into URLs.
 
+**Native clients** send `Authorization: Bearer <token>` instead of a cookie: a full-access device token on a self-hosted instance, a Supabase access token on a hosted one. Every route below that needs the owner accepts either the cookie session + CSRF token or such a bearer token; the extension import routes accept only their own import token. A request that presents a `Bearer` credential is judged by it alone: an invalid one is `401` with `WWW-Authenticate: Bearer` even if a valid cookie accompanies it. Every `Authorization` header on the request is examined, and more than one bearer value is invalid. CSRF and Origin checks apply to cookie authentication only. An `Authorization` header with another scheme (a proxy's Basic auth) is ignored; a proxy that adds its own `Authorization: Bearer` header must strip it before this server. Credentials are read from that header or the session cookie only, never from a URL, body or other header.
+
+**CORS:** no route sends CORS headers except the extension-origin allowance on `/api/extension/*` described below. Native HTTP clients do not need CORS; there is no setting to allow other web origins.
+
 ### Auth
 
 - GET `/api/health` -> `{status:'ok', version:'0.1.0'}`.
-- GET `/api/auth/me` -> `{authenticated:boolean, csrf_token?:string, version:'0.1.0'}`.
+- GET `/api/discovery` (public) -> `{name:'little-archive', version, api:1, mode:'self-hosted'|'hosted', auth}`. Self-hosted `auth` is `{methods:['password-session','device-token'], device_token_url:'/api/auth/devices'}`; hosted `auth` is `{methods:['supabase-jwt'], supabase_url}`. Nothing else is disclosed.
+- GET `/api/auth/me` -> `{authenticated:boolean, csrf_token?:string, version:'0.1.0'}`. With a valid bearer token instead of a cookie: `{authenticated:true, version, auth:'device-token', device:{id,name}}` (self-hosted) or `{authenticated:true, version, auth:'supabase-jwt', user_id}` (hosted). An invalid bearer token gives `{authenticated:false, version}`.
 - POST `/api/auth/login` `{password}` -> `{authenticated:true, csrf_token}` + HttpOnly cookie. JSON and same-origin Origin required when supplied. CSRF token not required to login. Strong initial password is set in environment; no unauthenticated setup endpoint.
-- POST `/api/auth/logout` -> `{ok:true}`.
+- POST `/api/auth/logout` -> `{ok:true}`. With a device token it revokes that token.
+- POST `/api/auth/devices` `{password, name}` -> `{id, name, token, created_at}`. Exchanges the owner password for a full-access device token (`lad_…`), shown once and stored only as a hash in `devices.sqlite3` beside the library, never in the library database or a backup. No cookie is set. Same protections as login: the shared limit of 10 password attempts per peer per 15 minutes across both routes (`429` + `Retry-After`), and a foreign `Origin` or cross-site fetch is refused. At most 20 devices. Max body 8 KiB.
+- GET `/api/auth/devices` -> `{devices:[{id,name,created_at,last_used_at,current:boolean}]}`. `last_used_at` is refreshed at most once a minute.
+- DELETE `/api/auth/devices/{id}` -> `{ok:true}`. The offline password reset revokes every device token.
+- GET `/api/account` -> `{mode, user_id:null|string, storage:{used_bytes, quota_bytes:null|number}, entitlements:{unlocked:boolean, deep_reads:{period:'YYYY-MM', used, limit:null|number, remaining:null|number}}}`. A self-hosted owner is unlocked with no quota or cap (`null`).
+
+Device tokens never expire on their own; revoke them. A device token and an extension import token are different credentials in different tables: neither is accepted where the other is expected.
 
 ### Item
 
@@ -58,6 +71,8 @@ Responses that return one full item (`GET /api/items/{id}` and every mutation th
 
 ### Extension
 
+Self-hosted only; every route in this section answers `404` in hosted mode. "web session" below also means a device token.
+
 - POST `/api/extension/tokens` web session+CSRF, `{name}` -> `{id,name,token}`. Token shown once. Import-only scope.
 - GET `/api/extension/tokens` web session -> `{tokens:[{id,name,created_at,last_used_at}]}`.
 - DELETE `/api/extension/tokens/{id}` web session+CSRF -> `{ok:true}`.
@@ -78,7 +93,7 @@ Extension popup: server URL + import token setup, open-app link, selected accoun
 
 ### Understanding (page details, transcripts, deep reads)
 
-All owner session plus CSRF on writes. Design, limits and privacy in `docs/understanding.md`. Errors `{detail}` with 404 (no such item), 409 (not enabled or not possible), 413 (HTML too large), 422 (nothing usable, wrong post, invalid input), 502 (the page or a provider could not be reached; messages never include internal addresses, response bodies or keys).
+All owner session plus CSRF on writes, or a bearer credential as described under Conventions. Design, limits and privacy in `docs/understanding.md`. Errors `{detail}` with 404 (no such item), 409 (not enabled or not possible), 413 (HTML too large), 422 (nothing usable, wrong post, invalid input), 502 (the page or a provider could not be reached; messages never include internal addresses, response bodies or keys).
 
 - POST `/api/items/{id}/page` -> full item. Exactly one of `{extraction:{title?,creator?,creator_url?,caption?,thumbnail_url?,video_url?,canonical_url?,content_type?,published_at?,duration_seconds?,language?,site_name?}}` (details the client extracted), `{html:string, oembed?:object}` (raw page up to 2 MB, optionally the oEmbed JSON the client fetched; the server parses it) or `{fetch:true}` (the server reads the public page itself; 409 unless the operator enabled `LA_FETCH_ENABLED`). Text is cleaned and bounded; a client extraction whose `canonical_url` names another post is refused. Empty fields on the item are filled, nothing the owner wrote or imported is replaced, a login wall or a page for a different post changes nothing and returns 422. Creating an item and importing never call this.
 - POST `/api/items/{id}/transcript` `{text,language?,seconds?,source?:'on_device'|'client'}` -> full item. Stores the text as `transcript` evidence (max 20,000 characters, replaces any earlier transcript) and indexes it for `q`. DELETE `/api/items/{id}/transcript` -> full item.
@@ -96,6 +111,20 @@ All owner session plus CSRF on writes. Design, limits and privacy in `docs/under
 - POST `/api/ai/jobs/{id}/retry` -> `{queued}`. Retries a failed/cancelled job using the item's current evidence. Returns 409 for other states; unchanged work already queued or completed is not duplicated.
 - POST `/api/items/{id}/ai/accept` -> item. Accept suggested summary/title only if not manually changed; merge topics into tags, file the save under `ai.suggested_folder` (an existing local collection, or a new local collection for a fixed category name), needs_review false.
 - POST `/api/items/{id}/ai/dismiss` -> item. Store dismissal fingerprint; keep manual fields.
+
+### Hosted mode
+
+Enabled only by `LA_MODE=hosted` with `LA_SUPABASE_URL`; configuration, tenancy, limits and verification boundaries are in [docs/hosted-mode.md](docs/hosted-mode.md).
+
+- **Auth:** every route except `/api/health`, `/api/discovery` and `/api/auth/me` requires `Authorization: Bearer <Supabase access token>`. The server verifies signature (ES256/RS256 via the project's JWKS, or HS256 with the legacy secret when configured), algorithm, `iss`, `aud`, `exp`, `iat`, a UUID `sub`, `role:'authenticated'`, and not `is_anonymous`. Failure is `401` + `WWW-Authenticate: Bearer`; unreachable signing keys are `503` + `Retry-After`. Cookies are never credentials.
+- **Library:** chosen only by the verified `sub`. Another account's item, collection, job, run or thumbnail ID behaves as nonexistent (`404`, or `400` where a referenced collection/item is validated).
+- **Not available (`404`):** `/api/auth/login`, `/api/auth/logout`, `/api/auth/devices*`, all `/api/extension/*`, and the bundled web UI.
+- POST `/api/account/delete` `{confirm:'DELETE'}` -> `{deleted:true}`. Permanently deletes the caller's library, thumbnails and unlock flag. Tokens issued before the deletion are then `401`. This month's deep-read count is kept under a hash until the month ends. Self-hosted: `404`. The Supabase user is not deleted by this route.
+- **Storage quota:** `POST`/`PUT`/`PATCH` answer `507` when the library's usage plus the request body would pass the quota, except `/api/account/delete` and `/api/ai/jobs/cancel`. Any write that would grow the library's database past its hard ceiling (the quota plus a margin) is rolled back whole and also answers `507`. Reads, exports, backups and deletes continue.
+- **Request size (`413`):** JSON 512 KiB, import file 8 MiB, thumbnail 4 MiB by default; all three configurable.
+- **Deep reads:** POST `/api/items/{id}/deep-read` charges one deep read when it queues a closer read. `402` if the account has no allowance and has not unlocked; `429` if the month's cap is used (nothing is queued). Its other answers (`404`, `409`) are unchanged and charge nothing. Ordinary suggestions (`/api/ai/jobs`) are not deep reads and are not metered. No route can set `unlocked`.
+- **Understanding:** each account has its own understanding service, usage counters and job queue; `/api/enrichment/usage` reports the caller's own. Provider, fetch and cache settings are the operator's and apply to every account. Automatic transcription is off: a transcript is made only by a closer read or sent by the client. `/page` and `/transcript` bodies are capped at the smaller of 3 MiB and the import limit.
+- `410` if the library is deleted while a request is in flight.
 
 ### Parser module contract (`server/importers.py`)
 

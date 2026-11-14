@@ -11,6 +11,8 @@ import io
 import os
 import secrets
 
+from ..storage import LibraryFull
+
 
 def reencode_image(raw: bytes) -> bytes:
     """Decode a raster image and return a fresh, bounded PNG. Raises ValueError for anything else."""
@@ -29,11 +31,17 @@ def reencode_image(raw: bytes) -> bytes:
 
 
 def write_asset(store, blob: bytes) -> str:
-    """Write a content-addressed PNG into the library's asset folder and return its digest."""
+    """Write a content-addressed PNG into the library's asset folder and return its digest.
+
+    A library with a storage quota (a hosted account) refuses an image that would pass it.
+    """
     digest = hashlib.sha256(blob).hexdigest()
     target = store.assets / (digest + ".png")
     with store.lock:
         if not target.exists():
+            if store.quota_bytes is not None and store.used_bytes() + len(blob) > store.quota_bytes:
+                raise LibraryFull("This library has reached its storage limit.")
+            store.asset_bytes = None  # recounted when next needed
             temporary = store.assets / ("." + secrets.token_hex(16) + ".tmp")
             try:
                 with open(temporary, "xb") as f:

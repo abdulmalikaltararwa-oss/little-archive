@@ -73,18 +73,27 @@ class UnderstandingWorker(ClassificationWorker):
     # -- the loop -----------------------------------------------------------------
     def run(self):
         while not self.stopping.is_set():
-            jobs = self._claim()
-            if not jobs:
+            if not self.step():
                 self.wake.wait(timeout=2)
                 self.wake.clear()
-                continue
-            try:
-                self._process(jobs)
-            except Exception:
-                # Never return model text, URLs, credentials or stack traces to clients or logs.
-                log.warning("A background understanding job failed unexpectedly.", exc_info=False)
-                for job in jobs:
-                    self._fail(job, GENERIC_FAILURE)
+
+    def step(self) -> bool:
+        """Claim and process one group of queued jobs; False when nothing was queued.
+
+        A deployment with a library per account calls this from one shared thread,
+        for each library with queued work in turn (``tenancy.AccountWorker``).
+        """
+        jobs = self._claim()
+        if not jobs:
+            return False
+        try:
+            self._process(jobs)
+        except Exception:
+            # Never return model text, URLs, credentials or stack traces to clients or logs.
+            log.warning("A background understanding job failed unexpectedly.", exc_info=False)
+            for job in jobs:
+                self._fail(job, GENERIC_FAILURE)
+        return True
 
     def _claim(self) -> list[_Job]:
         limit = self.service.batch_limit()

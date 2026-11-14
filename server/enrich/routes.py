@@ -1,4 +1,9 @@
-"""HTTP routes for the understanding layer. Owner session plus CSRF, like every other write."""
+"""HTTP routes for the understanding layer. The same owner credential as every other route.
+
+Each request uses the understanding service of the library its credential resolved to
+(``auth.store.enrichment``), never one fixed at start-up, so a deployment with a library
+per account cannot reach another account's saves through these routes.
+"""
 from __future__ import annotations
 
 import json
@@ -59,30 +64,39 @@ def _run(call):
         raise HTTPException(exc.status, exc.message) from exc
 
 
-def install_routes(app, service, *, owner):
+def install_routes(app, *, owner, after_page=None):
+    """`after_page(store)` runs once page details were attached (a hosted deployment tidies stored covers)."""
     @app.post("/api/items/{iid}/page")
     def attach_page(iid: str, data: PageInput, auth=Depends(owner)):
+        service = auth.store.enrichment
         if data.html is not None and len(data.html.encode("utf-8", "ignore")) > MAX_HTML_BYTES:
             raise HTTPException(413, "That page is too large. Send only the head of the document (everything up to its closing head tag).")
         extraction = data.extraction.model_dump() if data.extraction is not None else None
-        return _run(lambda: service.attach_page(iid, extraction=extraction, html=data.html, oembed=data.oembed, fetch=data.fetch))
+        try:
+            return _run(lambda: service.attach_page(iid, extraction=extraction, html=data.html, oembed=data.oembed, fetch=data.fetch))
+        finally:
+            if after_page is not None:
+                after_page(auth.store)
 
     @app.post("/api/items/{iid}/transcript")
     def add_transcript(iid: str, data: TranscriptInput, auth=Depends(owner)):
+        service = auth.store.enrichment
         return _run(lambda: service.set_transcript(iid, data.text, language=data.language, source="client", seconds=data.seconds))
 
     @app.delete("/api/items/{iid}/transcript")
     def delete_transcript(iid: str, auth=Depends(owner)):
+        service = auth.store.enrichment
         return _run(lambda: service.remove_transcript(iid))
 
     @app.post("/api/items/{iid}/deep-read")
     def deep_read(iid: str, auth=Depends(owner)):
+        service = auth.store.enrichment
         return _run(lambda: service.request_deep_read(iid))
 
     @app.get("/api/enrichment/status")
     def enrichment_status(auth=Depends(owner)):
-        return service.status()
+        return auth.store.enrichment.status()
 
     @app.get("/api/enrichment/usage")
     def enrichment_usage(since: str | None = Query(default=None, max_length=40), auth=Depends(owner)):
-        return service.ledger.totals(since)
+        return auth.store.enrichment.ledger.totals(since)

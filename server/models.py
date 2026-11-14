@@ -10,6 +10,15 @@ class Login(StrictModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class DeviceLogin(StrictModel):
+    password: str = Field(min_length=1, max_length=1024)
+    name: str = Field(min_length=1, max_length=100)
+
+
+class AccountDeletion(StrictModel):
+    confirm: Literal["DELETE"]
+
+
 class NewItem(StrictModel):
     url: str = Field(min_length=8, max_length=4096)
     title: str = Field(default="", max_length=500)
