@@ -337,7 +337,11 @@
   ::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    /* Not a token duration: any transition that runs at all keeps the old value until the next frame, so a card's or the
+       wall's new size and place would not be what the page reports for a frame, and the code that measures them
+       (the wall's window, the "load more" trigger) would act on the old layout. */
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
   ::view-transition-group(*),
