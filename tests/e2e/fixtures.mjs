@@ -75,12 +75,15 @@ export async function waitForItems(page) {
 
 /** How many saves are loaded: the total minus what the "Load more" button says remains. The wall itself shows a window. */
 export async function loadedCount(page) {
+  // One look at the page, not several: the last page can arrive (and the button go) between two separate reads, and a
+  // locator that has just lost its element waits for it to come back.
   const read = async () => {
-    const total = Number((await saveCount(page).textContent()).replace(/^\d[\d,]* of /, '').replace(/\D/g, ''));
-    const more = page.getByRole('button', { name: /^Load more/ });
-    if (!(await more.count())) return total;
-    const remaining = Number(((await more.textContent()).match(/([\d,]+) remaining/) || [])[1]?.replace(/\D/g, ''));
-    return total - remaining;
+    const { count, more } = await page.evaluate(() => {
+      const button = [...document.querySelectorAll('button')].find(node => /^Load more/.test(node.textContent.trim()));
+      return { count: document.querySelector('[data-testid="save-count"]')?.textContent ?? '', more: button ? button.textContent : null };
+    });
+    const total = Number(count.replace(/^\d[\d,]* of /, '').replace(/\D/g, ''));
+    return more === null ? total : total - Number(((more.match(/([\d,]+) remaining/) || [])[1] ?? '').replace(/\D/g, ''));
   };
   // The count and the button are drawn a moment apart when a list arrives, so wait for a reading that holds still.
   let last = await read();

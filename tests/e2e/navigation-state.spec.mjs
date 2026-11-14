@@ -243,6 +243,28 @@ test('favoriting a Rediscover result keeps the same sampled inventory and order'
   await expect(page.getByRole('button', { name: /^Load more/ })).toHaveCount(0);
 });
 
+test('keyboard focus inside a save survives its full record arriving a moment after it opens', async ({ page }) => {
+  await login(page);
+  await importLibrary(page, 6);
+  // The panel shows what the wall already knows at once and swaps in the full record when it arrives. Hold the answer
+  // back (not change it), as a slow connection would, and put the keyboard in the panel meanwhile.
+  await page.route(url => /^\/api\/items\/[^/]+$/.test(url.pathname), async route => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    await new Promise(resolve => setTimeout(resolve, 900));
+    return route.continue();
+  });
+  const arrived = page.waitForResponse(response => response.request().method() === 'GET' && /^\/api\/items\/[^/]+$/.test(new URL(response.url()).pathname));
+  await cards(page).first().getByRole('button', { name: /^Open /, exact: false }).click();
+  const detail = detailPanel(page);
+  const favorite = detail.getByRole('button', { name: /^(Add to|Remove from) favorites$/ });
+  await favorite.focus();
+  await expect(favorite).toBeFocused();
+  await arrived;
+  await page.waitForTimeout(300);
+  await expect(favorite).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement.tagName)).toBe('BUTTON');
+});
+
 test('the next page loads by itself near the end, once, and Load more stays for the keyboard', async ({ page }) => {
   await login(page);
   await importLibrary(page, 130);
