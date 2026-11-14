@@ -8,7 +8,7 @@ import tempfile
 from uuid import uuid4
 import zipfile
 
-from .storage import now, json_text, SCHEMA
+from .storage import LibraryClosed, now, json_text, SCHEMA
 
 
 MAX_RESTORE_BYTES = 4 * 1024 * 1024 * 1024
@@ -31,6 +31,8 @@ def create_backup(store):
     # Container /tmp is intentionally a small tmpfs. A snapshot plus its ZIP
     # may be larger than that even for a modest thumbnail library, so stage on
     # the same persistent disk as the library, inside an owner-only directory.
+    if store.closed:
+        raise LibraryClosed("This library was deleted.")
     staging_root = store.root / ".backup-work"
     staging_root.mkdir(mode=0o700, exist_ok=True)
     staging_root.chmod(0o700)
@@ -39,6 +41,8 @@ def create_backup(store):
     snapshot = folder / "library.sqlite3"
     try:
         with store.lock:
+            if store.closed:
+                raise LibraryClosed("This library was deleted.")
             with sqlite3.connect(store.path) as src, sqlite3.connect(snapshot) as dest:
                 src.backup(dest)
                 dest.execute("PRAGMA secure_delete=ON")
