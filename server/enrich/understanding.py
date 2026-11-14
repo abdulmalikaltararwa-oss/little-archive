@@ -68,10 +68,18 @@ describes a video you have not seen, and never write that you watched, saw, or v
 the video or picture. If evidence is thin, return a conservative title, few or no tags,
 and needs_review=true. Never treat a cover or alternative text as a full transcript.
 """
-_EXTENDED_PROMPT = """Write suggested_title as a short, specific title (at most 100 characters) in the language
-of the source text; do not use only the creator's name. Write summary as one or two plain
-sentences. content_type is the kind of thing that was saved. category must be exactly one
-of the listed categories; use "Other" when none fits.
+_EXTENDED_PROMPT = """Write suggested_title the way the owner would look for this later: name the thing itself
+(the dish, the place, the object, the idea, the technique), at most 100 characters, in the
+language of the source text. When the evidence already has a clear human-written title, return
+that title unchanged. Never make the kind of text the subject: do not use words such as note,
+post, caption, text, item, link, demo, sample, example, synthetic, fictional or illustrative in
+the title unless they are the actual topic, and do not use only the creator's name.
+Write summary as one or two plain sentences that state the content directly, like a reminder
+the owner wrote for themselves: "Grain bowl with roasted vegetables and a bright dressing."
+Never begin it with "The text", "This text", "This item", "This post", "This is", "The caption"
+or "The video", and do not describe the source as a text or an item.
+content_type is the kind of thing that was saved. category must be exactly one of the listed
+categories, chosen by what the content is about; use "Other" when none fits.
 """
 _COLLECTION_PROMPT = """collection may name one of the owner's existing collections when the item clearly belongs
 there; use an empty string when none fits.
@@ -463,25 +471,44 @@ class GeminiProvider:
 
 # ---------------------------------------------------------------- folder mapping
 
+# Words too general to say what a folder is about: "Gift ideas" is about gifts, not about ideas.
+_FOLDER_STOPWORDS = frozenset("""a an and for from in my of on our the to with ideas idea notes note things thing stuff
+little misc saved saves later someday plans plan inspiration inspo favorites favourites collection list""".split())
+
+
+def _stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
+_VOCABULARY = frozenset(_stem(word) for words in _CATEGORY_WORDS.values() for word in words)
+
+
 def _tokens(text: str) -> set[str]:
-    return set(re.findall(r"[^\W_]+", normalize_search(text)))
+    return {_stem(word) for word in re.findall(r"[^\W_]+", normalize_search(text))}
 
 
 def map_folder(category: str, topics, local_names) -> str:
     """Choose a folder for the owner without sending their collection names anywhere.
 
-    An exact name match wins; otherwise the collection sharing the most words with the
-    category's keywords and the suggested topics; otherwise the category itself (nothing
-    for "Other").
+    An exact name match wins. Otherwise each collection is scored on its distinctive words
+    (general ones such as "ideas" or "notes" are ignored). A word shared with a suggested
+    topic counts 3 when it is specific (not part of any category's vocabulary, as "gift" in
+    "Gift ideas"), sharing any word with the category counts 2, and a topic word that is itself
+    category vocabulary (as "design") counts 1. The best score wins; with no match at all
+    the category itself is suggested (nothing for "Other").
     """
     if category in CATEGORIES:
         for name in local_names:
             if name.casefold() == category.casefold():
                 return name
-    words = set(_CATEGORY_WORDS.get(category, ())) | set().union(*(_tokens(t) for t in topics or []))
+    stop = {_stem(word) for word in _FOLDER_STOPWORDS}
+    category_words = {_stem(word) for word in _CATEGORY_WORDS.get(category, ())} - stop
+    topic_words = set().union(*(_tokens(t) for t in topics or [])) - stop
     best, best_score = "", 0
     for name in sorted(local_names, key=str.casefold):
-        score = len(_tokens(name) & words)
+        words = _tokens(name) - stop
+        topical = words & (topic_words - category_words)
+        score = (2 if words & category_words else 0) + 3 * len(topical - _VOCABULARY) + len(topical & _VOCABULARY)
         if score > best_score:
             best, best_score = name, score
     if best:
