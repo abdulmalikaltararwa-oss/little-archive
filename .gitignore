@@ -23,3 +23,5 @@ work/
 /playwright-report/
 /test-results/
 /blob-report/
+/dist-mac/
+/.mac-build/

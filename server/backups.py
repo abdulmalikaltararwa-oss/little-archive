@@ -8,6 +8,7 @@ import tempfile
 from uuid import uuid4
 import zipfile
 
+from .enrich.schema import ENRICH_SCHEMA
 from .storage import LibraryClosed, now, json_text, SCHEMA
 
 
@@ -130,7 +131,10 @@ def restore_backup(archive, destination):
             c.execute("PRAGMA trusted_schema=OFF")
             with sqlite3.connect(":memory:") as reference:
                 reference.executescript(SCHEMA)
-                if schema_signature(c) != schema_signature(reference):
+                base = schema_signature(reference)
+                reference.executescript(ENRICH_SCHEMA)
+                # A backup is valid with or without the additive understanding tables.
+                if schema_signature(c) not in (base, schema_signature(reference)):
                     raise ValueError("Backup database schema differs from the supported version.")
             if c.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or c.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("Database integrity check failed.")

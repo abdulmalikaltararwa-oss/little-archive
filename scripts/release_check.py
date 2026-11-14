@@ -8,7 +8,7 @@ import sys
 from package_extension import extension_files
 
 root = Path(__file__).resolve().parent.parent
-required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "web/index.html", "web/app.js", "web/styles.css", "web/icon.svg", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md"]
+required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "web/index.html", "web/app.js", "web/styles.css", "web/icon.svg", "web/manifest.webmanifest", "web/icons/icon-192.png", "web/icons/icon-512.png", "web/icons/icon-maskable-512.png", "web/apple-touch-icon.png", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md", "docs/phone.md"]
 errors = ["Missing required file: " + p for p in required if not (root / p).is_file()]
 manifest_path = root / "extension/manifest.json"
 if manifest_path.is_file():

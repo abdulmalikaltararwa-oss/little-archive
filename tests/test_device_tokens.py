@@ -21,6 +21,7 @@ from server import cli
 from server.app import create_app
 from server.backups import schema_signature
 from server.config import Config
+from server.enrich.schema import ENRICH_SCHEMA
 from server.storage import SCHEMA
 
 
@@ -262,7 +263,7 @@ class DeviceTokenTests(unittest.TestCase):
         device, auth = self.device()
         self.client.post("/api/items", json={"url": "https://example.com/kept"}, headers=auth)
         with sqlite3.connect(self.root / "data" / "library.sqlite3") as library, sqlite3.connect(":memory:") as reference:
-            reference.executescript(SCHEMA)
+            reference.executescript(SCHEMA + ENRICH_SCHEMA)
             self.assertEqual(schema_signature(library), schema_signature(reference), "device tokens must not change the library schema")
         archive = zipfile.ZipFile(io.BytesIO(self.client.get("/api/backup", headers=auth).content))
         self.assertEqual(sorted(archive.namelist()), ["library.sqlite3", "manifest.json"])

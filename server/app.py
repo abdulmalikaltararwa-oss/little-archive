@@ -13,6 +13,7 @@ import hmac
 import html
 import io
 import json
+import mimetypes
 import os
 from pathlib import Path
 import re
@@ -33,11 +34,14 @@ from . import __version__
 from .backups import create_backup
 from .config import Config
 from .devices import DeviceTokens
-from .jobs import ClassificationWorker
+from .enrich.build import build_enrichment
+from .enrich.images import reencode_image, write_asset
+from .enrich.routes import install_routes as install_enrichment_routes
+from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
 from .models import AccountDeletion, AIJobs, BulkAction, CollectionInput, CollectionPatch, DeviceLogin, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput
 from .security import RateLimiter, token_hash, verify_password
-from .storage import LibraryClosed, Store, clean_tags, json_text, normalize_url, now
+from .storage import LibraryClosed, LibraryFull, Store, clean_tags, json_text, normalize_url, now
 
 
 COOKIE = "little_archive_session"
@@ -46,6 +50,8 @@ BODY = "little_archive.body"  # this request's buffered body, in its own ASGI sc
 FULL = "This library has reached its storage limit. Delete items or thumbnails to make room."
 # Writes that cannot grow a library stay available to an account at its quota.
 QUOTA_EXEMPT = {"/api/account/delete", "/api/ai/jobs/cancel"}
+# Browsers only accept an installable app's manifest with this type. Some systems' MIME tables lack it.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 @dataclass
@@ -74,8 +80,17 @@ class BodyLimitMiddleware:
             maximum = 8 * 1024
         elif path.endswith("/thumbnail"):
             maximum = 8 * 1024 * 1024
+        elif path.endswith("/page") or path.endswith("/transcript"):
+            maximum = 3 * 1024 * 1024
         if self.hosted:
-            maximum = self.hosted["thumbnail"] if path.endswith("/thumbnail") else self.hosted["upload"] if path == "/api/imports/file" else min(maximum, self.hosted["json"])
+            if path.endswith("/thumbnail"):
+                maximum = self.hosted["thumbnail"]
+            elif path == "/api/imports/file":
+                maximum = self.hosted["upload"]
+            elif path.endswith("/page") or path.endswith("/transcript"):
+                maximum = min(maximum, self.hosted["upload"])
+            else:
+                maximum = min(maximum, self.hosted["json"])
         headers = dict(scope.get("headers", []))
         try:
             declared = int(headers.get(b"content-length", b"0"))
@@ -118,19 +133,32 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     if hosted:
         from .entitlements import SQLiteEntitlements
         from .identity import IdentityError, IdentityUnavailable, SupabaseVerifier
-        from .tenancy import AccountDeleted, LibraryManager
-        owner_store, devices, libraries = None, None, LibraryManager(config)
+        from .tenancy import AccountDeleted, AccountWorker, LibraryManager, release_orphans, understanding_environment
+        owner_store, devices, enrichment, libraries = None, None, None, LibraryManager(config)
         entitlements = entitlements or SQLiteEntitlements(libraries.accounts_path, config.hosted_deep_reads_monthly, config.hosted_free_deep_reads_monthly)
         libraries.on_delete.append(entitlements.forget)
         libraries.resume_deletions()
         identity = identity or SupabaseVerifier.from_config(config)
         quota = config.hosted_storage_quota_mb * 1024 * 1024
         limits = {"json": config.hosted_max_json_kb * 1024, "upload": config.hosted_max_upload_mb * 1024 * 1024, "thumbnail": config.hosted_max_thumbnail_mb * 1024 * 1024}
+
+        def charge_deep_read(user_id):
+            """A closer read is the metered operation: one from this month's allowance, or a refusal."""
+            if not entitlements.deep_reads(user_id)["limit"] and not entitlements.is_unlocked(user_id):
+                raise HTTPException(402, "Deep reads come with the full unlock.")
+            if not entitlements.consume_deep_reads(user_id, 1):
+                used = entitlements.deep_reads(user_id)
+                raise HTTPException(429, f"This month's deep-read allowance is used ({used['used']} of {used['limit']}). It resets on the first of the month, UTC.")
+
+        # One understanding service per account library, all served by one worker thread.
+        worker, environment = AccountWorker(libraries), understanding_environment(config)
+        libraries.prepare = lambda store: worker.adopt(store, build_enrichment(store, config, environ=environment), charge_deep_read)
     else:
         # There is exactly one library and no account bookkeeping in this mode.
         owner_store, libraries, identity, quota, limits = Store(config), None, None, None, None
         devices, entitlements = DeviceTokens(config.data_dir), OwnerEntitlements()
-    worker = ClassificationWorker(owner_store, config, libraries)
+        enrichment = owner_store.enrichment = build_enrichment(owner_store, config)
+        worker = enrichment.worker
     limiter = RateLimiter()
 
     @asynccontextmanager
@@ -140,7 +168,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         worker.stop()
 
     app = FastAPI(title="Little Archive", version=__version__, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.state.store, app.state.config, app.state.worker = owner_store, config, worker
+    app.state.store, app.state.config, app.state.worker, app.state.enrichment = owner_store, config, worker, enrichment
     app.state.libraries, app.state.entitlements, app.state.identity, app.state.devices = libraries, entitlements, identity, devices
     app.add_middleware(BodyLimitMiddleware, hosted=limits)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
@@ -188,6 +216,10 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         return JSONResponse({"detail": "This library was deleted."}, status_code=410)
 
     if hosted:
+        @app.exception_handler(LibraryFull)
+        async def over_quota(request, exc):
+            return JSONResponse({"detail": FULL}, status_code=507)
+
         @app.exception_handler(sqlite3.OperationalError)
         async def out_of_space(request, exc):
             # SQLite refused to grow an account's database past its ceiling; the write was rolled back.
@@ -405,7 +437,10 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     @app.get("/api/items")
     def list_items(q: str = Query("", max_length=500), platform: Literal["", "instagram", "tiktok", "web"] = "", collection_id: str = "", tag: str = "", status: Literal["", "inbox", "to_revisit", "done", "archived"] = "", favorite: bool | None = None, needs_review: bool | None = None, sort: Literal["recent", "oldest", "title", "random"] = "recent", limit: int = Query(60, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000), auth=Depends(owner)):
         store = auth.store
-        return store.list_items(q=q, platform=platform, collection_id=collection_id, tag=tag, status=status, favorite=favorite, needs_review=needs_review, sort=sort, limit=limit, offset=offset)
+        result = store.list_items(q=q, platform=platform, collection_id=collection_id, tag=tag, status=status, favorite=favorite, needs_review=needs_review, sort=sort, limit=limit, offset=offset)
+        if q.strip():
+            annotate_matches(result["items"], q)  # where in each item the words were found
+        return result
 
     @app.post("/api/items")
     def add_item(data: NewItem, auth=Depends(owner)):
@@ -487,37 +522,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     @app.post("/api/items/{iid}/thumbnail")
     def upload_thumbnail(iid: str, request: Request, auth=Depends(owner)):
         store = auth.store
-        from PIL import Image, ImageOps, UnidentifiedImageError
         must_item(store, iid)
         raw = request.scope[BODY]  # read and bounded by BodyLimitMiddleware
-        try:
-            with Image.open(io.BytesIO(raw)) as im:
-                if im.format not in {"PNG", "JPEG", "WEBP"} or im.width * im.height > 20000000:
-                    raise ValueError("Use a PNG, JPEG, or WebP image under 20 megapixels.")
-                im = ImageOps.exif_transpose(im).convert("RGB")
-                im.thumbnail((1600, 1600))
-                output = io.BytesIO()
-                im.save(output, format="PNG", optimize=True)
-                blob = output.getvalue()
-        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-            raise ValueError("That file could not be decoded as a safe image.")
-        digest = hashlib.sha256(blob).hexdigest()
-        target = store.assets / (digest + ".png")
+        # The validation, re-encoding and storage are shared with the stored cover copy (server/enrich/images.py).
+        digest = write_asset(store, reencode_image(raw))
         with store.lock:
-            if not target.exists():
-                if hosted and store.used_bytes() + len(blob) > quota:
-                    raise HTTPException(507, FULL)
-                store.asset_bytes = None
-                temporary = store.assets / ("." + secrets.token_hex(16) + ".tmp")
-                try:
-                    with open(temporary, "xb") as f:
-                        f.write(blob)
-                        f.flush()
-                        os.fsync(f.fileno())
-                    temporary.chmod(0o600)
-                    os.replace(temporary, target)
-                finally:
-                    temporary.unlink(missing_ok=True)
             try:
                 with store.transaction() as c:
                     must_item(store, iid, c)
@@ -789,8 +798,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             return {"ok": True, "created": run["created"], "updated": run["updated"], "skipped": run["skipped"], "coverage": coverage}
 
     def current_settings(store):
-        enabled = bool(config.ollama_url and config.ollama_model)
-        return {"remote_previews": store.meta("remote_previews") == "true", "ai_enabled": enabled, "ai_available": enabled, "ai_model": config.ollama_model}
+        return {"remote_previews": store.meta("remote_previews") == "true", **store.enrichment.public_settings()}
 
     @app.get("/api/settings")
     def settings(auth=Depends(owner)):
@@ -803,31 +811,19 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         store.set_meta("remote_previews", "true" if data.remote_previews else "false")
         return current_settings(store)
 
-    def ai_request(auth):
-        """Refuse when no model is configured; hosted accounts also get a deep-read meter."""
-        if not config.ollama_url or not config.ollama_model:
-            raise HTTPException(503, "AI suggestions are not enabled on this service." if hosted else "Configure LA_OLLAMA_URL and LA_OLLAMA_MODEL on your server to enable local AI.")
-        if not hosted:
-            return None
-        if not entitlements.deep_reads(auth.user_id)["limit"] and not entitlements.is_unlocked(auth.user_id):
-            raise HTTPException(402, "Deep reads come with the full unlock.")
-
-        def charge(count):
-            # Each newly queued classification is one deep read. Raising here rolls the queueing back.
-            if not entitlements.consume_deep_reads(auth.user_id, count):
-                used = entitlements.deep_reads(auth.user_id)
-                raise HTTPException(429, f"That would pass this month's deep-read allowance ({used['used']} of {used['limit']} used). It resets on the first of the month, UTC.")
-        return charge
+    def ai_ready(store):
+        if not store.enrichment.ai_ready():
+            raise HTTPException(503, "AI suggestions are not enabled on this service." if hosted else "Configure an AI provider on your server to enable suggestions (Ollama, or Gemini as described in docs/understanding.md).")
 
     @app.post("/api/ai/jobs")
     def queue_ai(data: AIJobs, auth=Depends(owner)):
         store = auth.store
-        charge = ai_request(auth)
+        ai_ready(store)
         # Resolve the complete filtered inventory on the server, independent of
         # which gallery pages happen to have loaded in the browser.
         with store.lock:
             ids = list(dict.fromkeys(data.ids)) if data.ids is not None else store.matching_item_ids(**data.filters.model_dump())
-            queued = worker.enqueue(ids, store, charge)
+            queued = store.enrichment.worker.enqueue(ids)
         return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued}
 
     @app.get("/api/ai/jobs")
@@ -849,7 +845,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     @app.post("/api/ai/jobs/{jid}/retry")
     def retry_ai_job(jid: str, auth=Depends(owner)):
         store = auth.store
-        charge = ai_request(auth)
+        ai_ready(store)
         with store.lock:
             with store.transaction() as c:
                 job = c.execute("SELECT item_id,status FROM ai_jobs WHERE id=?", (jid,)).fetchone()
@@ -857,7 +853,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
                 raise HTTPException(404, "This classification job was not found.")
             if job["status"] not in {"failed", "cancelled"}:
                 raise HTTPException(409, "Only failed or cancelled jobs can be retried.")
-            return {"queued": worker.enqueue([job["item_id"]], store, charge)}
+            return {"queued": store.enrichment.worker.enqueue([job["item_id"]])}
 
     @app.post("/api/items/{iid}/ai/accept")
     def accept_ai(iid: str, auth=Depends(owner)):
@@ -868,11 +864,12 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             if not row["ai"]:
                 raise ValueError("There are no AI suggestions to accept.")
             ai = json.loads(row["ai"])
-            if ai.get("input_hash") != worker.fingerprint(item):
+            if ai.get("input_hash") != store.enrichment.worker.fingerprint(item):
                 raise HTTPException(409, "This item's information changed. Generate fresh suggestions before accepting them.")
             tags = clean_tags(json.loads(row["tags"]) + ai.get("topics", []))
             c.execute("UPDATE items SET title=?,summary=?,tags=?,needs_review=0,updated_at=? WHERE id=?", (row["title"] if row["manual_title"] else ai.get("suggested_title") or row["title"], row["summary"] if row["manual_summary"] else ai.get("summary") or row["summary"], json_text(tags), now(), iid))
             store.index_item(c, iid)
+            store.enrichment.apply_suggested_folder(c, iid, ai)
             return store.get_item(iid, c)
 
     @app.post("/api/items/{iid}/ai/dismiss")
@@ -895,8 +892,18 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
                 created += int(new)
         return {"created": created}
 
+    install_enrichment_routes(app, owner=owner, after_page=release_orphans if hosted else None)
+
     if not hosted:
         # The bundled web UI signs in with the owner password, so a hosted service is API-only.
         web = Path(__file__).resolve().parent.parent / "web"
+
+        # The installed app's share target (web/manifest.webmanifest) opens /share?title=&text=&url=. This is the
+        # ordinary static app: the server neither reads nor echoes those values, and a GET never saves anything.
+        # The page itself prefills the save dialog and waits for the owner to tap Save.
+        @app.api_route("/share", methods=["GET", "HEAD"], include_in_schema=False)
+        def share_target():
+            return FileResponse(web / "index.html", media_type="text/html")
+
         app.mount("/", StaticFiles(directory=web, html=True), name="web")
     return app

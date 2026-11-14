@@ -1,0 +1,14 @@
+# Build-only dependencies for scripts/build_mac_app.py (Python 3.12, macOS).
+# The server's runtime packages come from ../../requirements.txt and its lock file, so the
+# app bundles exactly the versions the server is tested with. None of the packages below
+# is needed to run the server from source, and requirements.txt does not list them.
+-r ../../requirements.txt
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+altgraph==0.17.5
+macholib==1.16.4
+packaging==26.3
+setuptools==84.2.1
+# The app's menu and first-run window use AppKit; the icon is rendered with it too.
+pyobjc-core==13.0
+pyobjc-framework-Cocoa==13.0

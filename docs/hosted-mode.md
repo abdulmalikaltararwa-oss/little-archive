@@ -27,6 +27,7 @@ Hosted mode reads its settings from the environment or the `--env-file`, like th
 | `LA_HOSTED_DEEP_READS_MONTHLY` | no | `300` | Fair-use cap on deep reads each month for an unlocked account. |
 | `LA_HOSTED_FREE_DEEP_READS_MONTHLY` | no | `0` | Deep reads each month for an account that has not unlocked. |
 | `LA_OLLAMA_URL`, `LA_OLLAMA_MODEL` | no | empty | The operator's model service. Leave empty to offer no AI. |
+| The [understanding settings](understanding.md) | no | off | `LA_AI_PROVIDER`, `LA_GEMINI_*`, `LA_GROQ_*`, `LA_FETCH_*`, `LA_PUBLIC_CACHE*` and the rest work as documented there and apply to every account. `LA_TRANSCRIBE_AUTO` is ignored: see "The understanding layer" below. |
 
 `LA_ADMIN_PASSWORD` must be absent: hosted mode has no owner, and the server refuses to start if one is set. Likewise, `LA_SUPABASE_*` settings without `LA_MODE=hosted` stop a self-hosted server from starting, so a half-switched configuration cannot look like it is in effect.
 
@@ -98,7 +99,20 @@ A library is created empty the first time an account makes an authenticated requ
 
 **Open libraries.** Up to `LA_HOSTED_OPEN_LIBRARIES` libraries are kept ready, least recently used first out. A library that a request or background job is still using is never opened a second time, even after it leaves that list. The setting bounds memory, not the number of accounts.
 
-**Background work.** The AI job queue is per account: jobs are stored in the account's own database, the single worker takes one job from each account with queued work in turn, and each result is written back to the library it came from. The set of accounts with queued work is saved, so work resumes after a restart without opening every library. A library that is busy with its own request is skipped for that pass, and a library whose job fails unexpectedly (a full disk, an account deleted mid-job) is set aside until work is queued in it again; neither stops the other accounts' work.
+**Background work.** The AI job queue is per account: jobs are stored in the account's own database, one worker thread takes one group of jobs from each account with queued work in turn, and each result is written back to the library it came from. The set of accounts with queued work is saved, so work resumes after a restart without opening every library. A library that is busy with its own request is skipped for that pass, and a library whose job fails unexpectedly (a full disk, an account deleted mid-job) is set aside until work is queued in it again; neither stops the other accounts' work.
+
+## The understanding layer
+
+[Understanding saves](understanding.md) (page details, suggestions, transcripts, closer reads) works in hosted mode with the same routes. What differs:
+
+- **One service per account.** Each account library gets its own understanding service, job queue and usage counters, built when the library is opened. The routes use the service of the library the caller's token resolved to; there is no service-wide instance a route could fall back to. `GET /api/enrichment/usage` reports the caller's own counters.
+- **Settings are the operator's.** The AI provider, its keys, server-side page reading and the cache are set once in the environment and apply to every account. No request can change them. With no provider set, AI routes answer `503`.
+- **A closer read is the metered deep read.** `POST /api/items/{id}/deep-read` takes one from the account's monthly allowance when it queues work (see the next section).
+- **No automatic transcription.** `LA_TRANSCRIBE_AUTO` is forced off, so a transcript is made only by a closer read or sent by the client. Otherwise queueing ordinary suggestions for short-captioned videos would spend transcription with no allowance check.
+- **Ordinary suggestions are not metered.** `POST /api/ai/jobs` is limited only by what an account holds. With a paid provider configured, any account, free or unlocked, can have its whole library analysed at the operator's cost. Leave the provider unset, or gate that route on `is_unlocked` before opening the service to the public; this code does not make that product decision.
+- **Server-side page reading** (`LA_FETCH_ENABLED`), if the operator turns it on, lets any account make the server request the public page of a post it saved. The fetcher's own protections are described in the understanding guide; they were written for a single owner and were not re-examined for a public service here.
+- **The shared cache** (`LA_PUBLIC_CACHE`), if turned on, is one file for the whole service at `<LA_DATA_DIR>/public-posts.sqlite3` unless a path is set. It holds only what was derived from public posts, as the understanding guide explains. Sharing it between accounts has one consequence that does not exist for a single owner: an account's usage counters show a cache hit when some other account already had the same public post read or analysed, which reveals that someone else on the service saved it. Leave it off if that matters.
+- **Stored covers** count toward the storage quota like thumbnails, are refused when they would pass it, and are removed when no item uses them.
 
 ## What a hosted server does not offer
 
@@ -119,12 +133,12 @@ Reads, exports, backups, deletes, cancelling AI jobs and deleting the account ke
 
 In hosted mode a thumbnail file is removed as soon as no item refers to it. (A self-hosted instance leaves such files in place, as before.)
 
-**Request size.** Bodies over the configured limits get `413`: ordinary JSON, import files and thumbnail uploads each have their own setting above.
+**Request size.** Bodies over the configured limits get `413`: ordinary JSON, import files and thumbnail uploads each have their own setting above. Page details and transcripts (`/page`, `/transcript`) may be up to 3 MiB, or the import limit if that is smaller.
 
 **Not limited by the server.** Put rate limiting and connection limits in the reverse proxy, and control sign-ups in Supabase:
 
 - request rate, per account or per address, and the number of requests one account runs at once;
-- the number of accounts, and so total disk use. Each new account costs about 150 KiB before it saves anything;
+- the number of accounts, and so total disk use. Each new account costs about 170 KiB before it saves anything;
 - memory for one request. An export is built in memory, so it is as large as the account's text. Decoding a thumbnail of the largest accepted dimensions (20 megapixels) was measured at well over 100 MiB for that request, from a 65 KiB upload. An import ZIP may expand to 64 MiB of text while it is parsed;
 - concurrent backups. Each one stages a snapshot and an archive on disk until its download finishes;
 - request bodies before sign-in. A body is read, up to the size limits above, before the token is checked.
@@ -142,7 +156,9 @@ The product has a free tier and a one-time paid unlock. The server can ask two t
 
 **No payment provider is integrated.** `set_unlocked(user_id, unlocked, source)` is the seam: a future purchase-verification webhook should verify the receipt with the store itself and then call it. No route sets the flag, and until that webhook exists the only way to unlock an account is to call that method from operator code on the server. `create_app(..., entitlements=...)` accepts another implementation of the same interface.
 
-Today one operation is metered: queueing AI classification. Each newly queued job is one deep read, charged when it is queued, including a retry. Work that is already queued or complete is not charged again. A failed or cancelled job is not refunded. An account with no allowance that has not unlocked gets `402`; a request that would pass the month's cap gets `429` and queues nothing. Whether "deep read" should mean this operation is a product decision this code does not settle; the charge is one call in `server/app.py` (`ai_request`) and can move.
+One operation is metered: a closer read, `POST /api/items/{id}/deep-read`. One deep read is charged when the request queues its job; a request that is refused for another reason (no transcription configured, one already in progress) charges nothing. A closer read that later fails or is cancelled is not refunded. An account with no allowance that has not unlocked gets `402`; an account whose month's cap is used gets `429` and nothing is queued. The charge sits on the queueing itself (`charge_deep_read` in `server/app.py`, applied in `tenancy.AccountWorker.adopt`), so any future route that queues a closer read is metered too.
+
+The understanding layer also records what each step used (`enrich_usage`, per account). Those counters are for reporting; nothing is limited by them.
 
 ## Account deletion
 
@@ -185,15 +201,18 @@ An account's backup ZIP is an ordinary version-1 backup. Restoring one into a ne
 
 By this repository's tests (`tests/test_contract_modes.py`, `tests/test_hosted_identity.py`, `tests/test_hosted_tenancy.py`, `tests/test_hosted_operator.py`), on Python 3.12 on macOS, with no network:
 
-- the same API scenarios pass in both modes, and a scripted run of 29 requests returns the same statuses and JSON shapes in both;
+- the same API scenarios pass in both modes, and a scripted run of 35 requests returns the same statuses and JSON shapes in both;
 - tokens signed with ES256, RS256 and HS256 keys generated in the tests are accepted; forged, tampered, expired, premature, wrong-audience, wrong-issuer, wrong-role, anonymous, API-key-shaped, `none`, algorithm-confused and malformed tokens are refused without creating a library;
 - key caching, rotation, withdrawal and outage behaviour, using a fake key endpoint and a controlled clock, and the real key fetcher against a key set served on loopback;
 - one account cannot read, change, list, export, back up or enumerate another's items, thumbnails, collections, tags, imports, jobs or settings;
 - the storage quota and its hard ceiling, including an import that expands far beyond its upload and eight clients writing at once; the request-size limits; removal of unreferenced thumbnails; and that a slow upload or import in one account does not stall another;
 - account deletion removes the account's files and records, leaves other accounts intact, blocks earlier tokens, and is completed at the next start after a simulated crash or a failed step;
 - the job worker serves accounts in turn, writes results to the right library, resumes after a restart, skips a busy library, and survives a failing library and an account deleted mid-job;
+- page details, transcripts, closer reads and usage counters stay inside the caller's account, and a closer read is charged to the monthly allowance exactly when it queues work;
 - the monthly deep-read meter, including month rollover with a controlled clock and an account deleted and recreated within a month.
 
 The real server process was also started in both modes on loopback and used with a device token and a locally signed access token, and a hosted process was put under twelve concurrent clients across six accounts while two of the accounts were deleted.
+
+The understanding layer's own tests run in single-owner mode. In hosted mode its page reading from a client, transcripts sent by a client, suggestions with a faked model, and the closer-read request were exercised; server-side page fetching, real transcription, the Gemini and Groq providers and the shared cache were **not** exercised in hosted mode.
 
 **Not verified:** a live Supabase project (the expected claims follow Supabase's documented token format and were not checked against real tokens), any mobile client, Linux or a container build with the two added packages, concurrent load, many thousands of accounts on one filesystem, restoring into a hosted account, and an independent security review.

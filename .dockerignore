@@ -17,3 +17,5 @@ test-results
 playwright-report
 blob-report
 dist-demo
+dist-mac
+.mac-build

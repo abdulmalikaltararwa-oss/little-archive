@@ -12,10 +12,11 @@ from contextlib import contextmanager
 import hashlib
 import os
 from pathlib import Path
+import re
 import secrets
 import shutil
 import sqlite3
-from threading import RLock
+from threading import Event, RLock, Thread
 import time
 from weakref import WeakValueDictionary
 
@@ -39,6 +40,38 @@ def account_hash(user_id):
     return hashlib.sha256(user_id.encode()).hexdigest()
 
 
+def has_queued(c):
+    return c.execute("SELECT 1 FROM ai_jobs WHERE status='queued' LIMIT 1").fetchone() is not None
+
+
+def release_orphans(store):
+    """Remove stored images that no item refers to, so they cannot use up an account's quota."""
+    with store.lock:
+        with store.transaction() as c:
+            kept = {row[0] for row in c.execute("SELECT DISTINCT asset_hash FROM items WHERE asset_hash IS NOT NULL")}
+        for entry in list(os.scandir(store.assets)):
+            if entry.is_file(follow_symlinks=False) and re.fullmatch(r"[0-9a-f]{64}\.png", entry.name) and entry.name[:64] not in kept:
+                os.unlink(entry.path)
+        store.asset_bytes = None
+
+
+def understanding_environment(config):
+    """The settings every account's understanding service is built from.
+
+    The optional cache of public-post results is one file for the whole service, never a
+    file inside each account's directory, so it is not mistaken for account data.
+    A transcript is made only when an account asks for a closer read, which is metered;
+    the automatic thin-caption rule would spend transcription without that check.
+    """
+    from .enrich.settings import EnrichSettings
+    values = {} if getattr(config, "testing", False) else dict(os.environ)
+    values["LA_TRANSCRIBE_AUTO"] = "false"
+    settings = EnrichSettings.from_env(values, config).validate()
+    if settings.cache_enabled and not settings.cache_path:
+        values["LA_PUBLIC_CACHE_PATH"] = str(Path(config.data_dir).resolve() / "public-posts.sqlite3")
+    return values
+
+
 class LibraryManager:
     def __init__(self, config, clock=time.time):
         self.config, self.clock = config, clock
@@ -52,6 +85,7 @@ class LibraryManager:
         self.max_open = config.hosted_open_libraries
         self.quota = config.hosted_storage_quota_mb * 1024 * 1024
         self.on_delete = []
+        self.prepare = None  # called once with each library as it is opened, before anyone else can use it
         self._lock = RLock()            # the open-library cache
         self._accounts_lock = RLock()   # accounts.sqlite3 and the two maps below
         # Bounded strong references, plus a weak map so a library that is still
@@ -116,6 +150,8 @@ class LibraryManager:
             store = self._recent.get(user_id) or self._live.get(user_id)
             if store is None or store.closed:
                 store = Store(self.config, root=path, tenant=user_id, quota_bytes=self.quota)
+                if self.prepare is not None:
+                    self.prepare(store)
                 self._live[user_id] = store
             self._recent[user_id] = store
             self._recent.move_to_end(user_id)
@@ -247,3 +283,69 @@ class LibraryManager:
             except (LibraryClosed, ValueError, OSError, sqlite3.Error):
                 self._drained(user_id)
         return None
+
+
+class AccountWorker:
+    """Hosted mode: one thread serves every account's queue, one group of jobs per account in turn.
+
+    Each account library has its own understanding service and worker object (built by
+    ``enrich.build_enrichment``); this class only decides whose turn it is and keeps one
+    account's failure from stopping the rest.
+    """
+
+    def __init__(self, libraries):
+        self.libraries, self.stopping, self.wake, self.thread, self.backoff = libraries, Event(), Event(), None, 1
+
+    def adopt(self, store, service, charge_deep_read=None):
+        """Attach an account library's understanding service and route its queueing through here."""
+        store.enrichment = service
+        worker = service.worker
+        worker.wake = self.wake
+        enqueue, enqueue_deep = worker.enqueue, worker.enqueue_deep
+
+        def queue(ids):
+            with store.lock:
+                count = enqueue(ids)
+                if count:
+                    self.libraries.mark_pending(store)
+                return count
+
+        def queue_deep(item_id):
+            with store.lock:
+                if charge_deep_read is not None:
+                    charge_deep_read(store.tenant)  # raises when the account has no allowance left
+                enqueue_deep(item_id)
+                self.libraries.mark_pending(store)
+
+        worker.enqueue, worker.enqueue_deep = queue, queue_deep
+
+    def start(self):
+        self.thread = Thread(target=self.run, daemon=True, name="little-archive-accounts")
+        self.thread.start()
+
+    def stop(self):
+        self.stopping.set()
+        self.wake.set()
+        if self.thread:
+            self.thread.join(timeout=2)
+
+    def run(self):
+        while not self.stopping.is_set():
+            if not self.step():
+                self.wake.wait(timeout=2)
+                self.wake.clear()
+
+    def step(self) -> bool:
+        """Do one group of jobs for the next account with queued work; False when there is none."""
+        store = None
+        try:
+            store = self.libraries.next_pending(has_queued)
+            if store is None:
+                return False
+            store.enrichment.worker.step()
+        except Exception:
+            # One library's failure (its account deleted mid-job, a full disk) must
+            # not end every account's work. It is set aside until work is queued again.
+            self.libraries.set_aside(store)
+            self.stopping.wait(self.backoff)
+        return True

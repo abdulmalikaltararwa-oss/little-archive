@@ -141,7 +141,8 @@ test('leaving Favorites and editing a sorted title refresh the loaded window wit
   const closingPosition = await scrollY(page);
   await closeDialog(detail);
   await expectPosition(page, closingPosition);
-  expect(await page.evaluate(() => {
+  // Focus returns in the dialog's close event, which the browser dispatches as a later task than the close itself.
+  await expect.poll(() => page.evaluate(() => {
     const rect = document.activeElement.getBoundingClientRect();
     return document.activeElement.matches('.card-open') && rect.bottom > 0 && rect.top < innerHeight;
   })).toBe(true);

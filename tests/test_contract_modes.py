@@ -25,7 +25,7 @@ from PIL import Image
 from server.app import create_app
 from server.backups import restore_backup
 from server.config import Config
-from support_hosted import SigningKey, bearer, claims, hosted_app
+from support_hosted import SigningKey, bearer, claims, fake_model, hosted_app, no_worker_threads
 
 
 PASSWORD = "contract-owner-password-2026"
@@ -86,9 +86,7 @@ class ContractScenarios:
         self.temporary = tempfile.TemporaryDirectory(prefix="little-archive-contract-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.no_worker = patch("server.jobs.ClassificationWorker.start")
-        self.no_worker.start()
-        self.addCleanup(self.no_worker.stop)
+        self.enterContext(no_worker_threads())
         self.target = self.backend(self.root, **self.settings)
         self.addCleanup(self.target.close)
         self.client, self.app = self.target.client, self.target.app
@@ -138,6 +136,8 @@ class LibraryContract(ContractScenarios):
             ("GET", "/api/export"), ("GET", "/api/backup"), ("GET", "/api/settings"), ("PATCH", "/api/settings"),
             ("POST", "/api/ai/jobs"), ("GET", "/api/ai/jobs"), ("POST", "/api/ai/jobs/cancel"), ("POST", "/api/ai/jobs/x/retry"),
             ("POST", f"/api/items/{item['id']}/ai/accept"), ("POST", f"/api/items/{item['id']}/ai/dismiss"),
+            ("POST", f"/api/items/{item['id']}/page"), ("POST", f"/api/items/{item['id']}/transcript"), ("DELETE", f"/api/items/{item['id']}/transcript"),
+            ("POST", f"/api/items/{item['id']}/deep-read"), ("GET", "/api/enrichment/status"), ("GET", "/api/enrichment/usage"),
             ("POST", "/api/demo"), ("GET", "/api/account"),
         ):
             with self.subTest(route=method + " " + path):
@@ -247,7 +247,9 @@ class LibraryContract(ContractScenarios):
             self.assertEqual(restored.get(row["thumbnail_url"]).status_code, 200)
 
     def test_settings_demo_seed_and_ai_disabled_state(self):
-        self.assertEqual(self.ok("GET", "/api/settings").json(), {"remote_previews": False, "ai_enabled": False, "ai_available": False, "ai_model": ""})
+        self.assertEqual(self.ok("GET", "/api/settings").json(), {
+            "remote_previews": False, "ai_enabled": False, "ai_available": False, "ai_model": "", "ai_provider": "", "ai_hosted": False,
+            "page_fetch_enabled": False, "transcription_available": False, "shared_cache_enabled": False})
         self.assertTrue(self.ok("PATCH", "/api/settings", {"remote_previews": True}).json()["remote_previews"])
         self.assertEqual(self.ok("POST", "/api/demo").json(), {"created": 15})
         self.assertEqual(self.ok("POST", "/api/demo").json(), {"created": 0})
@@ -287,7 +289,8 @@ class LibraryContract(ContractScenarios):
 
     def test_ai_suggestion_review_uses_the_callers_library(self):
         item = self.item(title="Original", summary="")
-        library, worker = self.target.library(), self.app.state.worker
+        library = self.target.library()
+        worker = library.enrichment.worker
         current = self.ok("GET", "/api/items/" + item["id"]).json()
         suggestion = {"input_hash": worker.fingerprint(current), "suggested_title": "Suggested", "summary": "Suggested summary", "topics": ["idea"]}
         with library.transaction() as c:
@@ -298,6 +301,26 @@ class LibraryContract(ContractScenarios):
             c.execute("UPDATE items SET ai=? WHERE id=?", (json.dumps({**suggestion, "input_hash": "stale"}), item["id"]))
         self.assertEqual(self.call("POST", f"/api/items/{item['id']}/ai/accept").status_code, 409)
         self.assertIsNone(self.ok("POST", f"/api/items/{item['id']}/ai/dismiss").json()["ai"])
+
+
+    def test_page_details_transcripts_and_closer_reads(self):
+        item = self.item("https://www.instagram.com/reel/CONTRACT0001/", title="")
+        paged = self.ok("POST", f"/api/items/{item['id']}/page", {"extraction": {"title": "A title read from the page", "creator": "example_creator", "caption": "Caption read from the page.", "content_type": "video"}}).json()
+        self.assertEqual((paged["title"], paged["creator"], paged["caption"], paged["enrichment"]["page"]["source"]), ("A title read from the page", "example_creator", "Caption read from the page.", "client"))
+        self.assertEqual(self.call("POST", f"/api/items/{item['id']}/page", {"fetch": True}).status_code, 409, "the server fetches nothing unless its operator turned that on")
+        self.assertEqual(self.call("POST", f"/api/items/{item['id']}/page", {"extraction": {"title": "x"}, "fetch": True}).status_code, 422)
+        spoken = self.ok("POST", f"/api/items/{item['id']}/transcript", {"text": "Words spoken in the clip about feeding a starter.", "language": "en"}).json()
+        self.assertEqual(spoken["enrichment"]["transcript"]["source"], "client")
+        self.assertEqual(self.ok("GET", "/api/items", params={"q": "starter"}).json()["total"], 1)
+        refused = self.call("POST", f"/api/items/{item['id']}/deep-read")
+        self.assertEqual(refused.status_code, 409)
+        self.assertIsNone(self.ok("DELETE", f"/api/items/{item['id']}/transcript").json()["enrichment"]["transcript"])
+        status = self.ok("GET", "/api/enrichment/status").json()
+        self.assertEqual(set(status), {"page", "analysis", "transcription", "deep_read", "shared_cache"})
+        self.assertEqual((status["page"]["server_fetch"], status["deep_read"]["available"], status["shared_cache"]["enabled"]), (False, False, False))
+        usage = self.ok("GET", "/api/enrichment/usage").json()
+        self.assertEqual((usage["page_reads"], usage["deep_reads"], usage["model_calls"]), (1, 0, 0))
+        self.assertEqual(self.call("POST", "/api/items/missing/page", {"extraction": {"title": "x"}}).status_code, 404)
 
 
 class QueueContract(ContractScenarios):
@@ -322,18 +345,13 @@ class QueueContract(ContractScenarios):
     def test_worker_writes_each_result_to_the_library_it_was_queued_in(self):
         item = self.item(caption="A synthetic caption.")
         self.ok("POST", "/api/ai/jobs", {"ids": [item["id"]]})
-        worker = self.app.state.worker
-
-        def inference(*args):
-            worker.stopping.set()  # One job, then let the loop end.
-            return {"suggested_title": "Synthetic suggestion", "summary": "Synthetic summary.", "topics": ["example"], "needs_review": True}
-
-        with patch("server.classifier.classify_item", side_effect=inference):
-            worker.run()
-        worker.stopping.clear()
+        with fake_model():
+            self.assertTrue(self.app.state.worker.step())
+            self.assertFalse(self.app.state.worker.step(), "nothing else was queued")
         suggested = self.ok("GET", "/api/items/" + item["id"]).json()["ai"]
-        self.assertEqual(suggested["suggested_title"], "Synthetic suggestion")
+        self.assertEqual(suggested["suggested_title"], "About A useful guide")
         self.assertEqual(self.ok("GET", "/api/ai/jobs").json()["counts"]["completed"], 1)
+        self.assertEqual(self.ok("GET", "/api/enrichment/usage").json()["model_calls"], 1)
 
 
 class SelfHostedLibraryContract(LibraryContract, unittest.TestCase):
@@ -403,6 +421,12 @@ class ModeParity(unittest.TestCase):
         record("POST /api/ai/jobs", call("POST", "/api/ai/jobs", {"filters": {}}))
         record("GET /api/ai/jobs", call("GET", "/api/ai/jobs"))
         record("POST /api/ai/jobs/cancel", call("POST", "/api/ai/jobs/cancel"))
+        record("POST page", call("POST", f"/api/items/{item['id']}/page", {"extraction": {"title": "Read from the page", "caption": "A caption."}}))
+        record("POST transcript", call("POST", f"/api/items/{item['id']}/transcript", {"text": "Words spoken in the clip."}))
+        record("POST deep-read", call("POST", f"/api/items/{item['id']}/deep-read"))
+        record("DELETE transcript", call("DELETE", f"/api/items/{item['id']}/transcript"))
+        record("GET /api/enrichment/status", call("GET", "/api/enrichment/status"))
+        record("GET /api/enrichment/usage", call("GET", "/api/enrichment/usage"))
         record("POST /api/demo", call("POST", "/api/demo"))
         record("GET /api/account", call("GET", "/api/account"))
         record("GET /api/auth/me anonymous", target.client.get("/api/auth/me"))
@@ -425,7 +449,7 @@ class ModeParity(unittest.TestCase):
         return result
 
     def test_both_modes_answer_the_same_script_with_the_same_shapes(self):
-        with tempfile.TemporaryDirectory(prefix="little-archive-parity-") as folder, patch("server.jobs.ClassificationWorker.start"):
+        with tempfile.TemporaryDirectory(prefix="little-archive-parity-") as folder, no_worker_threads():
             results = {}
             for backend in (SelfHostedClient, HostedClient):
                 target = backend(Path(folder) / backend.mode, **dict(MODEL))
@@ -434,15 +458,15 @@ class ModeParity(unittest.TestCase):
                 finally:
                     target.close()
         owner, account = results["self-hosted"], results["hosted"]
-        self.assertEqual(len(owner), 29)
+        self.assertEqual(len(owner), 35)
         self.assertEqual([row[0] for row in owner], [row[0] for row in account])
         for (label, owner_status, owner_body), (_, account_status, account_body) in zip(owner, account):
             with self.subTest(request=label):
                 self.assertEqual(owner_status, account_status)
                 self.assertEqual(self.comparable(label, owner_body), self.comparable(label, account_body))
         statuses = {label: status for label, status, _ in owner}
-        self.assertEqual((statuses["PATCH invalid"], statuses["GET missing item"], statuses["GET /api/items anonymous"]), (422, 404, 401))
-        self.assertTrue(all(status == 200 for label, status in statuses.items() if label not in {"PATCH invalid", "GET missing item", "GET /api/items anonymous"}))
+        expected = {"PATCH invalid": 422, "GET missing item": 404, "GET /api/items anonymous": 401, "POST deep-read": 409}
+        self.assertEqual({label: status for label, status in statuses.items() if status != 200}, expected)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import { PLATFORM_NAMES, STATUS_NAMES, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage } from './utils.js';
+import { PLATFORM_NAMES, STATUS_NAMES, SHARE_PATH, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage, readShareTarget, isTikTokShortLink } from './utils.js';
 
 const app = document.getElementById('app');
 const IS_DEMO = document.documentElement.dataset.demo === 'true';
@@ -8,6 +8,9 @@ const state = {
   filters: { q: '', platform: '', collection_id: '', tag: '', status: '', favorite: false, needs_review: false, sort: 'recent' },
   view: 'all', selected: new Set(), selecting: false, loading: false, request: 0, theme: 'system', detail: null,
 };
+// A link shared from the phone's share sheet waits here, through sign-in, until the owner reviews it.
+// The demo has no share target and never reads one.
+let pendingShare = IS_DEMO ? null : readShareTarget(location);
 let dom = {};
 let uid = 0;
 let lastFocusedControl = null;
@@ -144,7 +147,8 @@ function applyTheme(theme) {
   state.theme = theme;
   const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]').content = dark ? '#202722' : '#F7F4EF';
+  // The browser (and an installed app's title bar) follows the page's own background token. The fallback matches styles.css.
+  document.querySelector('meta[name="theme-color"]').content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || (dark ? '#1c231f' : '#f8f3ea');
   if (!IS_DEMO) try { localStorage.setItem('little-archive-theme', theme); } catch { /* Storage is optional for appearance. */ }
 }
 try { applyTheme(IS_DEMO ? 'system' : ['light', 'dark', 'system'].includes(localStorage.getItem('little-archive-theme')) ? localStorage.getItem('little-archive-theme') : 'system'); } catch { applyTheme('system'); }
@@ -173,7 +177,8 @@ function renderLogin(message = '') {
     finally { submit.disabled = false; }
   } }, error, field('Password', password), submit);
   const story = h('section', { class: 'login-story', 'aria-label': 'About Little Archive' }, brand(), h('div', {}, h('div', { class: 'eyebrow' }, 'A home for your curious mind'), h('h1', {}, 'Good things,', h('br'), 'kept close.'), h('p', {}, 'Your saved posts, ideas, and little discoveries. Together in a space that belongs to you.'), paperArt()), h('div', { class: 'login-footer' }, icon('shield'), 'Open source. Self-hosted. Yours to keep.'));
-  const panel = h('main', { class: 'login-panel', id: 'main' }, h('div', { class: 'login-box' }, h('div', { class: 'eyebrow' }, 'Welcome home'), h('h2', {}, 'Your archive awaits.'), h('p', {}, 'Sign in to pick up where your curiosity left off.'), form, h('p', { class: 'login-help' }, 'Use the owner password configured when this instance was installed. Need to reset it? Your server administrator can use the local password-reset command.')));
+  const shareNote = pendingShare?.shared ? h('div', { class: 'notice', role: 'status' }, pendingShare.url ? `Sign in to review and save the link you shared from ${hostLabel(pendingShare.url)}. It is waiting for you.` : 'Sign in to finish saving what you shared.') : null;
+  const panel = h('main', { class: 'login-panel', id: 'main' }, h('div', { class: 'login-box' }, h('div', { class: 'eyebrow' }, 'Welcome home'), h('h2', {}, 'Your archive awaits.'), h('p', {}, 'Sign in to pick up where your curiosity left off.'), shareNote, form, h('p', { class: 'login-help' }, 'Use the owner password configured when this instance was installed. Need to reset it? Your server administrator can use the local password-reset command.')));
   app.append(h('div', { class: 'login-screen' }, story, panel));
   document.title = 'Little Archive — Welcome home';
 }
@@ -184,6 +189,21 @@ async function initializeLibrary() {
   catch (error) {
     if (state.authenticated) renderLoadError(error);
   }
+  presentSharedLink();
+}
+
+// A shared link only opens the ordinary save dialog, prefilled. Saving stays an explicit tap.
+function presentSharedLink() {
+  const share = pendingShare;
+  if (!share || !state.authenticated) return;
+  pendingShare = null;
+  openAdd(share);
+}
+
+// The shared text stays in the address until the dialog is dismissed, so a reload during sign-in
+// does not lose it. After that the address goes back to the app's own.
+function forgetSharedAddress() {
+  if (location.pathname === SHARE_PATH) history.replaceState(null, '', '/');
 }
 
 function renderShell() {
@@ -193,7 +213,7 @@ function renderShell() {
   menu.setAttribute('aria-controls', 'sidebar'); menu.setAttribute('aria-expanded', 'false');
   const scrim = h('div', { class: 'mobile-scrim', 'aria-hidden': 'true', onClick: () => setNavigation(false) });
   const importButton = btn('Import', 'upload', openImport);
-  const addButton = btn('Save a link', 'plus', openAdd, 'primary');
+  const addButton = btn('Save a link', 'plus', () => openAdd(), 'primary');
   const topbar = h('header', { class: 'topbar' }, menu, h('span', { class: 'topbar-label' }, 'A little space for everything you love'), h('div', { class: 'topbar-actions' }, importButton, addButton));
   const hero = h('section', { class: 'hero', 'aria-label': 'Your personal archive' }, h('div', { class: 'hero-copy' }, h('div', { class: 'eyebrow' }, 'Collect a little. Discover a lot.'), h('h1', {}, 'Good things, kept close.'), h('p', {}, 'The recipe. The idea. That thing you wanted to try. Find your little discoveries again.')), paperArt());
   const title = h('h2', { tabindex: '-1' }, 'All saves');
@@ -437,7 +457,7 @@ function renderItems({ preservePosition = false } = {}) {
   if (!state.items.length) {
     const libraryEmpty = !state.stats.total && !state.stats.archived;
     const clear = () => setView('all');
-    dom.grid.replaceChildren(h('section', { class: 'empty-state' }, h('div', { class: 'empty-illustration' }, icon(libraryEmpty ? 'bookmark' : 'search')), h('h3', {}, libraryEmpty ? 'Every collection starts somewhere.' : 'Nothing here just yet.'), h('p', {}, libraryEmpty ? 'Save your first link, bring in an export, or explore with a small collection of clearly labeled demo saves.' : 'Try a different search or filter. Your next rediscovery might be one collection over.'), h('div', { class: 'empty-actions' }, libraryEmpty ? [btn('Save a link', 'plus', openAdd, 'primary'), btn('Import your saves', 'upload', openImport), btn('Try demo saves', 'sparkles', event => addDemo(event.currentTarget), 'ghost')] : [btn('Clear filters', 'x', clear, 'primary')])));
+    dom.grid.replaceChildren(h('section', { class: 'empty-state' }, h('div', { class: 'empty-illustration' }, icon(libraryEmpty ? 'bookmark' : 'search')), h('h3', {}, libraryEmpty ? 'Every collection starts somewhere.' : 'Nothing here just yet.'), h('p', {}, libraryEmpty ? 'Save your first link, bring in an export, or explore with a small collection of clearly labeled demo saves.' : 'Try a different search or filter. Your next rediscovery might be one collection over.'), h('div', { class: 'empty-actions' }, libraryEmpty ? [btn('Save a link', 'plus', () => openAdd(), 'primary'), btn('Import your saves', 'upload', openImport), btn('Try demo saves', 'sparkles', event => addDemo(event.currentTarget), 'ghost')] : [btn('Clear filters', 'x', clear, 'primary')])));
   } else {
     const existing = new Map([...dom.grid.querySelectorAll('[data-item-id]')].map(card => [card.dataset.itemId, card]));
     let cursor = dom.grid.firstChild;
@@ -476,6 +496,8 @@ function renderCard(item) {
     if (event.target.checked && state.selected.size >= 200) { event.target.checked = false; toast('Select up to 200 saves, or use Organize to update every match.'); return; }
     event.target.checked ? state.selected.add(item.id) : state.selected.delete(item.id); renderSelection();
   } });
+  // The label is a finger-sized hit area around the small checkbox; it has no effect with a mouse.
+  const selectArea = h('label', { class: 'card-select-hit' }, checkbox);
   const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => {
     const trigger = event.currentTarget;
     const hadFocus = document.activeElement === trigger;
@@ -486,7 +508,7 @@ function renderCard(item) {
     });
   }, 'card-favorite');
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
-  card.append(open, checkbox, favorite); return card;
+  card.append(open, selectArea, favorite); return card;
 }
 
 function renderSelection() {
@@ -566,17 +588,22 @@ function collectionChecklist(selected = []) {
   return { element: list, values: () => [...list.querySelectorAll('input:checked')].map(x => x.value) };
 }
 
-function openAdd() {
-  const m = modal('Save a little discovery');
-  const url = h('input', { type: 'url', required: true, placeholder: 'https://…', autocomplete: 'url' });
-  const title = h('input', { type: 'text', maxlength: 500, placeholder: 'Give it a name you’ll remember', dir: 'auto' });
-  const notes = h('textarea', { placeholder: 'What caught your eye?', maxlength: 20000, dir: 'auto' });
+// `share` is a link handed over by the phone's share sheet (see parseSharedContent). It only prefills the
+// form as text; the person reviews it and taps Save.
+function openAdd(share = null) {
+  const m = modal('Save a little discovery', share ? { onClose: forgetSharedAddress } : {});
+  const url = h('input', { type: 'url', required: true, placeholder: 'https://…', autocomplete: 'url', value: share?.url || '' });
+  const title = h('input', { type: 'text', maxlength: 500, placeholder: 'Give it a name you’ll remember', dir: 'auto', value: share?.title || '' });
+  const notes = h('textarea', { placeholder: 'What caught your eye?', maxlength: 20000, dir: 'auto', value: share?.notes || '' });
   const tags = h('input', { type: 'text', placeholder: 'design, weekend ideas, food', dir: 'auto' });
   const collections = collectionChecklist();
-  const form = h('form', {}, h('p', { class: 'dialog-description' }, 'Keep a post, article, video, or any link worth coming back to.'), field('Link', url), field('Title', title), field('Your notes', notes), field('Topics', tags, 'Separate topics with commas.'), h('div', { class: 'form-field' }, h('span', { class: 'field-label' }, 'Collections'), collections.element));
+  const notices = [];
+  if (share?.shared) notices.push(h('div', { class: 'notice', role: 'status' }, h('strong', {}, 'Shared with Little Archive. '), share.url ? `Check the link from ${hostLabel(share.url)}, then tap Save.` : 'We could not find a web link in it. Paste the link below.'));
+  if (share?.url && isTikTokShortLink(share.url)) notices.push(h('div', { class: 'notice', role: 'status' }, 'This is a TikTok short link, which Little Archive cannot save. Open the video in your browser, then share or copy its full link.'));
+  const form = h('form', {}, ...notices, h('p', { class: 'dialog-description' }, 'Keep a post, article, video, or any link worth coming back to.'), field('Link', url), field('Title', title), field('Your notes', notes), field('Topics', tags, 'Separate topics with commas.'), h('div', { class: 'form-field' }, h('span', { class: 'field-label' }, 'Collections'), collections.element));
   const error = formError(form);
   const save = h('button', { class: 'btn primary', type: 'submit' }, icon('bookmark'), 'Save to archive');
-  form.append(h('div', { class: 'flex-wrap' }, btn('Cancel', null, m.close), save));
+  form.append(h('div', { class: 'flex-wrap form-actions' }, btn('Cancel', null, m.close), save));
   form.addEventListener('submit', async e => {
     e.preventDefault(); error.clear(); save.disabled = true;
     try {
@@ -585,7 +612,10 @@ function openAdd() {
       m.close(); await refreshLibrary(); toast('A little discovery, safely kept.'); openDetail(item.id);
     } catch (e) { error.show(e); } finally { save.disabled = false; }
   });
-  m.body.append(form); url.focus();
+  m.body.append(form);
+  // A link that arrived ready to review keeps the on-screen keyboard closed so Save stays in view: focus rests on
+  // the dialog itself (named by its heading) instead of a field or the close button.
+  if (share?.url) { m.dialog.tabIndex = -1; m.dialog.focus({ preventScroll: true }); } else url.focus();
 }
 
 function openCollection(collection = null) {
@@ -674,7 +704,7 @@ function openOrganize() {
     try { if (!collection.value) throw new Error('Choose a local collection.'); await updateMatches('collection', collection.value); }
     catch (error) { collectionError.show(error); } finally { addCollection.disabled = !locals.length; }
   });
-  const ai = h('section', { class: 'setting-section' }, h('h3', {}, 'Let local AI suggest topics'), h('p', {}, 'Queue the complete scope. Suggestions use available titles, captions, notes, and collection names. You review them before they change your organization.'));
+  const ai = h('section', { class: 'setting-section' }, h('h3', {}, state.settings.ai_hosted ? 'Let AI suggest topics' : 'Let local AI suggest topics'), h('p', {}, state.settings.ai_hosted ? 'Queue the complete scope. Your server’s hosted AI service receives each save’s caption, creator and any transcript, not your notes or collection names. You review every suggestion before it changes your organization.' : 'Queue the complete scope. Suggestions use available titles, captions, notes, and collection names. You review them before they change your organization.'));
   const queue = btn('Queue topic suggestions', 'sparkles', event => busy(event.currentTarget, async () => {
     const result = await api('/ai/jobs', { method: 'POST', body: { filters: currentScope() } });
     toast(`${result.queued} queued · ${result.unchanged} already current · ${result.matched} matched.`);
@@ -731,7 +761,15 @@ function renderDetail(m, item, setDirty, fallbackFocus = null) {
   if (sourceCollections.length) m.body.append(h('section', { class: 'detail-section mt-12' }, h('h3', {}, 'Original collections'), h('div', { class: 'tags' }, sourceCollections.map(c => h('span', { class: 'tag source', dir: 'auto' }, icon('folder'), c.name))), h('p', { class: 'field-help mt-12' }, 'Kept exactly as imported from the source.')));
   if (item.ai && item.needs_review) {
     const ai = item.ai;
-    m.body.append(h('section', { class: 'ai-card', 'aria-label': 'AI suggestion' }, h('h3', {}, icon('sparkles'), 'A little help organizing'), h('p', { dir: 'auto' }, ai.summary || ai.suggested_title), h('div', { class: 'tags' }, (ai.topics || []).map(x => h('span', { class: 'tag' }, x))), h('p', { class: 'field-help' }, `Based on ${String(ai.evidence_level || 'available text').replaceAll('-', ' ')}. Review suggestions before accepting.`), h('div', { class: 'flex-wrap' }, btn('Accept suggestions', 'check', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/accept`, { method: 'POST' }); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Suggestions accepted.'); }), 'primary small'), btn('Dismiss', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/dismiss`, { method: 'POST' }); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Suggestion dismissed.'); }), 'ghost small'))));
+    m.body.append(h('section', { class: 'ai-card', 'aria-label': 'AI suggestion' }, h('h3', {}, icon('sparkles'), 'A little help organizing'), h('p', { dir: 'auto' }, ai.summary || ai.suggested_title), h('div', { class: 'tags' }, (ai.topics || []).map(x => h('span', { class: 'tag' }, x))), ai.suggested_folder ? h('p', { class: 'field-help' }, `Suggested folder: ${ai.suggested_folder}. Accepting files this save there.`) : null, h('p', { class: 'field-help' }, `${ai.evidence_note || `Based on ${String(ai.evidence_level || 'available text').replaceAll('-', ' ')}.`} Review suggestions before accepting.`), h('div', { class: 'flex-wrap' }, btn('Accept suggestions', 'check', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/accept`, { method: 'POST' }); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Suggestions accepted.'); }), 'primary small'), btn('Dismiss', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/ai/dismiss`, { method: 'POST' }); renderDetail(m, updated, setDirty, 'save'); await refreshEditedItem(updated); toast('Suggestion dismissed.'); }), 'ghost small'))));
+  }
+  const spoken = (item.evidence || []).find(e => e.kind === 'transcript' && e.text);
+  if (spoken) {
+    const short = spoken.text.length > 360 ? `${spoken.text.slice(0, 360)}…` : spoken.text;
+    const line = h('p', { dir: 'auto' }, short);
+    const section = h('section', { class: 'detail-section', 'aria-label': 'Transcript of the audio' }, h('h3', {}, 'What is said'), line, h('p', { class: 'field-help' }, 'An automatic transcript of the audio. It can contain mistakes, and it says nothing about what is shown on screen.'));
+    if (short !== spoken.text) { let full = false; const more = btn('Show all', 'arrow', () => { full = !full; line.textContent = full ? spoken.text : short; more.lastChild.textContent = full ? 'Show less' : 'Show all'; }, 'ghost small'); section.append(more); }
+    m.body.append(section);
   }
   const title = h('input', { type: 'text', value: item.title || '', maxlength: 500, dir: 'auto' });
   const summary = h('textarea', { value: item.summary || '', maxlength: 4000, rows: 3, placeholder: 'A short reminder of what this is about…', dir: 'auto' });
@@ -770,14 +808,20 @@ function renderDetail(m, item, setDirty, fallbackFocus = null) {
   const tools = h('section', { class: 'detail-section' }, h('h3', {}, 'A few useful extras'), h('div', { class: 'flex-wrap' }, upload, thumbnailInput));
   upload.dataset.detailFocus = 'preview';
   if (item.thumbnail_url) tools.lastChild.append(btn('Remove preview', 'x', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; const updated = await api(`/items/${item.id}/thumbnail`, { method: 'DELETE' }); renderDetail(m, updated, setDirty, 'preview'); await refreshEditedItem(updated); }), 'ghost small'));
-  const aiButton = btn('Suggest topics with local AI', 'sparkles', event => busy(event.currentTarget, async () => { const result = await api('/ai/jobs', { method: 'POST', body: { ids: [item.id] } }); toast(`${result.queued} classification job queued. Check activity, then reopen this save to review.`); }), 'small');
-  if (!state.settings.ai_enabled) { aiButton.disabled = true; aiButton.title = 'Configure a local Ollama model on your server to enable suggestions.'; }
-  tools.append(h('div', { class: 'mt-12' }, aiButton), h('p', { class: 'field-help mt-12' }, IS_DEMO ? 'This isolated demo does not upload files or run AI. Install your own instance to use these features.' : state.settings.ai_enabled ? 'AI works from available text. A video cover is not a full video analysis.' : 'Optional local AI is not configured. Your library works without it.'));
+  const aiButton = btn(state.settings.ai_hosted ? 'Suggest topics with AI' : 'Suggest topics with local AI', 'sparkles', event => busy(event.currentTarget, async () => { const result = await api('/ai/jobs', { method: 'POST', body: { ids: [item.id] } }); toast(`${result.queued} classification job queued. Check activity, then reopen this save to review.`); }), 'small');
+  if (!state.settings.ai_enabled) { aiButton.disabled = true; aiButton.title = 'Configure an AI provider on your server to enable suggestions.'; }
+  tools.append(h('div', { class: 'mt-12' }, aiButton), h('p', { class: 'field-help mt-12' }, IS_DEMO ? 'This isolated demo does not upload files or run AI. Install your own instance to use these features.' : state.settings.ai_hosted ? 'Your server uses a hosted AI service: the post’s caption, creator and any transcript are sent to it, not your notes. A video cover is not a full video analysis.' : state.settings.ai_enabled ? 'AI works from available text. A video cover is not a full video analysis.' : 'Optional local AI is not configured. Your library works without it.'));
+  const deepRead = item.enrichment?.deep_read;
+  if (!IS_DEMO && deepRead && (deepRead.available || ['queued', 'running'].includes(deepRead.state))) {
+    const deepButton = btn(deepRead.available ? 'Read this more closely' : 'A closer read is queued', 'search', event => busy(event.currentTarget, async () => { if (!m.confirmDiscard()) return; await api(`/items/${item.id}/deep-read`, { method: 'POST' }); toast('A closer read is queued. Check activity, then reopen this save.'); renderDetail(m, await api(`/items/${item.id}`), setDirty, 'deep'); }), 'small');
+    deepButton.disabled = !deepRead.available; deepButton.dataset.detailFocus = 'deep';
+    tools.append(h('div', { class: 'mt-12' }, deepButton), h('p', { class: 'field-help mt-12' }, deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the audio to your server’s transcription service, then reads this save again from what is said. The video itself is never stored.'));
+  }
   m.body.append(tools);
   const evidence = h('details', { class: 'detail-section' }, h('summary', {}, 'Source text & evidence'));
   evidence.open = evidenceOpen;
   if (item.caption) evidence.append(h('div', { class: 'evidence' }, h('span', { class: 'evidence-label' }, 'Caption'), h('p', { dir: 'auto' }, item.caption)));
-  for (const ev of item.evidence || []) { if (ev.kind === 'caption' && ev.text === item.caption) continue; evidence.append(h('div', { class: 'evidence' }, h('span', { class: 'evidence-label' }, String(ev.kind).replaceAll('_', ' ')), h('p', { dir: 'auto' }, ev.text))); }
+  for (const ev of item.evidence || []) { if ((ev.kind === 'caption' && ev.text === item.caption) || ev.kind === 'transcript') continue; evidence.append(h('div', { class: 'evidence' }, h('span', { class: 'evidence-label' }, String(ev.kind).replaceAll('_', ' ')), h('p', { dir: 'auto' }, ev.text))); }
   if (!item.caption && !(item.evidence || []).length) evidence.append(h('p', { class: 'field-help mt-12' }, 'This save currently has link-only evidence. Add your own notes or import more source text.'));
   m.body.append(evidence, h('dl', { class: 'detail-meta detail-section' }, h('div', {}, h('dt', {}, 'Added to archive'), h('dd', {}, formatDate(item.created_at))), h('div', {}, h('dt', {}, 'Saved on source'), h('dd', {}, formatDate(item.saved_at))), h('div', {}, h('dt', {}, 'Last observed'), h('dd', {}, formatDate(item.last_seen_at))), h('div', {}, h('dt', {}, 'Content type'), h('dd', {}, item.content_type || 'link'))));
   m.body.append(h('section', { class: 'detail-section' }, h('h3', {}, 'Keep reviewing'), h('p', { class: 'field-help' }, 'Move through every save needing review in this scope, including unloaded pages.'), btn(item.needs_review ? 'Mark reviewed & next' : 'Next save to review', 'arrow', event => busy(event.currentTarget, async () => {
@@ -889,7 +933,7 @@ function openSettings(section = '') {
   if (IS_DEMO) connectionSection.replaceChildren(h('h3', {}, 'Connect your browser'), h('p', {}, 'Browser connections require your own self-hosted instance. This public demo creates no credentials and cannot import from a real account.'));
   m.body.append(connectionSection);
   refreshTokens().catch(e => tokens.append(h('div', { class: 'form-error' }, errorMessage(e))));
-  m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Optional local AI'), h('p', {}, IS_DEMO ? 'No AI runs in this demo. A self-hosted instance can use an operator-configured local Ollama model to suggest topics from available text.' : state.settings.ai_enabled ? `Configured model: ${state.settings.ai_model || 'local model'}. Suggestions are created from the available text and are yours to review.` : 'No model is configured. To enable suggestions, set your Ollama URL and model in the server environment and restart the instance.'), h('p', {}, 'A text model cannot watch a video. Imported captions, titles, and image alternative text remain distinct evidence.'), btn('View classification jobs', 'activity', () => { m.close(); openActivity('ai'); }, 'small')));
+  m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, state.settings.ai_hosted ? 'Optional hosted AI' : 'Optional local AI'), h('p', {}, IS_DEMO ? 'No AI runs in this demo. A self-hosted instance can use an operator-configured local Ollama model to suggest topics from available text.' : state.settings.ai_hosted ? `Configured: ${state.settings.ai_provider} (${state.settings.ai_model}). Post text (caption, creator, any transcript) is sent to that service to make suggestions, which are yours to review.` : state.settings.ai_enabled ? `Configured model: ${state.settings.ai_model || 'local model'}. Suggestions are created from the available text and are yours to review.` : 'No model is configured. To enable suggestions, set your Ollama URL and model (or a hosted provider) in the server environment and restart the instance.'), h('p', {}, 'A text model cannot watch a video. Imported captions, titles, transcripts of the audio, and image alternative text remain distinct evidence.'), btn('View classification jobs', 'activity', () => { m.close(); openActivity('ai'); }, 'small')));
   const exports = h('section', { class: 'setting-section' }, h('h3', {}, 'Your data, ready to go'), h('p', {}, 'JSON preserves your organization and notes. CSV is useful for spreadsheets; HTML works with bookmark managers.'), h('div', { class: 'flex-wrap' }, ...[['json', 'JSON'], ['csv', 'CSV'], ['html', 'Bookmarks HTML']].map(([format, label]) => btn(label, 'download', event => downloadFile(`/export?format=${format}`, `little-archive.${format}`, event.currentTarget), 'small'))), h('div', { class: 'mt-12' }, btn('Download full backup', 'archive', event => downloadFile('/backup', 'little-archive-backup.zip', event.currentTarget))), h('p', { class: 'mt-12' }, 'Backups include a database snapshot and local assets. Restore with the offline server command so pending work and library identity can be handled safely.'));
   if (IS_DEMO) {
     exports.children[1].textContent = 'These downloads contain the synthetic demo records and any in-memory edits you made. They are not a backup of a real account.';

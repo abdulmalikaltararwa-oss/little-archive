@@ -25,11 +25,14 @@ from PIL import Image, ImageOps
 
 from server.app import create_app
 from server.config import Config
+from fastapi import HTTPException
+
 from server.backups import create_backup
+from server.enrich.images import write_asset
 from server.entitlements import MemoryEntitlements, OwnerEntitlements, SQLiteEntitlements, usage_key
-from server.storage import LibraryClosed
-from server.tenancy import AccountDeleted, LibraryManager, account_hash
-from support_hosted import SigningKey, bearer, claims, hosted_app, hosted_config
+from server.storage import LibraryClosed, LibraryFull
+from server.tenancy import AccountDeleted, LibraryManager, account_hash, release_orphans
+from support_hosted import SigningKey, bearer, claims, fake_model, hosted_app, hosted_config, no_worker_threads, offer_closer_reads
 
 
 MODEL = {"ollama_url": "http://127.0.0.1:1", "ollama_model": "synthetic-model"}
@@ -58,9 +61,7 @@ class HostedCase(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.data = self.root / "data"
-        self.no_worker = patch("server.jobs.ClassificationWorker.start")
-        self.no_worker.start()
-        self.addCleanup(self.no_worker.stop)
+        self.enterContext(no_worker_threads())
         self.key = SigningKey()
         self.app, self.keyset = hosted_app(self.root, self.key, **self.settings)
         self.client = TestClient(self.app)
@@ -99,6 +100,8 @@ class TenantIsolationTests(HostedCase):
                                                     "tags": [marker + "-tag"], "collection_ids": [shelf["id"]], "caption": marker + " caption"}).json()
         color = {"alice": "#aa3311", "bob": "#1133aa"}[name]
         thumbnail = self.ok(auth, "POST", f"/api/items/{item['id']}/thumbnail", content=image(color)).json()["thumbnail_url"]
+        self.ok(auth, "POST", f"/api/items/{item['id']}/page", {"extraction": {"creator": marker + " creator", "site_name": marker + " site"}})
+        self.ok(auth, "POST", f"/api/items/{item['id']}/transcript", {"text": marker + " spoken words"})
         run = self.ok(auth, "POST", "/api/imports/file", params={"filename": name + ".csv"}, content=f"url,title\nhttps://example.com/{name}/imported,{marker} imported\n".encode()).json()
         self.ok(auth, "PATCH", "/api/settings", {"remote_previews": name == "alice"})
         self.ok(auth, "POST", "/api/ai/jobs", {"ids": [item["id"]]})
@@ -112,6 +115,7 @@ class TenantIsolationTests(HostedCase):
 
     def snapshot(self, auth):
         return {"items": self.ok(auth, "GET", "/api/export").json()["items"], "collections": self.ok(auth, "GET", "/api/collections").json(),
+                "listed": self.ok(auth, "GET", "/api/items").json()["items"], "usage": self.ok(auth, "GET", "/api/enrichment/usage").json(),
                 "jobs": self.ok(auth, "GET", "/api/ai/jobs").json(), "imports": self.ok(auth, "GET", "/api/imports").json(),
                 "settings": self.ok(auth, "GET", "/api/settings").json(), "tags": self.ok(auth, "GET", "/api/tags").json()}
 
@@ -149,6 +153,11 @@ class TenantIsolationTests(HostedCase):
             "retry her job": ("POST", f"/api/ai/jobs/{hers['job']}/retry", None, 404),
             "accept her suggestion": ("POST", f"/api/items/{hers['item']}/ai/accept", None, 404),
             "dismiss her suggestion": ("POST", f"/api/items/{hers['item']}/ai/dismiss", None, 404),
+            "attach page details": ("POST", f"/api/items/{hers['item']}/page", {"extraction": {"title": "taken over", "caption": "taken over"}}, 404),
+            "ask the server to read her page": ("POST", f"/api/items/{hers['item']}/page", {"fetch": True}, 404),
+            "add a transcript": ("POST", f"/api/items/{hers['item']}/transcript", {"text": "taken over"}, 404),
+            "remove her transcript": ("DELETE", f"/api/items/{hers['item']}/transcript", None, 404),
+            "closer read of her item": ("POST", f"/api/items/{hers['item']}/deep-read", None, 404),
         }
         for label, (method, path, body, expected) in refused.items():
             with self.subTest(attempt=label):
@@ -166,7 +175,7 @@ class TenantIsolationTests(HostedCase):
         self.assertEqual(self.ok(b, "POST", "/api/items/bulk", {"filters": {"q": "alice"}, "action": "archive"}).json(), {"updated": 0})
         self.assertEqual(self.ok(b, "POST", "/api/ai/jobs", {"filters": {"q": "alice"}}).json()["matched"], 0)
         for path in ("/api/collections", "/api/tags", "/api/stats", "/api/imports", "/api/ai/jobs", "/api/settings", "/api/account",
-                     "/api/export", "/api/export?format=csv", "/api/export?format=html"):
+                     "/api/enrichment/status", "/api/enrichment/usage", "/api/export", "/api/export?format=csv", "/api/export?format=html"):
             with self.subTest(path=path):
                 body = self.ok(b, "GET", path).text
                 self.assertNotIn(marker, body)
@@ -179,6 +188,29 @@ class TenantIsolationTests(HostedCase):
         self.assertFalse(self.ok(b, "GET", "/api/settings").json()["remote_previews"])
         self.assertTrue(self.ok(self.a, "GET", "/api/settings").json()["remote_previews"])
         self.assertEqual(self.ok(b, "GET", "/api/account").json()["user_id"], self.bob)
+        self.assertEqual(self.ok(b, "GET", "/api/enrichment/usage").json()["page_reads"], 1, "each account's usage is its own")
+        self.assertEqual(self.ok(b, "GET", "/api/items", params={"q": "spoken"}).json()["total"], 1, "search over transcripts stays in the caller's library")
+
+    def test_each_account_has_its_own_understanding_service(self):
+        hers, his = self.libraries.open(self.alice), self.libraries.open(self.bob)
+        self.assertIsNot(hers.enrichment, his.enrichment)
+        self.assertIs(hers.enrichment.store, hers)
+        self.assertIs(his.enrichment.worker.store, his)
+        self.assertIs(his.enrichment.ledger.store, his)
+        self.assertIsNone(self.app.state.enrichment, "a hosted server has no library-wide service a route could fall back to")
+        offer_closer_reads(hers)
+        self.assertFalse(hers.enrichment.settings.transcribe_auto)
+        self.assertFalse(hers.enrichment.wants_auto_transcript(hers.get_item(self.hers["item"])), "transcripts are made only by a metered closer read")
+        self.assertIsNone(self.app.state.store)
+        tree = ast.parse((Path(__file__).resolve().parents[1] / "server" / "enrich" / "routes.py").read_text())
+        installer = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "install_routes")
+        self.assertNotIn("service", [argument.arg for argument in installer.args.args + installer.args.kwonlyargs], "no service is fixed when the routes are installed")
+        handlers = [node for node in installer.body if isinstance(node, ast.FunctionDef)]
+        self.assertEqual(len(handlers), 6)
+        for handler in handlers:
+            with self.subTest(handler=handler.name):
+                self.assertIn("Depends(owner)", ast.unparse(handler.args))
+                self.assertIn("auth.store.enrichment", ast.unparse(handler), "every understanding route uses the caller's own service")
 
     def test_cancelling_and_bulk_operations_stay_inside_the_callers_library(self):
         self.assertEqual(self.ok(self.b, "POST", "/api/ai/jobs/cancel").json(), {"cancelled": 1})
@@ -301,7 +333,7 @@ class TenantIsolationTests(HostedCase):
                             calls = [ast.unparse(n) for n in ast.walk(node) if isinstance(n, ast.Call) and "libraries" in ast.unparse(n.func)]
                             self.assertEqual(calls, ["libraries.delete(auth.user_id)"], "deletion must target the caller only")
                         else:
-                            self.assertFalse(names & {"libraries", "identity"}, "route chooses a library or identity itself")
+                            self.assertFalse(names & {"libraries", "identity", "enrichment", "worker"}, "route chooses a library, identity or service itself")
         self.assertGreaterEqual(routes, 45)
 
 
@@ -507,6 +539,25 @@ class StorageQuotaTests(HostedCase):
         self.assertEqual(list(assets.iterdir()), [])
         self.assertLess(self.ok(auth, "GET", "/api/account").json()["storage"]["used_bytes"], pictured)
 
+    def test_no_stored_image_can_pass_the_quota_and_unreferenced_ones_are_tidied(self):
+        user, auth = self.account()
+        item = self.ok(auth, "POST", "/api/items", {"url": "https://example.com/pictured"}).json()["id"]
+        library = self.libraries.open(user)
+        noise = io.BytesIO()
+        Image.frombytes("RGB", (700, 700), random.Random(11).randbytes(700 * 700 * 3)).save(noise, "PNG")
+        with self.assertRaises(LibraryFull):
+            write_asset(library, noise.getvalue())  # the path a stored cover copy takes as well
+        self.assertEqual(list(library.assets.iterdir()), [])
+        kept = self.ok(auth, "POST", f"/api/items/{item}/thumbnail", content=image("#345678")).json()["thumbnail_url"].rsplit("/", 1)[1]
+        stray = write_asset(library, image("#876543"))
+        self.assertEqual(len(list(library.assets.iterdir())), 2)
+        self.ok(auth, "POST", f"/api/items/{item}/page", {"extraction": {"title": "Read from the page", "caption": "A caption."}})
+        self.assertEqual([path.name for path in library.assets.iterdir()], [kept + ".png"], "attaching page details tidies covers no item uses")
+        self.assertNotEqual(stray, kept)
+        (library.assets / "notes.txt").write_text("not an image this server wrote")
+        release_orphans(library)
+        self.assertEqual(sorted(path.name for path in library.assets.iterdir()), sorted([kept + ".png", "notes.txt"]))
+
     def test_self_hosted_thumbnail_files_are_left_exactly_as_before(self):
         with tempfile.TemporaryDirectory() as folder:
             app = create_app(Config(data_dir=Path(folder) / "data", admin_password="a-private-owner-password", public_url="http://testserver", testing=True))
@@ -527,6 +578,7 @@ class AccountDeletionTests(HostedCase):
         item = self.ok(auth, "POST", "/api/items", {"url": f"https://example.com/{name}", "title": name + "-private-marker", "caption": "Text to classify."}).json()
         self.ok(auth, "POST", f"/api/items/{item['id']}/thumbnail", content=image("#aa3311" if name == "alice" else "#1133aa"))
         self.entitlements.set_unlocked(user, True, source="synthetic-test")
+        self.assertTrue(self.entitlements.consume_deep_reads(user, 1))
         self.ok(auth, "POST", "/api/ai/jobs", {"ids": [item["id"]]})
         return user, auth, item["id"]
 
@@ -654,18 +706,17 @@ class AccountDeletionTests(HostedCase):
         alice, a, _ = self.seeded("alice")
         bob, b, his_item = self.seeded("bob")
         worker, entered, release, seen = self.app.state.worker, Event(), Event(), []
+        worker.backoff = 0
 
-        def inference(item, *args):
-            seen.append(item["title"])
-            if item["title"].startswith("alice"):
+        def before(batch):
+            if batch[0].evidence.source["title"].startswith("alice"):
                 entered.set()
                 if not release.wait(5):
-                    raise AssertionError("Controlled inference was not released.")
+                    raise AssertionError("The controlled model call was not released.")
             else:
                 worker.stopping.set()
-            return {"suggested_title": "About " + item["title"], "summary": "Synthetic.", "topics": [], "needs_review": True}
 
-        with patch("server.classifier.classify_item", side_effect=inference):
+        with fake_model(seen, before):
             thread = Thread(target=worker.run, daemon=True)
             thread.start()
             try:
@@ -868,15 +919,15 @@ class HostedQueueTests(HostedCase):
         return [self.ok(auth, "POST", "/api/items", {"url": f"https://example.com/{name}/{number}", "title": f"{name} {number}", "caption": "Text to classify."}).json()["id"] for number in range(count)]
 
     def run_worker(self, jobs, app=None):
+        """Run the real account worker in a thread until the model was asked about `jobs` items."""
         worker, seen = (app or self.app).state.worker, []
+        worker.backoff = 0
 
-        def inference(item, *args):
-            seen.append(item["title"])
-            if len(seen) >= jobs:
+        def before(batch):
+            if len(seen) + len(batch) >= jobs:
                 worker.stopping.set()
-            return {"suggested_title": "About " + item["title"], "summary": "Synthetic.", "topics": [], "needs_review": True}
 
-        with patch("server.classifier.classify_item", side_effect=inference):
+        with fake_model(seen, before):
             thread = Thread(target=worker.run, daemon=True)
             thread.start()
             thread.join(10)
@@ -884,27 +935,40 @@ class HostedQueueTests(HostedCase):
         worker.stopping.clear()
         return seen
 
-    def test_deep_reads_gate_and_meter_queued_work_per_account(self):
+    def unlock(self, *users):
+        for user in users:
+            self.entitlements.set_unlocked(user, True, source="synthetic-purchase")
+
+    def test_closer_reads_are_gated_and_metered_per_account(self):
         (alice, a), (bob, b) = self.account(), self.account()
-        hers, his = self.items(a, "alice", 4), self.items(b, "bob", 1)
-        locked = self.client.post("/api/ai/jobs", json={"ids": hers[:1]}, headers=a)
+        hers, his = self.items(a, "alice", 5), self.items(b, "bob", 1)
+        offered = self.client.post(f"/api/items/{hers[0]}/deep-read", headers=a)
+        self.assertEqual(offered.status_code, 409, "nothing is charged while a closer read is not on offer")
+        for user in (alice, bob):
+            offer_closer_reads(self.libraries.open(user))
+        locked = self.client.post(f"/api/items/{hers[0]}/deep-read", headers=a)
         self.assertEqual((locked.status_code, locked.json()["detail"]), (402, "Deep reads come with the full unlock."))
-        self.entitlements.set_unlocked(alice, True, source="synthetic-purchase")
-        over = self.client.post("/api/ai/jobs", json={"ids": hers}, headers=a)
-        self.assertEqual(over.status_code, 429)
-        self.assertIn("0 of 3 used", over.json()["detail"])
         self.assertEqual(self.ok(a, "GET", "/api/ai/jobs").json()["total"], 0, "a refused request queues nothing")
-        self.assertEqual(self.ok(a, "GET", "/api/account").json()["entitlements"]["deep_reads"]["used"], 0)
-        self.assertEqual(self.ok(a, "POST", "/api/ai/jobs", {"ids": hers[:3]}).json(), {"queued": 3, "matched": 3, "unchanged": 0})
-        self.assertEqual(self.ok(a, "POST", "/api/ai/jobs", {"ids": hers[:3]}).json()["queued"], 0, "unchanged work is not charged again")
+        self.unlock(alice)
+        for iid in hers[:3]:
+            self.assertEqual(self.ok(a, "POST", f"/api/items/{iid}/deep-read").json(), {"queued": 1})
+        self.assertEqual(self.status(a, "POST", f"/api/items/{hers[0]}/deep-read"), 409, "one already in progress is not charged twice")
+        over = self.client.post(f"/api/items/{hers[3]}/deep-read", headers=a)
+        self.assertEqual(over.status_code, 429)
+        self.assertIn("3 of 3", over.json()["detail"])
+        self.assertEqual(self.ok(a, "GET", "/api/ai/jobs").json()["counts"]["queued"], 3, "a refused request queues nothing")
+        self.assertEqual(self.ok(a, "GET", "/api/items/" + hers[3]).json()["enrichment"]["deep_read"]["state"], "")
         self.assertEqual(self.ok(a, "GET", "/api/account").json()["entitlements"]["deep_reads"], {"period": time.strftime("%Y-%m", time.gmtime()), "used": 3, "limit": 3, "remaining": 0})
-        self.assertEqual(self.status(a, "POST", "/api/ai/jobs", {"ids": hers[3:]}), 429)
-        self.ok(a, "POST", "/api/ai/jobs/cancel")
-        job = self.ok(a, "GET", "/api/ai/jobs").json()["jobs"][0]["id"]
-        self.assertEqual(self.status(a, "POST", f"/api/ai/jobs/{job}/retry"), 429, "a retry is new work")
-        self.assertEqual(self.status(b, "POST", "/api/ai/jobs", {"ids": his}), 402, "one account's unlock is not another's")
-        self.entitlements.set_unlocked(bob, True)
-        self.assertEqual(self.ok(b, "POST", "/api/ai/jobs", {"ids": his}).json()["queued"], 1)
+        self.assertIn(alice, self.libraries._pending, "a queued closer read is offered to the worker")
+        self.assertEqual(self.ok(a, "POST", "/api/ai/jobs", {"ids": hers[3:]}).json()["queued"], 2, "ordinary suggestions are not deep reads")
+        self.assertEqual(self.ok(a, "GET", "/api/account").json()["entitlements"]["deep_reads"]["used"], 3)
+        self.assertEqual(self.status(b, "POST", f"/api/items/{his[0]}/deep-read"), 402, "one account's unlock is not another's")
+        self.unlock(bob)
+        self.assertEqual(self.ok(b, "POST", f"/api/items/{his[0]}/deep-read").json(), {"queued": 1})
+        self.assertEqual(self.ok(b, "GET", "/api/account").json()["entitlements"]["deep_reads"]["used"], 1)
+        with self.assertRaises(HTTPException) as refused:
+            self.libraries.open(alice).enrichment.worker.enqueue_deep(hers[4])
+        self.assertEqual(refused.exception.status_code, 429, "the meter sits on the queueing itself, whatever route reaches it")
 
     def test_no_request_can_grant_an_unlock(self):
         user, auth = self.account()
@@ -919,8 +983,6 @@ class HostedQueueTests(HostedCase):
 
     def test_the_worker_serves_accounts_in_turn_and_writes_each_result_to_its_own_library(self):
         (alice, a), (bob, b) = self.account(), self.account()
-        for user in (alice, bob):
-            self.entitlements.set_unlocked(user, True)
         hers, his = self.items(a, "alice", 3), self.items(b, "bob", 1)
         self.ok(a, "POST", "/api/ai/jobs", {"ids": hers})
         self.ok(b, "POST", "/api/ai/jobs", {"ids": his})
@@ -930,15 +992,14 @@ class HostedQueueTests(HostedCase):
             for number, iid in enumerate(ids):
                 self.assertEqual(self.ok(auth, "GET", "/api/items/" + iid).json()["ai"]["suggested_title"], f"About {name} {number}")
             self.assertEqual(self.ok(auth, "GET", "/api/ai/jobs").json()["counts"]["completed"], len(ids))
-        self.assertIsNone(self.libraries.next_pending(self.app.state.worker.has_queued))
+        self.assertFalse(self.app.state.worker.step(), "nothing is left queued")
+        self.assertEqual(len(self.libraries._pending), 0)
         with sqlite3.connect(self.data / "accounts.sqlite3") as c:
             self.assertEqual(c.execute("SELECT count(*) FROM pending_jobs").fetchone()[0], 0)
 
     def broken_library_scenario(self, transactions_that_work_first):
         """Alice's library starts failing; Bob's queued job must still be done."""
         (alice, a), (bob, b) = self.account(), self.account()
-        for user in (alice, bob):
-            self.entitlements.set_unlocked(user, True)
         self.ok(a, "POST", "/api/ai/jobs", {"ids": self.items(a, "alice", 1)})
         his = self.items(b, "bob", 1)
         self.ok(b, "POST", "/api/ai/jobs", {"ids": his})
@@ -970,8 +1031,6 @@ class HostedQueueTests(HostedCase):
 
     def test_a_library_busy_with_its_own_request_does_not_hold_up_another_accounts_work(self):
         (alice, a), (bob, b) = self.account(), self.account()
-        for user in (alice, bob):
-            self.entitlements.set_unlocked(user, True)
         self.ok(a, "POST", "/api/ai/jobs", {"ids": self.items(a, "alice", 1)})
         self.ok(b, "POST", "/api/ai/jobs", {"ids": self.items(b, "bob", 1)})
         busy, holding, release = self.libraries.open(alice), Event(), Event()
@@ -997,7 +1056,6 @@ class HostedQueueTests(HostedCase):
     def test_queued_work_resumes_after_a_restart_without_scanning_accounts(self):
         alice, a = self.account()
         _, idle = self.account()
-        self.entitlements.set_unlocked(alice, True)
         iid = self.items(a, "alice", 1)[0]
         self.items(idle, "idle", 1)
         self.ok(a, "POST", "/api/ai/jobs", {"ids": [iid]})

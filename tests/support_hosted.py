@@ -3,8 +3,10 @@
 Signing keys are generated in memory for each test and served by a fake key-set
 fetcher, so every token is verified by the real code against real cryptography.
 """
+from contextlib import ExitStack
 import json
 import time
+from unittest.mock import patch
 from uuid import uuid4
 
 import jwt
@@ -12,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from server.app import create_app
 from server.config import Config
+from server.enrich.understanding import AnalysisOutcome, ProviderUsage
 from server.identity import SupabaseVerifier
 
 
@@ -77,3 +80,43 @@ def hosted_app(root, *keys, **settings):
 
 def bearer(token):
     return {"Authorization": "Bearer " + token}
+
+
+def no_worker_threads():
+    """Keep either mode's background worker from starting; tests drive it one step at a time."""
+    stack = ExitStack()
+    stack.enter_context(patch("server.jobs.ClassificationWorker.start"))
+    stack.enter_context(patch("server.tenancy.AccountWorker.start"))
+    return stack
+
+
+def fake_model(seen=None, before=None):
+    """Stand in for the configured model: each item is titled after its own title, so a
+    result that reached the wrong library would be visible."""
+    def analyze(provider, batch):
+        if before is not None:
+            before(batch)
+        outcomes = []
+        for entry in batch:
+            title = entry.evidence.source.get("title", "")
+            if seen is not None:
+                seen.append(title)
+            result = {"suggested_title": "About " + title, "summary": "Synthetic summary.", "topics": ["example"],
+                      "content_type": "link", "needs_review": True, "category": "Other", "collection": ""}
+            outcomes.append(AnalysisOutcome(entry.key, result=result))
+        return outcomes, ProviderUsage(1)
+    return patch("server.enrich.understanding.OllamaProvider.analyze", autospec=True, side_effect=analyze)
+
+
+class FakeTranscriber:
+    """Enough of a transcription provider for a closer read to be offered; never called."""
+    name, model = "synthetic", "synthetic-transcriber"
+
+    def transcribe(self, audio, content_type, *, language=None):
+        raise AssertionError("No audio is transcribed in these tests.")
+
+
+def offer_closer_reads(library):
+    """Make this library's understanding service consider a closer read available."""
+    library.enrichment.configure(transcriber=FakeTranscriber(), fetcher=object())
+    library.enrichment.update_settings(fetch_enabled=True)
