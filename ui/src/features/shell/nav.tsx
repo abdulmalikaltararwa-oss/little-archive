@@ -18,7 +18,7 @@ function collectionDot(color: string | null | undefined) {
   return DOTS[String(color ?? '').toLowerCase()] ?? 'bg-[#94a98b]';
 }
 
-function NavButton({ navKey, active, icon, label, count, onClick, title, nested, soon }: { navKey: string; active?: boolean; icon: ReactNode; label: string; count?: number | null; onClick(): void; title?: string; nested?: boolean; soon?: boolean }) {
+function NavButton({ navKey, active, icon, label, count, onClick, title, nested }: { navKey: string; active?: boolean; icon: ReactNode; label: string; count?: number | null; onClick(): void; title?: string; nested?: boolean }) {
   return (
     <button
       type="button"
@@ -35,7 +35,6 @@ function NavButton({ navKey, active, icon, label, count, onClick, title, nested,
     >
       {icon}
       <span dir="auto" className="min-w-0 flex-1 truncate">{label}</span>
-      {soon ? <span className="label-mono shrink-0 rounded-full bg-butter-pale px-1.5 !text-[0.58rem] !text-butter-ink">soon</span> : null}
       {count != null ? <span className={cn('num shrink-0 rounded-full px-2 py-0.5 text-2xs', active ? 'bg-sage-pale text-sage dark:text-sage-deep' : 'bg-card-2 text-ink-soft')}>{Number(count).toLocaleString()}</span> : null}
     </button>
   );
@@ -132,11 +131,11 @@ export function NavContent({ onNavigate }: { onNavigate?(): void }) {
         ))}
       </Group>
 
-      {/* Seams for the next wave. Each leads to a placeholder screen that says so. */}
-      <Group label="arriving next">
-        <NavButton navKey="recipes" active={loc.screen === 'recipes'} icon={<CookingPot aria-hidden="true" />} label="Recipes" soon onClick={() => screen('recipes')} />
-        <NavButton navKey="places" active={loc.screen === 'places'} icon={<MapPinned aria-hidden="true" />} label="Places" soon onClick={() => screen('places')} />
-        <NavButton navKey="ask" active={loc.screen === 'ask'} icon={<MessageCircleQuestion aria-hidden="true" />} label="Ask your archive" soon onClick={() => screen('ask')} />
+      {/* What the saves can do beyond being kept. Each screen says so itself where a server does not offer it. */}
+      <Group label="from your saves">
+        <NavButton navKey="recipes" active={loc.screen === 'recipes'} icon={<CookingPot aria-hidden="true" />} label="Recipes" onClick={() => screen('recipes')} />
+        <NavButton navKey="places" active={loc.screen === 'places'} icon={<MapPinned aria-hidden="true" />} label="Places" onClick={() => screen('places')} />
+        <NavButton navKey="ask" active={loc.screen === 'ask'} icon={<MessageCircleQuestion aria-hidden="true" />} label="Ask your archive" onClick={() => screen('ask')} />
       </Group>
 
       <div className="flex flex-col gap-0.5 border-t border-line pt-4">

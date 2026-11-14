@@ -166,10 +166,9 @@ export function ImportDialog({ spec, close }: DialogProps<'import'>) {
             <div><Button variant="soft" disabled={importing} onClick={() => { close(); openDialog({ kind: 'settings', section: 'connections' }); }}><Link2 />Set up a connection</Button></div>
           </Section>
         ) : null}
-        {/* Seam: the guided export walkthrough arrives in the next wave. */}
-        <Section title="Guided Instagram and TikTok export">
-          <p>A step-by-step walkthrough for requesting your data from Instagram or TikTok and bringing the file here. Arriving next.</p>
-          <div><Button variant="ghost" size="sm" className="-ms-2" disabled={importing} onClick={() => { close(); archive.goScreen('guided-import'); }}><Route />See what is planned</Button></div>
+        <Section title="Guided Instagram and TikTok import">
+          <p>Ask Instagram or TikTok for your saves, hand the file over, and see what it holds before anything is saved. You can leave and pick it up again.</p>
+          <div><Button variant="ghost" size="sm" className="-ms-2" disabled={importing} onClick={() => { close(); archive.goScreen('guided-import'); }}><Route />Start the guided import</Button></div>
         </Section>
       </div>
     </Modal>

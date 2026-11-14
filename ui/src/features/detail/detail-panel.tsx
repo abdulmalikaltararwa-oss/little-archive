@@ -22,6 +22,8 @@ import { rememberFocus, type FocusMemory } from '@/lib/focus';
 import { canMorph, COVER_TRANSITION } from '@/lib/transition';
 import { copyText, openReview } from '../actions';
 import { Cover } from '../library/cover';
+import { PlacesEntry } from '../places/detail-entry';
+import { RecipeEntry } from '../recipes/detail-entry';
 
 const STATUS_OPTIONS = (Object.entries(STATUS_NAMES) as [Status, string][]).map(([value, label]) => ({ value, label }));
 
@@ -263,6 +265,10 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
       ) : null}
 
       {spoken ? <div className="mt-5"><Transcript text={spoken.text} /></div> : null}
+
+      {/* What else this save holds: a recipe to cook from, places it names. Each shows nothing where the server has no such feature. */}
+      <RecipeEntry item={item} />
+      <PlacesEntry item={item} allowLeave={allowLeave} />
 
       <form id={formId} onSubmit={event => void submit(event)} className="mt-5 flex flex-col gap-4 border-t border-line pt-5">
         <FormError message={error} />

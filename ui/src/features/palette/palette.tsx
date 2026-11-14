@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { errorMessage, hostLabel, PLATFORM_NAMES } from '@web/utils.js';
 import { Command as CommandPrimitive } from 'cmdk';
 import { cn } from 'cn';
-import { Activity, Archive, Bookmark, Clock, CornerDownLeft, Folder, Heart, LayoutGrid, Monitor, Moon, Plus, Search, Settings, Sparkles, Sun, Upload } from 'lucide-react';
+import { Activity, Archive, Bookmark, Clock, CookingPot, CornerDownLeft, Folder, Heart, LayoutGrid, MapPinned, MessageCircleQuestion, Monitor, Moon, Plus, Route, Search, Settings, Sparkles, Sun, Upload } from 'lucide-react';
 import { Dialog } from 'radix-ui';
 import { useArchive, useArchiveState } from '@/app/archive-context';
 import { useTheme } from '@/app/theme';
@@ -73,19 +73,23 @@ export function CommandPalette({ spec, close }: { spec: OpenDialog; close(): voi
     { id: 'go-review', label: 'Needs review', icon: <Sparkles aria-hidden="true" />, words: 'suggestions ai', run: () => archive.goView('review') },
     { id: 'go-rediscover', label: 'Rediscover', icon: <Bookmark aria-hidden="true" />, words: 'random shuffle surprise', run: () => archive.goView('rediscover') },
     { id: 'go-archived', label: 'Archived', icon: <Archive aria-hidden="true" />, run: () => archive.goView('archived') },
+    { id: 'go-ask', label: 'Ask your archive…', icon: <MessageCircleQuestion aria-hidden="true" />, words: 'question answer', run: () => archive.goScreen('ask') },
+    { id: 'go-recipes', label: 'Recipes', icon: <CookingPot aria-hidden="true" />, words: 'cook food ingredients', run: () => archive.goScreen('recipes') },
+    { id: 'go-places', label: 'Places', icon: <MapPinned aria-hidden="true" />, words: 'map where travel', run: () => archive.goScreen('places') },
     ...(['instagram', 'tiktok', 'web'] as const).map(platform => ({ id: `go-${platform}`, label: `${PLATFORM_NAMES[platform]} saves`, icon: <PlatformIcon platform={platform} />, words: 'source', run: () => archive.goView(`platform:${platform}`) })),
     ...collections.map(collection => ({ id: `go-collection-${collection.id}`, label: collection.name, hint: collection.kind === 'source' ? 'source' : 'collection', icon: <Folder aria-hidden="true" />, words: 'collection folder', run: () => archive.goView(`collection:${collection.id}`) })),
   ], [archive, collections]);
   const actions = useMemo<Entry[]>(() => [
     { id: 'do-save', label: 'Save a link', icon: <Plus aria-hidden="true" />, words: 'add new url', run: () => openDialog({ kind: 'save-link' }) },
     { id: 'do-import', label: 'Import your saves', icon: <Upload aria-hidden="true" />, words: 'file export bring', run: () => openDialog({ kind: 'import' }) },
+    { id: 'do-guided', label: 'Guided Instagram or TikTok import', icon: <Route aria-hidden="true" />, words: 'backlog export archive zip', run: () => archive.goScreen('guided-import') },
     { id: 'do-organize', label: 'Organize library', icon: <Sparkles aria-hidden="true" />, words: 'topics tags ai bulk', run: () => openDialog({ kind: 'organize' }) },
     { id: 'do-activity', label: 'Import activity', icon: <Activity aria-hidden="true" />, words: 'jobs progress', run: () => openDialog({ kind: 'activity' }) },
     { id: 'do-settings', label: 'Settings & connections', icon: <Settings aria-hidden="true" />, words: 'preferences tokens export backup sign out', run: () => openDialog({ kind: 'settings' }) },
     { id: 'do-light', label: 'Appearance: light', icon: <Sun aria-hidden="true" />, words: 'theme', run: () => setTheme('light') },
     { id: 'do-dark', label: 'Appearance: dark', icon: <Moon aria-hidden="true" />, words: 'theme night', run: () => setTheme('dark') },
     { id: 'do-system', label: 'Appearance: match this device', icon: <Monitor aria-hidden="true" />, words: 'theme system auto', run: () => setTheme('system') },
-  ], [setTheme]);
+  ], [archive, setTheme]);
 
   const shownViews = views.filter(entry => matches(entry, lower)).slice(0, lower ? 8 : 6);
   const shownActions = actions.filter(entry => matches(entry, lower)).slice(0, lower ? 8 : 5);
