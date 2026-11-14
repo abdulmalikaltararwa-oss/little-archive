@@ -32,6 +32,9 @@ test('a narrow screen supports navigation, editing, keyboard search and remember
   await expect(palette).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(palette).toHaveCount(0);
+  // The dialog leaves the page first and hands focus back a moment later; a key pressed in between is answered by whatever the
+  // page has focused then, and the hand-back then takes focus from the search box. Wait for it before the next key.
+  await expect.poll(() => page.evaluate(() => document.activeElement !== document.body && !document.activeElement.closest('[role="dialog"]'))).toBe(true);
   await page.keyboard.press('/');
   await expect(searchBox(page)).toBeFocused();
   await search(page, title);
