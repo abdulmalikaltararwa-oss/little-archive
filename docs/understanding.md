@@ -129,7 +129,7 @@ Every tier reports what it used through `server/enrich/usage.py`: model calls, i
 
 ## Settings
 
-All are environment variables (or `.env`). Everything is off or conservative unless set. Keys are read only from the environment, are never part of any response, and never appear in a URL.
+All are environment variables (or `.env`). Everything is off or conservative unless set. Keys are read only from the environment, are never part of any response, and never appear in a URL. An invalid combination stops the server at start with a message naming the setting. `python -m server.cli doctor` checks them before you start, makes no network request, prints no values, and reports which optional features are on.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

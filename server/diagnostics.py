@@ -140,6 +140,14 @@ def diagnose(*, env_file=Path(".env"), environment=None, check_ai=False, check_p
         config = Config.from_env(effective)
         config.validate()
         checks.append(check("configuration", "passed", "configuration_valid", "Configured origins and the data location passed validation.", sources=sources))
+        try:
+            from .enrich.settings import EnrichSettings
+            understanding = EnrichSettings.from_env(effective, config).validate()
+            checks.append(check("understanding", "passed", "understanding_configuration_valid", "Optional understanding settings are valid. Each feature is on only if you set it.",
+                                page_fetch=understanding.fetch_enabled, ai_provider=understanding.ai_provider or "none", transcription=bool(understanding.transcription_provider), shared_cache=understanding.cache_enabled))
+        except ValueError as exc:
+            # The messages name settings, never their values.
+            checks.append(check("understanding", "failed", "understanding_configuration_invalid", "An optional understanding setting is invalid.", str(exc)))
     except (ValueError, OSError, RuntimeError, TypeError):
         checks.append(check("configuration", "failed", "configuration_invalid", "An origin, model setting, or data location is invalid.", "Use an HTTP loopback or HTTPS public origin, keep data outside web, and configure both model fields or neither.", sources=sources))
         config = None

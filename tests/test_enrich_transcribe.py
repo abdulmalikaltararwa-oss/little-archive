@@ -158,6 +158,36 @@ class SettingsTests(unittest.TestCase):
             self.build({"LA_PUBLIC_CACHE_PATH": str(web)})
 
 
+class DoctorTests(unittest.TestCase):
+    """`doctor` validates the new settings without network access and without printing values."""
+
+    def report(self, environment):
+        from unittest.mock import patch
+        from server.diagnostics import diagnose
+        with TemporaryDirectory() as root, patch("server.diagnostics.metadata.version", return_value="1.0.0"):
+            base = {"LA_ADMIN_PASSWORD": "a-long-test-password-123", "LA_DATA_DIR": str(Path(root) / "data"), "LA_PUBLIC_URL": "http://localhost:8787"}
+            return diagnose(env_file=Path(root) / "missing.env", environment={**base, **environment})
+
+    def row(self, report):
+        return next(r for r in report["checks"] if r["id"] == "understanding")
+
+    def test_defaults_are_valid_and_report_what_is_on(self):
+        row = self.row(self.report({}))
+        self.assertEqual((row["status"], row["details"]), ("passed", {"page_fetch": False, "ai_provider": "none", "transcription": False, "shared_cache": False}))
+
+    def test_enabled_features_are_reported_without_secrets(self):
+        report = self.report({"LA_FETCH_ENABLED": "true", "LA_AI_PROVIDER": "gemini", "LA_GEMINI_API_KEY": KEY, "LA_GROQ_API_KEY": KEY + "x"})
+        self.assertEqual(self.row(report)["details"], {"page_fetch": True, "ai_provider": "gemini", "transcription": True, "shared_cache": False})
+        self.assertNotIn(KEY, json.dumps(report))
+
+    def test_a_bad_setting_blocks_before_start_and_names_the_setting_only(self):
+        report = self.report({"LA_GEMINI_API_KEY": KEY})
+        row = self.row(report)
+        self.assertEqual((row["status"], row["code"], report["status"], report["exit_code"]), ("failed", "understanding_configuration_invalid", "blocked", 1))
+        self.assertIn("LA_AI_PROVIDER", row["next_action"])
+        self.assertNotIn(KEY, json.dumps(report))
+
+
 class MeteringAndSchemaTests(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
