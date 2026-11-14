@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The middle of the icon tile's gradient (web/icon.svg). -->
+    <color name="ic_launcher_background">#507158</color>
+</resources>

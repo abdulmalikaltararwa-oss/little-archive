@@ -4,7 +4,7 @@ Hosted mode lets one Little Archive server hold a private library for each of ma
 
 It is off unless you configure it. Without `LA_MODE=hosted`, a server is the single-owner library described in [self-hosting](self-hosting.md), unchanged.
 
-**Status.** This mode is development software. It has been exercised by this repository's automated tests, using signing keys generated in the tests and a fake key endpoint, and by starting the real server process on loopback. It has **not** been run against a live Supabase project, used from a mobile app, load-tested, deployed in a container, or independently security-reviewed. The last section lists exactly what was and was not checked.
+**Status.** This mode is development software. It has been exercised by this repository's automated tests, using signing keys generated in the tests and a fake key endpoint, and by starting the real server process on loopback. It has **not** been run against a live Supabase project, load-tested, deployed in a container, or independently security-reviewed. The [mobile app](mobile-app.md) was used against it on the iOS simulator with a local stand-in for Supabase Auth (sign-up, sign-in, token refresh, account deletion); no real mobile device was used. The last section lists exactly what was and was not checked.
 
 ## Configure
 
@@ -120,7 +120,7 @@ A library is created empty the first time an account makes an authenticated requ
 - **The Chrome extension flow.** Every `/api/extension/*` route answers `404`, and the extension-origin CORS allowance is off. Import tokens are looked up in a single owner library, which a hosted server does not have. People can still import export files through `/api/imports/file`.
 - **The bundled web interface.** It signs in with the owner password, so a hosted server serves the API only and `/` answers `404`.
 - **Per-account model settings.** The model service is the operator's, set by `LA_OLLAMA_URL` and `LA_OLLAMA_MODEL`. No request can change it. With it unset, AI routes answer `503`.
-- **CORS.** No route sends CORS headers. Native HTTP clients do not need them. A browser client on another origin would need an explicit allow-list setting, which does not exist yet.
+- **CORS.** No route sends CORS headers. Native HTTP clients do not need them, and the [mobile app](mobile-app.md#why-native-http-and-no-server-change) uses one. A browser client on another origin would need an explicit allow-list setting, which does not exist yet.
 
 ## Limits
 

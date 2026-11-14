@@ -27,6 +27,15 @@ Covered by automated tests only; not yet run against a live Supabase project, a 
 - In hosted mode the understanding layer runs once per account library, with one worker thread serving every account's queue in turn. A closer read is the metered deep read; automatic transcription is off.
 - Add PyJWT and cryptography as pinned dependencies for token verification.
 
+### iOS and Android app (in development)
+
+A Capacitor app in `mobile/` that runs the existing interface against a self-hosted server or the hosted service. See [the mobile app guide](docs/mobile-app.md). Run on the iOS simulator and an Android emulator against local servers; not run on a physical phone, a real Supabase project or a store build.
+
+- First launch chooses a server (the hosted service or a typed address) after asking `/api/discovery`; sign-in exchanges the owner password for a device token, or uses Supabase email and password with token refresh. Credentials live in the Keychain or an Android Keystore-backed store.
+- A transport in `web/transport.js` (bearer token, native HTTP, `/api` paths only, thumbnails through blob URLs) used only inside the app; `web/app.js` keeps its browser behaviour, and no server change or CORS allowance was needed.
+- Share to Little Archive from the Android share sheet and an iOS Share Extension; the app opens the ordinary save dialog and nothing is saved until Save.
+- Settings: sign out, switch server and, for a hosted account, delete the account (the Supabase Auth user is not removed; see the guide).
+
 ### First v1 foundations
 
 - Retain loaded gallery pages, scroll position, and useful keyboard focus after item edits and favorites; keep random samples stable when the edit does not change search/filter membership.

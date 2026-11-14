@@ -2,6 +2,8 @@
 
 Your Little Archive instance can be installed on a phone like an app, and on Android it appears in the share sheet, so a link shared from a browser or another app opens the "Save a little discovery" dialog with the link already filled in. Sharing into the app never saves by itself: the dialog waits for your tap. Everything talks to your own instance; nothing goes through a project-operated service.
 
+There is also a native iOS and Android app (development software) that adds a share-sheet entry on iPhone as well; see [the mobile app guide](mobile-app.md). This page is about installing the web app.
+
 What is verified and what is not is listed [at the end](#what-was-and-was-not-verified). In short: the pieces were exercised with desktop Chromium, an older WebKit build, and HTTP clients against a local server. Nothing here has been run on a real Android phone or a real iPhone yet.
 
 ## Before you start: HTTPS
