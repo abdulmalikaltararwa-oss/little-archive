@@ -81,19 +81,24 @@ def main(argv=None):
             print(f"Restored {manifest['items']} items into {Path(args.destination).resolve()}.")
             print("Set LA_DATA_DIR to that directory and set a new LA_ADMIN_PASSWORD before starting. Existing import tokens are revoked.")
         elif args.command == "reset-password":
+            from .devices import DeviceTokens
             from .security import hash_password
             from .storage import Store
+            config = Config.from_env()
+            if config.hosted:
+                raise ValueError("Hosted mode has no owner password; accounts sign in through the identity provider.")
             password = getpass.getpass("New owner password (12+ characters): ")
             if password != getpass.getpass("Repeat password: "):
                 raise ValueError("Passwords did not match.")
             encoded = hash_password(password)
-            store = Store(Config.from_env())
+            store = Store(config)
             with store.transaction() as c:
                 c.execute("UPDATE meta SET value=? WHERE key='password_hash'", (encoded,))
                 c.execute("DELETE FROM sessions")
                 c.execute("DELETE FROM extension_tokens")
                 c.execute("UPDATE import_runs SET status='cancelled',coverage='partial' WHERE status='running'")
-            print("Password changed. Sessions and extension tokens revoked. Update .env before a fresh-library restore.")
+            DeviceTokens(config.data_dir).revoke_all()
+            print("Password changed. Sessions, device tokens and extension tokens revoked. Update .env before a fresh-library restore.")
     except (ValueError, OSError) as exc:
         print(f"Little Archive: {exc}", file=sys.stderr)
         return 1
