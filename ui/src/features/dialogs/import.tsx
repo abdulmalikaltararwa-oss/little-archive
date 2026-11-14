@@ -169,7 +169,7 @@ export function ImportDialog({ spec, close }: DialogProps<'import'>) {
         {/* Seam: the guided export walkthrough arrives in the next wave. */}
         <Section title="Guided Instagram and TikTok export">
           <p>A step-by-step walkthrough for requesting your data from Instagram or TikTok and bringing the file here. Arriving next.</p>
-          <div><Button variant="ghost" size="sm" className="-ms-2" disabled={importing} onClick={() => { close(); archive.navigate({ screen: 'guided-import', item: '' }); }}><Route />See what is planned</Button></div>
+          <div><Button variant="ghost" size="sm" className="-ms-2" disabled={importing} onClick={() => { close(); archive.goScreen('guided-import'); }}><Route />See what is planned</Button></div>
         </Section>
       </div>
     </Modal>

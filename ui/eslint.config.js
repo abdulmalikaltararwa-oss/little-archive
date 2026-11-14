@@ -30,7 +30,7 @@ export default tseslint.config(
   },
   {
     // The provider and the hooks that read it belong together.
-    files: ['src/app/archive-context.tsx'],
+    files: ['src/app/archive-context.tsx', 'src/features/feature-kit.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
   {

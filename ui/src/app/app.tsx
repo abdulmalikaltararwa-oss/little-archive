@@ -8,7 +8,7 @@ import { BootScreen, LoginScreen } from '@/features/auth/screens';
 import { DetailPanel } from '@/features/detail/detail-panel';
 import { DialogHost } from '@/features/dialogs/host';
 import { LibraryScreen, SEARCH_INPUT_ID } from '@/features/library/library-screen';
-import { SeamScreen } from '@/features/seams/seam-screen';
+import { FeatureScreen } from '@/features/screens';
 import { Shell } from '@/features/shell/shell';
 import { ArchiveProvider } from './archive-context';
 import { openDialog, useConfirm, useDialogs } from './ui-state';
@@ -22,6 +22,7 @@ export function App({ archive }: { archive: Archive }) {
   const phase = useStore(archive.store, state => state.phase);
   const bootError = useStore(archive.store, state => state.bootError);
   const screen = useStore(archive.store, state => state.loc.screen);
+  const rest = useStore(archive.store, state => state.loc.rest);
   const share = useStore(archive.store, state => state.pendingShare);
   const demo = archive.backend.kind === 'demo';
 
@@ -81,7 +82,7 @@ export function App({ archive }: { archive: Archive }) {
         {phase === 'signed-out' ? <LoginScreen /> : null}
         {phase === 'ready' ? (
           <>
-            <Shell demo={demo}>{screen === 'library' ? <LibraryScreen demo={demo} /> : <SeamScreen screen={screen} demo={demo} />}</Shell>
+            <Shell demo={demo}>{screen === 'library' ? <LibraryScreen demo={demo} /> : <FeatureScreen screen={screen} demo={demo} rest={rest} />}</Shell>
             <DetailPanel />
             <DialogHost />
           </>

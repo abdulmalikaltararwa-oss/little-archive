@@ -1,15 +1,13 @@
 // Placeholder screens for what arrives next: recipes and cook mode, the places map, asking your archive, the
 // guided export import, and the one-time unlock. Each has its address, its place in the navigation and a
 // screen that says plainly that it is not here yet. None of them calls a server route that does not exist.
-import { useEffect, useState } from 'react';
-import { errorMessage } from '@web/utils.js';
+import { useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useArchive } from '@/app/archive-context';
-import { Notice, Whisper } from '@/components/field';
+import { Whisper } from '@/components/field';
 import { Ascii, type ArtName } from '@/components/fx/ascii';
 import { Button } from '@/components/ui/button';
 import type { SeamScreen as SeamName } from '@/data/location';
-import type { Account } from '@/data/types';
 import { VIEW_TITLE_ID } from '@/lib/focus';
 import type { SeamContracts } from './contracts';
 
@@ -60,31 +58,6 @@ const SEAMS: Record<SeamName, SeamCopy> = {
   },
 };
 
-/** The unlock screen can already say what the server reports today (GET /api/account). It offers nothing to buy. */
-function Entitlements() {
-  const archive = useArchive();
-  const [account, setAccount] = useState<Account | null>(null);
-  const [error, setError] = useState('');
-  const real = archive.backend.real;
-  useEffect(() => {
-    if (!real) return;
-    let stale = false;
-    archive.api.account().then(value => { if (!stale) setAccount(value); }, caught => { if (!stale) setError(errorMessage(caught)); });
-    return () => { stale = true; };
-  }, [archive, real]);
-  if (!real) return <Notice className="mt-6 text-start">This demo has no account. On a real server this screen shows what your library is entitled to.</Notice>;
-  if (error) return <Notice className="mt-6 text-start">Your server did not report an account status: {error}</Notice>;
-  if (!account) return null;
-  const reads = account.entitlements.deep_reads;
-  return (
-    <dl className="mt-6 grid w-full grid-cols-2 gap-3 text-start text-sm">
-      <div className="rounded-md bg-card-2 px-4 py-3"><dt className="label-mono">This library</dt><dd className="mt-1 text-ink">{account.mode === 'hosted' ? 'Hosted account' : 'Your own server'}</dd></div>
-      <div className="rounded-md bg-card-2 px-4 py-3"><dt className="label-mono">Unlocked</dt><dd className="mt-1 text-ink">{account.entitlements.unlocked ? 'Yes' : 'Not yet'}</dd></div>
-      <div className="col-span-2 rounded-md bg-card-2 px-4 py-3"><dt className="label-mono">Closer reads this month</dt><dd className="num mt-1 text-ink">{reads.limit == null ? `${reads.used} used · no limit` : `${reads.used} of ${reads.limit} used`}</dd></div>
-    </dl>
-  );
-}
-
 export function SeamScreen({ screen, demo }: { screen: SeamName; demo: boolean }) {
   const archive = useArchive();
   const copy = SEAMS[screen];
@@ -107,7 +80,6 @@ export function SeamScreen({ screen, demo }: { screen: SeamName; demo: boolean }
         </ul>
         <p className="mt-5 text-xs leading-relaxed text-ink-soft">This is a placeholder. Nothing here works yet, and nothing is sent anywhere.</p>
       </div>
-      {screen === 'unlock' ? <Entitlements /> : null}
       <Button className="mt-8" onClick={() => archive.goView('all')}><ArrowLeft />Back to your library</Button>
     </section>
   );

@@ -248,7 +248,7 @@ export function SettingsDialog({ spec, close }: DialogProps<'settings'>) {
       {/* Seam: the one-time unlock arrives in the next wave. Today the screen only reports what the server says. */}
       <Section title="Unlock">
         <p>Little Archive is free on your own server, always. For the hosted service a one-time unlock is on its way.</p>
-        <div><Button variant="ghost" size="sm" className="-ms-2" onClick={() => { close(); archive.navigate({ screen: 'unlock', item: '' }); }}><KeyRound />See what is planned</Button></div>
+        <div><Button variant="ghost" size="sm" className="-ms-2" onClick={() => { close(); archive.goScreen('unlock'); }}><KeyRound />See what is planned</Button></div>
       </Section>
 
       <AccountSection />

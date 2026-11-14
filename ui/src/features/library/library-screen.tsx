@@ -5,7 +5,7 @@ import { cn } from 'cn';
 import { Archive, ArrowRight, Check, ChevronsUpDown, CircleCheck, FolderPlus, Heart, HeartOff, Inbox, LayoutGrid, Plus, Search, ShieldCheck, Shuffle, Sparkles, Tag as TagIcon, Upload, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { openDialog, toast } from '@/app/ui-state';
-import { Ascii, AsciiSpinner, type ArtName } from '@/components/fx/ascii';
+import { AsciiSpinner } from '@/components/fx/ascii';
 import { PlatformIcon } from '@/components/icons';
 import { Pick } from '@/components/pick';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { Segmented } from '@/components/ui/segmented';
 import { viewTitle, withPlatform } from '@/data/location';
 import type { BulkAction, Platform, Sort } from '@/data/types';
 import { VIEW_TITLE_ID } from '@/lib/focus';
+import { StateCard } from '../feature-kit';
 import { Gallery } from './gallery';
 import { Hero } from './hero';
 
@@ -204,17 +205,6 @@ function BulkBar() {
         <X className="size-4" aria-hidden="true" />
       </button>
     </div>
-  );
-}
-
-function StateCard({ art, title, children, actions }: { art: ArtName; title: string; children: React.ReactNode; actions: React.ReactNode }) {
-  return (
-    <section className="mx-auto flex max-w-xl flex-col items-center rounded-2xl border border-dashed border-line-strong bg-card/50 px-6 py-12 text-center sm:py-16">
-      <Ascii name={art} className="mb-6 text-start text-sm leading-[1.15] text-sage dark:text-sage-deep" />
-      <h2 className="display text-3xl text-ink">{title}</h2>
-      <p className="mt-2.5 max-w-sm text-sm leading-relaxed text-ink-soft sm:text-base">{children}</p>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">{actions}</div>
-    </section>
   );
 }
 

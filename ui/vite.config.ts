@@ -13,6 +13,8 @@ export default defineConfig({
   // behind a reverse proxy, from GitHub Pages (the demo) and from inside the phone app.
   base: './',
   plugins: [react(), tailwindcss()],
+  // Several dev servers can run from one checkout (one per port) without sharing a dependency cache.
+  cacheDir: process.env.LA_UI_CACHE || 'node_modules/.vite',
   resolve: {
     alias: {
       '@': path.resolve(here, 'src'),

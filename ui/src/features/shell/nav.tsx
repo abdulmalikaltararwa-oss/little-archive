@@ -8,7 +8,7 @@ import { useArchive, useArchiveState } from '@/app/archive-context';
 import { openDialog } from '@/app/ui-state';
 import { Whisper } from '@/components/field';
 import { PlatformIcon } from '@/components/icons';
-import type { Screen } from '@/data/location';
+import type { SeamScreen } from '@/data/location';
 import type { Collection, Platform } from '@/data/types';
 import { VIEW_TITLE_ID } from '@/lib/focus';
 
@@ -68,7 +68,7 @@ export function NavContent({ onNavigate }: { onNavigate?(): void }) {
     // Chosen from the phone's sheet, the new view announces itself: focus lands on its heading.
     if (onNavigate) requestAnimationFrame(() => document.getElementById(VIEW_TITLE_ID)?.focus({ preventScroll: true }));
   };
-  const screen = (next: Screen) => { archive.navigate({ screen: next, item: '' }); onNavigate?.(); };
+  const screen = (next: SeamScreen) => { archive.goScreen(next); onNavigate?.(); };
   const dialog = (spec: Parameters<typeof openDialog>[0]) => { onNavigate?.(); openDialog(spec); };
   const isView = (view: string) => library && loc.view === view;
   const locals = collections.filter(collection => collection.kind === 'local');

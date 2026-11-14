@@ -123,7 +123,7 @@ export function CommandPalette({ spec, close }: { spec: OpenDialog; close(): voi
                   <Heading>search</Heading>
                   <Row
                     onRun={run}
-                    entry={{ id: 'search-library', label: `Search the library for “${query}”`, hint: 'enter', icon: <Search aria-hidden="true" />, run: () => archive.navigate({ screen: 'library', view: 'all', q: query, platform: '', tag: '', sort: '', item: '' }) }}
+                    entry={{ id: 'search-library', label: `Search the library for “${query}”`, hint: 'enter', icon: <Search aria-hidden="true" />, run: () => archive.navigate({ screen: 'library', view: 'all', q: query, platform: '', tag: '', sort: '', item: '', rest: '' }) }}
                   />
                 </>
               ) : null}
