@@ -7,7 +7,9 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
 import sqlite3
+import stat
 from threading import RLock
 import unicodedata
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -237,18 +239,48 @@ class Store:
         """The hard limit: the quota plus room for the write that crosses it and for clean-up."""
         return self.quota_bytes + max(256 * 1024, self.quota_bytes // 16)
 
+    DISK_FULL_BYTES = 1024 * 1024
+
+    def disk_is_full(self):
+        """True when the volume holding this library has next to no room left.
+
+        SQLite reports "database or disk is full" both for the page limit set on an account's database and for a disk with
+        nothing left. Only the first is the account's doing, and only the first is something deleting content can fix. When
+        the limit is what stopped a write, the disk still has room (the limit is far below what the volume holds).
+        """
+        try:
+            return shutil.disk_usage(self.root).free < self.DISK_FULL_BYTES
+        except OSError:
+            return False
+
     def assets_size(self):
         with self.lock:
             if self.asset_bytes is None:
                 self.asset_bytes = sum(entry.stat(follow_symlinks=False).st_size for entry in os.scandir(self.assets) if entry.is_file(follow_symlinks=False))
             return self.asset_bytes
 
+    def staged_bytes(self):
+        """What a guided import has staged on disk for this library (pieces of an export being uploaded, or the joined file), if anything.
+
+        It is not in the database or the thumbnail folder, but it is the account's data on the service's disk, so it counts as used.
+        """
+        total = 0
+        for folder, _, names in os.walk(self.root / "imports"):
+            for name in names:
+                try:
+                    info = os.lstat(os.path.join(folder, name))
+                except OSError:
+                    continue
+                if stat.S_ISREG(info.st_mode):
+                    total += info.st_size
+        return total
+
     def used_bytes(self):
-        """Live database pages plus local thumbnails; freed pages are reusable, so not counted."""
+        """Live database pages, local thumbnails and staged import files; freed pages are reusable, so not counted."""
         with self.lock:
             with self.transaction() as c:
                 pages, free, size = (c.execute("PRAGMA " + name).fetchone()[0] for name in ("page_count", "freelist_count", "page_size"))
-            return (pages - free) * size + self.assets_size()
+            return (pages - free) * size + self.assets_size() + self.staged_bytes()
 
     def meta(self, key):
         with self.transaction() as c:

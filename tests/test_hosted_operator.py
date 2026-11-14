@@ -15,6 +15,7 @@ from server.diagnostics import diagnose
 
 
 SECRET = "synthetic-legacy-jwt-secret-of-at-least-32-bytes"
+SERVICE_KEY = "sb_secret_synthetic0test0value0not0real0"
 
 
 class HostedOperatorTests(unittest.TestCase):
@@ -24,7 +25,8 @@ class HostedOperatorTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.data = self.root / "data"
         self.environment = {"LA_MODE": "hosted", "LA_SUPABASE_URL": "https://synthetic-project.supabase.test", "LA_SUPABASE_JWT_SECRET": SECRET,
-                            "LA_DATA_DIR": str(self.data), "LA_PUBLIC_URL": "http://localhost:8787"}
+                            "LA_DATA_DIR": str(self.data), "LA_PUBLIC_URL": "http://localhost:8787",
+                            "LA_SUPABASE_SERVICE_KEY": SERVICE_KEY}
 
     def report(self, **changes):
         guards = (patch("socket.create_connection", side_effect=AssertionError("Network was not requested")),
@@ -48,9 +50,23 @@ class HostedOperatorTests(unittest.TestCase):
         for package in ("pyjwt", "cryptography"):
             self.assertEqual(self.row(result, "dependency_" + package)["code"], "dependency_installed")
         serialized = json.dumps(result)
-        for private in (SECRET, str(self.root), "synthetic-project"):
+        for private in (SECRET, SERVICE_KEY, str(self.root), "synthetic-project"):
             self.assertNotIn(private, serialized)
         self.assertFalse(self.data.exists(), "diagnostics must not create the data directory")
+
+    def test_doctor_says_when_deleting_an_account_could_not_delete_its_sign_in(self):
+        missing = self.report(LA_SUPABASE_SERVICE_KEY="")
+        row = self.row(missing, "supabase_admin_key")
+        self.assertEqual((row["status"], row["code"]), ("failed", "supabase_admin_key_missing"))
+        self.assertEqual(missing["exit_code"], 1)
+        self.assertIn("LA_SUPABASE_SERVICE_KEY", row["next_action"])
+        allowed = self.report(LA_SUPABASE_SERVICE_KEY="", LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION="true")
+        self.assertEqual((self.row(allowed, "supabase_admin_key")["status"], allowed["exit_code"]), ("warning", 0))
+        present = self.row(self.report(), "supabase_admin_key")
+        self.assertEqual((present["status"], present["code"]), ("passed", "supabase_admin_key_configured"))
+        self.assertNotIn(SERVICE_KEY, json.dumps([missing, allowed, present]))
+        for bad in ("sb_publishable_" + "x" * 30, "short", "has a space in it" * 3):
+            self.assertEqual(self.row(self.report(LA_SUPABASE_SERVICE_KEY=bad), "configuration")["code"], "configuration_invalid", bad[:12])
 
     def test_doctor_blocks_contradictory_hosted_settings(self):
         self.assertEqual(self.row(self.report(LA_ADMIN_PASSWORD="a-private-owner-password"), "configuration")["code"], "configuration_invalid")

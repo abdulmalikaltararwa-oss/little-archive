@@ -6,18 +6,24 @@ secret that you choose when you start it. Use it with a hosted-mode Little Archi
 
     export STUB_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
     export STUB_PUBLISHABLE_KEY="the sb_publishable_... value from app.config.json"
+    export STUB_SECRET_KEY="sb_secret_$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
     python3 mobile/dev/stub_supabase.py --port 8853 &
 
     LA_MODE=hosted LA_SUPABASE_URL=http://127.0.0.1:8853 LA_SUPABASE_JWT_SECRET="$STUB_JWT_SECRET" \\
+    LA_SUPABASE_SERVICE_KEY="$STUB_SECRET_KEY" \\
     LA_PUBLIC_URL=http://localhost:8852 LA_DATA_DIR=/tmp/la-hosted \\
     python -m uvicorn server.app:create_app --factory --port 8852
+
+(The server refuses to start in hosted mode without LA_SUPABASE_SERVICE_KEY, so that deleting an account can delete its sign-in; the
+stand-in makes up a key for that and removes the user when the server asks.)
 
 Build the app against both with a development config (see docs/mobile-app.md). Settings, all optional:
 
     STUB_EXPIRES_IN    seconds an access token lives (default 3600; use 90 to watch refreshing)
     STUB_CONFIRM=1     sign-up answers "check your email" without a session, like a project that confirms emails
 
-Routes: signup, token (password and refresh_token grants), logout, and an empty key set. Every route requires the
+Routes: signup, token (password and refresh_token grants), logout, an empty key set, and the admin call that deletes a user
+(`DELETE /auth/v1/admin/users/<id>`, which needs the secret key in the `apikey` header). The other routes require the
 publishable key in the `apikey` header, as the real service does.
 """
 import argparse
@@ -26,6 +32,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -53,6 +60,7 @@ class Handler(BaseHTTPRequestHandler):
     secret = ""
     issuer = ""
     publishable = ""
+    secret_key = ""
     lifetime = 3600
     confirm = False
 
@@ -79,6 +87,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send(401, {"code": 401, "error_code": "no_authorization", "msg": "No API key found in request"})
             return False
         return True
+
+    def do_DELETE(self):
+        match = re.fullmatch(r"/auth/v1/admin/users/([0-9a-f-]{36})", urlsplit(self.path).path)
+        if not match:
+            return self.send(404, {"msg": "not found"})
+        if not self.secret_key or self.headers.get("apikey") != self.secret_key:
+            return self.send(401, {"code": 401, "error_code": "no_authorization", "msg": "This endpoint requires a valid secret key"})
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        for email, user in list(USERS.items()):
+            if user["id"] == match.group(1):
+                del USERS[email]
+                for refresh in [r for r, owner in REFRESH.items() if owner == email]:
+                    del REFRESH[refresh]
+                return self.send(200, {"id": user["id"], "email": email})
+        self.send(404, {"code": 404, "error_code": "user_not_found", "msg": "User not found"})
 
     def do_GET(self):
         if urlsplit(self.path).path == "/auth/v1/.well-known/jwks.json":
@@ -135,6 +159,7 @@ def main():
             sys.exit(f"Set {name} first (see the top of this file).")
     Handler.secret = os.environ["STUB_JWT_SECRET"]
     Handler.publishable = os.environ["STUB_PUBLISHABLE_KEY"]
+    Handler.secret_key = os.environ.get("STUB_SECRET_KEY", "")
     Handler.issuer = f"http://127.0.0.1:{args.port}/auth/v1"
     Handler.lifetime = int(os.environ.get("STUB_EXPIRES_IN", "3600"))
     Handler.confirm = os.environ.get("STUB_CONFIRM") == "1"

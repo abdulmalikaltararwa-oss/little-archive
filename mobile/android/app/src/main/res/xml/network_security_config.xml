@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Release builds: https only. The app's own address check (mobile/src/server-url.js) refuses http except to this device;
-     this is the same rule enforced by Android. -->
+<!-- Release builds: https only, to every host. The app's own address check (mobile/src/server-url.js) refuses plain http
+     except to this device, and the emulator's 10.0.2.2 only in a development bundle; Android's rule is stricter than both,
+     which fails closed. The debug build type has its own file (src/debug/res/xml). -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>

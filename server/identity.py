@@ -25,6 +25,10 @@ class IdentityError(Exception):
     """The presented token does not prove an account. Details stay server-side."""
 
 
+class IdentityExpired(IdentityError):
+    """The token was genuine but its time is up. A signed-in phone refreshes it, so it is not counted as a failed sign-in."""
+
+
 class IdentityUnavailable(Exception):
     """Signing keys could not be obtained; this is not evidence about the token."""
 
@@ -184,6 +188,8 @@ class SupabaseVerifier:
                 token, key, algorithms=[algorithm], audience=self.audience, issuer=self.issuer, leeway=self.leeway,
                 options={"require": ["exp", "iat", "sub", "aud", "iss"], "strict_aud": True, "enforce_minimum_key_length": True},
             )
+        except jwt.ExpiredSignatureError as exc:
+            raise IdentityExpired("Token expired.") from exc
         except jwt.PyJWTError as exc:
             raise IdentityError("Token rejected.") from exc
         try:

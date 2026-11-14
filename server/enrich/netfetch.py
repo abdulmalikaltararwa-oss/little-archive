@@ -8,8 +8,17 @@ What is enforced on every request and every redirect hop:
   IPv4 address are refused), and a single mixed answer is refused as a whole;
 * the connection is then made to the validated IP address with the original host as
   ``Host`` and TLS server name, so a second DNS answer cannot redirect it (rebinding);
-* limits on redirects, bytes and total time; a small content-type allowlist per call;
+* limits on redirects, bytes and total time (the time limit also bounds each lookup-and-connect step, not only the
+  download); a small content-type allowlist per call;
+* a response is read as it comes and never decoded by the HTTP library: only gzip and deflate are understood, they are
+  inflated here under the same byte limit, so a few kilobytes cannot expand into gigabytes, and any other
+  Content-Encoding is refused;
 * no cookies are sent, none are kept, and no environment proxy settings are used.
+
+This is meant to be safe on a service where any account can ask for a read, not only for a single owner. Two things it
+cannot do from inside the process: a name server that never answers holds one worker thread for the system
+resolver's own timeout (bound how many reads run at once, as the hosted limits do), and a service that can reach
+private networks through some address this list does not know should also deny them at the firewall. See docs/hosted-mode.md.
 
 The User-Agent says what this is. There is no proxy rotation, no spoofed crawler
 identity and no login. A site that refuses the request simply yields an error.
@@ -22,6 +31,7 @@ import re
 import socket
 import time
 from urllib.parse import urljoin, urlsplit
+import zlib
 
 import httpx
 
@@ -38,7 +48,13 @@ _BLOCKED_NETWORKS = [ipaddress.ip_network(n) for n in (
     "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24",
     "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
     "224.0.0.0/4", "240.0.0.0/4",
+    # Azure's host-side wire server answers on this public-looking address from inside a virtual machine.
+    "168.63.129.16/32",
     "::/128", "::1/128", "::/96", "64:ff9b:1::/48", "100::/64", "2001:db8::/32", "2001:10::/28", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8",
+    # Listed so the answer does not depend on which Python release's idea of "global" is running: IPv4-translated
+    # addresses, the IETF protocol-assignment block (Teredo, ORCHID and anycast helpers), the new documentation block
+    # and segment-routing identifiers.
+    "::ffff:0:0:0/96", "2001::/23", "3fff::/20", "5f00::/16",
 )]
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 _BLOCKED_NAMES = {"localhost", "metadata", "metadata.google.internal"}
@@ -83,7 +99,7 @@ def system_resolver(host: str, port: int) -> list[str]:
 def _host_kind(host: str):
     """Return an ip_address for a canonical IP literal, else the cleaned DNS name. Raises FetchError."""
     host = host.strip().rstrip(".").lower()
-    if not host or len(host) > 253:
+    if not host or len(host) > 253 or "%" in host:  # a zone or scope identifier is never part of a public address
         raise FetchError("invalid_url", "That is not a valid address.")
     try:
         return ipaddress.ip_address(host)
@@ -97,6 +113,19 @@ def _host_kind(host: str):
         host = host.encode("idna").decode("ascii")
     except UnicodeError as exc:
         raise FetchError("invalid_url", "That is not a valid address.") from exc
+    # Name preparation maps look-alike characters (full-width digits, ideographic full stops) to ASCII, so what
+    # looked like a name can turn out to be an address. Judge the prepared form by the same rules as the typed one.
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        if not _NUMERIC_HOST.fullmatch(host):
+            pass
+        else:
+            raise FetchError("blocked_destination", "That address is not allowed for server-side reading.")
+    else:
+        # Only a canonical literal, typed as such, is an address. One that only became an address after preparation
+        # is an obfuscation, public or not, and is not followed.
+        raise FetchError("blocked_destination", "That address is not allowed for server-side reading.")
     labels = host.split(".")
     if len(labels) < 2 or not all(_LABEL.fullmatch(label) for label in labels):
         raise FetchError("blocked_destination", "That address is not allowed for server-side reading.")
@@ -183,11 +212,18 @@ class SafeFetcher:
         try:
             current, redirects = url, 0
             while True:
+                if self.clock() >= deadline:
+                    raise FetchError("timeout", "The site was too slow to answer.")
                 parts, host, port, addresses = self._destination(current)
                 outcome, failure = None, None
                 for address in addresses[:2]:
+                    remaining = deadline - self.clock()
+                    if remaining <= 0:
+                        raise FetchError("timeout", "The site was too slow to answer.")
+                    # Each connection attempt gets what is left of the whole allowance, never a fresh one.
+                    step = httpx.Timeout(connect=min(5.0, self.timeout, remaining), read=min(self.timeout, remaining), write=min(self.timeout, remaining), pool=min(self.timeout, remaining))
                     try:
-                        outcome = self._request(client, parts, host, port, address, accept, allowed_types, limit, deadline)
+                        outcome = self._request(client, parts, host, port, address, accept, allowed_types, limit, deadline, step)
                         break
                     except _ConnectFailed as exc:
                         failure = exc
@@ -207,14 +243,14 @@ class SafeFetcher:
         finally:
             client.close()
 
-    def _request(self, client, parts, host, port, address, accept, allowed_types, limit, deadline):
+    def _request(self, client, parts, host, port, address, accept, allowed_types, limit, deadline, timeout=None):
         literal = f"[{address}]" if address.version == 6 else str(address)
         path = (parts.path or "/") + (("?" + parts.query) if parts.query else "")
         default_port = 443 if parts.scheme == "https" else 80
         headers = {"Host": host if port == default_port else f"{host}:{port}", "User-Agent": self.user_agent, "Accept": accept, "Accept-Encoding": "identity"}
         extensions = {"sni_hostname": host} if parts.scheme == "https" else {}
         try:
-            with client.stream("GET", f"{parts.scheme}://{literal}:{port}{path}", headers=headers, extensions=extensions) as response:
+            with client.stream("GET", f"{parts.scheme}://{literal}:{port}{path}", headers=headers, extensions=extensions, **({"timeout": timeout} if timeout is not None else {})) as response:
                 if response.status_code in REDIRECT_CODES:
                     location = response.headers.get("location", "")
                     if not location or len(location) > 4096:
@@ -228,14 +264,39 @@ class SafeFetcher:
                 declared = response.headers.get("content-length", "")
                 if declared.isdigit() and int(declared) > limit:
                     raise FetchError("too_large", "The page is larger than the size limit.")
+                inflater = _inflater(response.headers.get("content-encoding", ""))
+                # A transport that already holds the whole body (a test double) has had it decoded by the library; a real
+                # connection has not, and is read below exactly as it arrives.
+                preloaded = response.is_stream_consumed and hasattr(response, "_content")
+                if preloaded:
+                    inflater = None
                 chunks, total = [], 0
-                for chunk in response.iter_bytes():
-                    total += len(chunk)
-                    if total > limit:
-                        raise FetchError("too_large", "The page is larger than the size limit.")
+                # iter_raw: what came over the wire, undecoded. Decoding is done below, with a ceiling.
+                for chunk in ([response.content] if preloaded else response.iter_raw()):
                     if self.clock() > deadline:
                         raise FetchError("timeout", "The site was too slow to answer.")
-                    chunks.append(chunk)
+                    if inflater is None:
+                        total += len(chunk)
+                        if total > limit:
+                            raise FetchError("too_large", "The page is larger than the size limit.")
+                        chunks.append(chunk)
+                        continue
+                    pending = chunk
+                    while pending:
+                        try:
+                            out = inflater.decompress(pending, limit + 1 - total)
+                        except zlib.error as exc:
+                            raise FetchError("request_failed", "The site could not be read.") from exc
+                        total += len(out)
+                        if total > limit:
+                            raise FetchError("too_large", "The page is larger than the size limit.")
+                        chunks.append(out)
+                        pending = inflater.unconsumed_tail
+                if inflater is not None:
+                    tail = inflater.flush()
+                    if total + len(tail) > limit:
+                        raise FetchError("too_large", "The page is larger than the size limit.")
+                    chunks.append(tail)
                 return _Response(response.status_code, content_type, b"".join(chunks))
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise _ConnectFailed() from exc
@@ -243,6 +304,16 @@ class SafeFetcher:
             raise FetchError("timeout", "The site was too slow to answer.") from exc
         except (httpx.HTTPError, httpx.InvalidURL, OSError) as exc:
             raise FetchError("request_failed", "The site could not be read.") from exc
+
+
+def _inflater(header: str):
+    """None for an unencoded body; a bounded-output decompressor for gzip or deflate; anything else is refused."""
+    names = [part.strip().lower() for part in header.split(",") if part.strip()]
+    if not names or names == ["identity"]:
+        return None
+    if len(names) != 1 or names[0] not in {"gzip", "x-gzip", "deflate"}:
+        raise FetchError("unsupported_encoding", "The site returned content in an encoding that is not read.")
+    return zlib.decompressobj(zlib.MAX_WBITS | 32)  # gzip or zlib framing, detected from the first bytes
 
 
 @dataclass(frozen=True)

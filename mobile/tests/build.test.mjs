@@ -84,3 +84,24 @@ test('a development configuration can point the build at local servers; a config
     assert.throws(() => build({ LA_APP_CONFIG: bad }), /secret|publishable/);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('a release bundle holds no trace of the emulator address; only a build that asks for a development bundle accepts it', () => {
+  const release = build();
+  const debug = build({ LA_DEBUG_BUILD: '1' });
+  try {
+    assert.doesNotMatch(read(release, 'native/boot.js'), /10\.0\.2\.2|__LA_DEBUG_BUILD__/, 'the release bundle has the address check without the emulator host');
+    assert.match(read(debug, 'native/boot.js'), /10\.0\.2\.2/);
+    assert.doesNotMatch(read(debug, 'native/boot.js'), /__LA_DEBUG_BUILD__/, 'the flag is a build-time literal, not something the page can set');
+  } finally { rmSync(release, { recursive: true, force: true }); rmSync(debug, { recursive: true, force: true }); }
+});
+
+test('the configuration is checked by the same rule as the bundle: an emulator address needs a development build', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'la-config-'));
+  try {
+    const dev = path.join(directory, 'emulator.json');
+    writeFileSync(dev, JSON.stringify({ ...JSON.parse(readFileSync(shipped, 'utf8')), hostedServerUrl: 'http://10.0.2.2:8852' }));
+    assert.throws(() => build({ LA_APP_CONFIG: dev }), /hostedServerUrl/, 'a release build refuses to be pointed at the emulator host');
+    const out = build({ LA_APP_CONFIG: dev, LA_DEBUG_BUILD: '1' });
+    try { assert.ok(read(out, 'native/boot.js').includes('http://10.0.2.2:8852')); } finally { rmSync(out, { recursive: true, force: true }); }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

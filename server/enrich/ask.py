@@ -343,7 +343,7 @@ class AskService:
         payload = json.dumps({"question": question, "saves": [{"ref": r, "passages": [{"id": p["id"], "field": p["field"], "text": p["text"]} for p in shown[r]["passages"]]} for r in order]},
                              ensure_ascii=False)
         try:
-            raw = structured_call(self.service, system=ASK_SYSTEM, user=payload, schema=ASK_OUTPUT, max_tokens=900, items=len(order))
+            raw = structured_call(self.service, system=ASK_SYSTEM, user=payload, schema=ASK_OUTPUT, max_tokens=900, items=len(order), feature="ask")
         except FeatureError as exc:
             if exc.code not in {"ai_failed", "ai_invalid"}:
                 raise

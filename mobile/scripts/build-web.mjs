@@ -11,12 +11,19 @@
  * Environment:
  *   LA_APP_CONFIG  a different config file, for a development build against a local server (it still has to pass validation)
  *   LA_WWW_DIR     a different output folder (the tests use a temporary one)
+ *   LA_DEBUG_BUILD set to 1 for a development bundle: it additionally accepts http://10.0.2.2 (the Android emulator's name
+ *                  for the computer), which a release bundle refuses. Never set it for a build that is shipped.
  */
 import { build } from 'esbuild';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SECRET_LOOKING, validateConfig } from '../src/config.js';
+
+// A development bundle is chosen here, once, and applies to the address check while the configuration is validated below as
+// well as to the bundle (esbuild's `define` replaces __LA_DEBUG_BUILD__ with a literal, so a release bundle holds no trace of it).
+const debugBuild = ['1', 'true'].includes(String(process.env.LA_DEBUG_BUILD || '').toLowerCase());
+globalThis.__LA_DEBUG_BUILD__ = debugBuild;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -65,6 +72,9 @@ await build({
   logLevel: 'warning',
   // The interface is loaded at run time, after sign-in, not bundled with the shell.
   external: ['/app.js'],
+  define: { __LA_DEBUG_BUILD__: String(debugBuild) },
+  // Syntax-only minification, so the branch the flag turns off (and the host name in it) is removed from a release bundle.
+  minifySyntax: true,
   plugins: [{
     name: 'app-config',
     setup(b) {
@@ -89,4 +99,4 @@ for await (const file of files(out)) {
   for (const key of keys) if (key !== config.supabasePublishableKey) throw new Error(`${path.relative(out, file)} contains a Supabase key that is not the configured publishable key.`);
 }
 
-console.log(`Built ${path.relative(process.cwd(), out) || '.'} (hosted service ${config.hostedServerUrl}${configPath === path.join(root, 'app.config.json') ? '' : `, development configuration ${configPath}`}).`);
+console.log(`Built ${path.relative(process.cwd(), out) || '.'} (hosted service ${config.hostedServerUrl}${configPath === path.join(root, 'app.config.json') ? '' : `, development configuration ${configPath}`}${debugBuild ? ', DEVELOPMENT BUNDLE: do not ship' : ''}).`);

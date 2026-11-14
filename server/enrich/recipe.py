@@ -921,7 +921,7 @@ class RecipeService:
         thin_rules = method == "auto" and doc is not None and used == "rules" and not doc["steps"]
         if (doc is None or thin_rules) and method in {"auto", "ai"} and caps["ai"] and ev.fields:
             tried.append("ai")
-            raw = structured_call(self.service, system=RECIPE_SYSTEM, user=ev.payload(), schema=RECIPE_OUTPUT, max_tokens=2048, item_id=item_id)
+            raw = structured_call(self.service, system=RECIPE_SYSTEM, user=ev.payload(), schema=RECIPE_OUTPUT, max_tokens=2048, item_id=item_id, feature="recipes")
             candidate = verify_ai_recipe(raw, ev, fallback_title=title)
             candidate["provenance"] = {**candidate["provenance"], **ai_label(self.service, ev)}
             if doc is None or len(candidate["ingredients"]) + len(candidate["steps"]) > len(doc["ingredients"]) + len(doc["steps"]):

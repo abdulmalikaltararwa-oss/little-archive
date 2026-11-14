@@ -12,6 +12,7 @@ class ClassificationWorker:
         self.stopping = threading.Event()
         self.wake = threading.Event()
         self.thread = None
+        self.denied = 0
 
     def fingerprint(self, item):
         # Hash the classifier's actual bounded input projection, not a second
@@ -30,8 +31,10 @@ class ClassificationWorker:
         }
         return hashlib.sha256(json_text(data).encode()).hexdigest()
 
-    def enqueue(self, ids):
-        count = 0
+    def enqueue(self, ids, admit=None):
+        """Queue the items that need a job. `admit()` (hosted mode) is asked once for each job that would be new or
+        requeued and may say no; the number it refused is left in `denied`. Items that already have a job never ask."""
+        count, self.denied = 0, 0
         with self.store.transaction() as c:
             for iid in dict.fromkeys(ids):
                 item = self.store.get_item(iid, c)
@@ -40,6 +43,9 @@ class ClassificationWorker:
                 digest = self.fingerprint(item)
                 old = c.execute("SELECT id,status FROM ai_jobs WHERE item_id=? AND input_hash=?", (iid, digest)).fetchone()
                 if old and old["status"] in {"queued", "running", "completed"}:
+                    continue
+                if admit is not None and not admit():
+                    self.denied += 1
                     continue
                 if old:
                     c.execute("UPDATE ai_jobs SET status='queued',error='',updated_at=? WHERE id=?", (now(), old["id"]))

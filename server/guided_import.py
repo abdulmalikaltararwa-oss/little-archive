@@ -224,6 +224,9 @@ class GuidedImports:
     def create(self, *, platform: str, source_account: str, filename: str, size_bytes: int, sha256: str | None) -> dict:
         if size_bytes < 1 or size_bytes > self.limits.max_archive_bytes:
             raise FeatureError(413, f"This file is larger than this server accepts for an import ({self.limits.max_archive_bytes // MIB} MiB).", "file_too_large", max_bytes=self.limits.max_archive_bytes)
+        if self.store.quota_bytes is not None and self.store.used_bytes() + size_bytes > self.store.quota_bytes:
+            # A hosted account's staged upload counts toward its storage quota (Store.used_bytes), so say so before any piece is sent.
+            raise FeatureError(507, "This library does not have room for a file this size. Delete items or thumbnails to make room, then add the file again.", "storage_full")
         self._prune()
         with self.store.lock:
             with self.store.transaction() as c:
