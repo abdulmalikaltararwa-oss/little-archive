@@ -10,6 +10,7 @@ existing query runs unchanged inside the caller's own database.
 from collections import OrderedDict
 from contextlib import contextmanager
 import hashlib
+import logging
 import os
 from pathlib import Path
 import re
@@ -23,10 +24,13 @@ from weakref import WeakValueDictionary
 from .identity import valid_user_id
 from .storage import LibraryClosed, Store, now
 
+log = logging.getLogger("little_archive")
+
 
 ACCOUNT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS deleted_accounts(user_hash TEXT PRIMARY KEY, deleted_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pending_jobs(user_id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS auth_deletions(user_id TEXT PRIMARY KEY, requested_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '');
 """
 TOMBSTONE_DAYS = 30
 DELETING = ".deleting-"
@@ -314,8 +318,9 @@ class AccountWorker:
     account's failure from stopping the rest.
     """
 
-    def __init__(self, libraries):
+    def __init__(self, libraries, deletions=None):
         self.libraries, self.stopping, self.wake, self.thread, self.backoff = libraries, Event(), Event(), None, 1
+        self.deletions, self.deletion_thread = deletions, None  # sign-in deletions still owed to the identity provider
 
     def adopt(self, store, service, meters=None):
         """Attach an account library's understanding service and route its queueing through here.
@@ -418,12 +423,26 @@ class AccountWorker:
     def start(self):
         self.thread = Thread(target=self.run, daemon=True, name="little-archive-accounts")
         self.thread.start()
+        if self.deletions is not None:
+            # Its own thread: a slow identity provider must not hold up anyone's queued work.
+            self.deletion_thread = Thread(target=self.run_deletions, daemon=True, name="little-archive-sign-in-deletions")
+            self.deletion_thread.start()
 
     def stop(self):
         self.stopping.set()
         self.wake.set()
         if self.thread:
             self.thread.join(timeout=2)
+        if self.deletion_thread:
+            self.deletion_thread.join(timeout=2)
+
+    def run_deletions(self, interval=15):
+        while not self.stopping.is_set():
+            try:
+                self.deletions.tick()
+            except Exception:
+                log.warning("Retrying sign-in deletions failed unexpectedly; it will be tried again.", exc_info=False)
+            self.stopping.wait(interval)
 
     def run(self):
         while not self.stopping.is_set():

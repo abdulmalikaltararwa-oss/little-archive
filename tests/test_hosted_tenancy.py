@@ -447,7 +447,7 @@ class StorageQuotaTests(HostedCase):
         user, auth = self.account()
         ids, refused = self.fill(auth)
         self.assertEqual(refused.status_code, 507)
-        self.assertEqual(self.ok(auth, "POST", "/api/account/delete", {"confirm": "DELETE"}).json(), {"deleted": True})
+        self.assertEqual(self.ok(auth, "POST", "/api/account/delete", {"confirm": "DELETE"}).json(), {"deleted": True, "auth_user_deleted": False, "auth_deletion": "not_configured"})
         self.assertFalse((self.data / "users" / user).exists())
 
     def expanding_archive(self, members=40):
@@ -597,7 +597,7 @@ class AccountDeletionTests(HostedCase):
         self.assertEqual(self.status(a, "POST", "/api/account/delete", {"confirm": "DELETE", "user_id": bob}), 422)
         self.assertEqual(self.client.post("/api/account/delete", json={"confirm": "DELETE"}).status_code, 401)
         self.assertTrue((self.data / "users" / alice / "library.sqlite3").is_file(), "refused requests delete nothing")
-        self.assertEqual(self.ok(a, "POST", "/api/account/delete", {"confirm": "DELETE"}).json(), {"deleted": True})
+        self.assertEqual(self.ok(a, "POST", "/api/account/delete", {"confirm": "DELETE"}).json(), {"deleted": True, "auth_user_deleted": False, "auth_deletion": "not_configured"})
         self.assertFalse((self.data / "users" / alice).exists())
         self.assertEqual({path.name for path in (self.data / "users").iterdir()}, {bob})
         after = self.everything_on_disk()

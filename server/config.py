@@ -138,7 +138,7 @@ class Config:
             raise ValueError("LA_MODE must be self-hosted (the default) or hosted.")
         if self.mode == SELF_HOSTED:
             # A half-configured identity provider must never look like it is in effect.
-            if self.supabase_url or self.supabase_jwt_secret or self.supabase_jwt_issuer:
+            if self.supabase_url or self.supabase_jwt_secret or self.supabase_jwt_issuer or self.supabase_service_key:
                 raise ValueError("LA_SUPABASE_* settings apply only with LA_MODE=hosted. Remove them or set LA_MODE=hosted.")
             return
         if self.admin_password:

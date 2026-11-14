@@ -73,7 +73,7 @@ UNLIMITED = {"hosted_rate_address_per_minute": 0, "hosted_rate_account_per_minut
 
 def hosted_config(root, **settings):
     return Config(data_dir=root / "data", public_url="http://testserver", testing=True, mode="hosted",
-                  supabase_url=SUPABASE_URL, **{**UNLIMITED, **settings})
+                  **{"supabase_url": SUPABASE_URL, "supabase_jwt_issuer": ISSUER, **UNLIMITED, **settings})
 
 
 def hosted_app(root, *keys, **settings):

@@ -142,8 +142,8 @@ class BodyLimitMiddleware:
         await self.app(scope, replay, send)
 
 
-def create_app(config: Config | None = None, *, identity=None, entitlements=None):
-    """`identity` and `entitlements` replace the hosted defaults (tests, future providers)."""
+def create_app(config: Config | None = None, *, identity=None, entitlements=None, auth_admin=None):
+    """`identity`, `entitlements` and `auth_admin` replace the hosted defaults (tests, future providers)."""
     config = config or Config.from_env()
     config.validate()
     config.require_account_deletion()
@@ -151,9 +151,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     if hosted:
         from .entitlements import SQLiteEntitlements, SuggestionLimits
         from .identity import IdentityError, IdentityExpired, IdentityUnavailable, SupabaseVerifier
+        from .account_deletion import AuthDeletions
+        from .supabase_admin import SupabaseAdmin
         from .tenancy import AccountDeleted, AccountWorker, LibraryManager, release_orphans, understanding_environment
         owner_store, devices, enrichment, libraries = None, None, None, LibraryManager(config)
-        meters = hosted_limits = None  # replaced just below
+        meters = hosted_limits = auth_deletions = None  # replaced just below
         entitlements = entitlements or SQLiteEntitlements(
             libraries.accounts_path, config.hosted_deep_reads_monthly, config.hosted_free_deep_reads_monthly,
             suggestion_limits=SuggestionLimits(config.hosted_suggestions_daily_free, config.hosted_suggestions_monthly_free,
@@ -168,12 +170,16 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         meters, hosted_limits = AccountMeters(entitlements), HostedLimits(config)
 
         # One understanding service per account library, all served by one worker thread.
-        worker, environment = AccountWorker(libraries), understanding_environment(config)
+        # Deleting an account also deletes its Supabase sign-in, when the project's secret key is configured; see account_deletion.py.
+        if auth_admin is None and config.supabase_service_key:
+            auth_admin = SupabaseAdmin(config.supabase_url, config.supabase_service_key)
+        auth_deletions = AuthDeletions(libraries, auth_admin) if auth_admin is not None else None
+        worker, environment = AccountWorker(libraries, auth_deletions), understanding_environment(config)
         libraries.prepare = lambda store: worker.adopt(store, build_enrichment(store, config, environ=environment), meters)
     else:
         # There is exactly one library and no account bookkeeping in this mode.
         owner_store, libraries, identity, quota, limits = Store(config), None, None, None, None
-        meters = hosted_limits = None
+        meters = hosted_limits = auth_deletions = None
         devices, entitlements = DeviceTokens(config.data_dir, config.device_token_idle_days, config.device_token_max_days), OwnerEntitlements()
         enrichment = owner_store.enrichment = build_enrichment(owner_store, config)
         worker = enrichment.worker
@@ -188,7 +194,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     app = FastAPI(title="Little Archive", version=__version__, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.store, app.state.config, app.state.worker, app.state.enrichment = owner_store, config, worker, enrichment
     app.state.libraries, app.state.entitlements, app.state.identity, app.state.devices = libraries, entitlements, identity, devices
-    app.state.meters, app.state.limits = meters, hosted_limits
+    app.state.meters, app.state.limits, app.state.auth_deletions = meters, hosted_limits, auth_deletions
     app.add_middleware(BodyLimitMiddleware, hosted=limits)
     if hosted:
         # Around the body reader: address budget first, then sign-in, both before a request body is read.
@@ -484,9 +490,21 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
 
     @app.post("/api/account/delete", dependencies=hosted_route)
     def delete_account(data: AccountDeletion, auth=Depends(owner)):
-        """Permanent: the caller's library, thumbnails, allowance and unlock records."""
+        """Permanent: the caller's library, thumbnails and unlock record, and then their Supabase sign-in.
+
+        200 with `auth_user_deleted: true` when both are gone. 202 with `auth_deletion: "pending"` when the library is gone and the
+        sign-in could not be deleted yet; it is retried until Supabase confirms. 200 with `auth_deletion: "not_configured"` on a
+        server whose operator chose to run without the secret key: the library is gone and the sign-in is not.
+        """
+        if auth_deletions is not None:
+            auth_deletions.request(auth.user_id)  # written first, so a failure part-way is finished later, not forgotten
         libraries.delete(auth.user_id)
-        return {"deleted": True}
+        if auth_deletions is None:
+            return {"deleted": True, "auth_user_deleted": False, "auth_deletion": "not_configured"}
+        if auth_deletions.attempt(auth.user_id) == "done":
+            return {"deleted": True, "auth_user_deleted": True}
+        return JSONResponse({"deleted": True, "auth_user_deleted": False, "auth_deletion": "pending",
+                             "detail": "Your library is deleted. Deleting your sign-in did not finish yet; it is retried automatically until it does."}, status_code=202)
 
     @app.get("/api/items")
     def list_items(q: str = Query("", max_length=500), platform: Literal["", "instagram", "tiktok", "web"] = "", collection_id: str = "", tag: str = "", status: Literal["", "inbox", "to_revisit", "done", "archived"] = "", favorite: bool | None = None, needs_review: bool | None = None, sort: Literal["recent", "oldest", "title", "random"] = "recent", limit: int = Query(60, ge=1, le=200), offset: int = Query(0, ge=0, le=1000000), auth=Depends(owner)):
