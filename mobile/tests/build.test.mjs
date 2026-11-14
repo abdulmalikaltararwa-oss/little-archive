@@ -1,19 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.resolve(here, '../scripts/build-web.mjs');
-const web = path.resolve(here, '../../web');
+const ui = path.resolve(here, '../../ui');
 const shipped = path.resolve(here, '../app.config.json');
 
-function build(env = {}) {
+// A small interface build with the shape Vite makes: an index.html that lists chunks as module scripts, a manifest, a chunk
+// that is loaded later, a stylesheet that names an asset, and a demo page with a chunk of its own that the app must not take.
+function interfaceBuild() {
+  const dist = mkdtempSync(path.join(tmpdir(), 'la-ui-'));
+  const put = (name, text) => { mkdirSync(path.dirname(path.join(dist, name)), { recursive: true }); writeFileSync(path.join(dist, name), text); };
+  put('index.html', [
+    '<!doctype html>', '<html lang="en">', '  <head>', '    <meta charset="utf-8">',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">',
+    '    <title>Little Archive</title>', '    <link rel="icon" href="./icon.svg" type="image/svg+xml">',
+    '    <script src="./theme-init.js"></script>',
+    '    <script type="module" crossorigin src="./assets/shared-CCCC.js"></script>',
+    '    <script type="module" crossorigin src="./assets/main-AAAA.js"></script>',
+    '    <link rel="stylesheet" crossorigin href="./assets/main-DDDD.css">',
+    '  </head>', '  <body>', '    <div id="app"></div>', '  </body>', '</html>', ''].join('\n'));
+  put('demo.html', '<!doctype html><script type="module" src="./assets/demo-FFFF.js"></script>');
+  put('theme-init.js', '(function () { document.documentElement.dataset.theme = "light"; })();\n');
+  put('icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  // The entry picks a backend when it starts, so it can reach the demo's chunk (with the demo's photos) as well as the ones it uses.
+  put('assets/main-AAAA.js', 'import { shared } from "./shared-CCCC.js";\nexport const later = () => import("./screen-BBBB.js");\nexport const demo = () => import("./demo-FFFF.js");\nshared();\n');
+  put('assets/shared-CCCC.js', 'export const shared = () => 1;\n');
+  put('assets/screen-BBBB.js', 'export default 2;\n');
+  put('assets/demo-FFFF.js', 'export const demo = "synthetic records";\n');
+  put('assets/001-HHHH.webp', 'a photo of nothing');
+  put('assets/main-DDDD.css', '@font-face { font-family: T; src: url(./icon-GGGG.svg); }\nbody { color: red; }\n');
+  put('assets/icon-GGGG.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  // Vite 8 writes no key for the html pages. The entry is a shared chunk, named with a leading underscore, that holds its own css and assets.
+  put('.vite/manifest.json', JSON.stringify({
+    '_shared-CCCC.js': { file: 'assets/shared-CCCC.js', name: 'shared' },
+    '_main-AAAA.js': { file: 'assets/main-AAAA.js', name: 'main', imports: ['_shared-CCCC.js'], dynamicImports: ['src/screen.tsx', 'src/data/backends/demo.ts'], css: ['assets/main-DDDD.css'], assets: ['assets/icon-GGGG.svg'] },
+    'src/screen.tsx': { file: 'assets/screen-BBBB.js', name: 'screen', src: 'src/screen.tsx', isDynamicEntry: true, imports: ['_shared-CCCC.js'] },
+    'src/data/backends/demo.ts': { file: 'assets/demo-FFFF.js', name: 'demo', src: 'src/data/backends/demo.ts', isDynamicEntry: true, assets: ['assets/001-HHHH.webp'] },
+  }));
+  return dist;
+}
+
+const fixture = interfaceBuild();
+test.after(() => rmSync(fixture, { recursive: true, force: true }));
+
+function build(env = {}, dist = fixture) {
   const out = mkdtempSync(path.join(tmpdir(), 'la-www-'));
-  try { execFileSync(process.execPath, [script], { env: { ...process.env, LA_WWW_DIR: out, ...env }, stdio: 'pipe' }); }
+  try { execFileSync(process.execPath, [script], { env: { ...process.env, LA_WWW_DIR: out, LA_UI_DIST: dist, ...env }, stdio: 'pipe' }); }
   catch (error) { rmSync(out, { recursive: true, force: true }); throw new Error(String(error.stderr || error.message)); }
   return out;
 }
@@ -25,34 +63,77 @@ function* walk(directory, base = directory) {
 }
 const read = (...parts) => readFileSync(path.join(...parts), 'utf8');
 
-test('the bundle holds the shared interface byte for byte, the app shell, and nothing else', () => {
+test('the bundle holds what index.html reaches of the interface, byte for byte, and the app shell, and nothing else', () => {
   const out = build();
   try {
-    assert.deepEqual([...walk(out)].sort(), ['app.js', 'fonts/Fraunces-OFL.txt', 'fonts/fraunces-soft.woff2', 'icon.svg', 'index.html', 'native/boot.js', 'native/native.css', 'styles.css', 'utils.js']);
-    for (const name of ['app.js', 'utils.js', 'styles.css', 'icon.svg']) assert.equal(read(out, name), read(web, name), `${name} is copied, not changed`);
-    // The shell is bundled with the transport; the interface does not import it (the public demo's file list is fixed).
-    assert.match(read(out, 'native/boot.js'), /createTransport/);
-    assert.doesNotMatch(read(out, 'app.js'), /from '\.\/transport\.js'|import\(.\.\/transport/);
+    assert.deepEqual([...walk(out)].sort(), ['assets/icon-GGGG.svg', 'assets/main-AAAA.js', 'assets/main-DDDD.css', 'assets/screen-BBBB.js', 'assets/shared-CCCC.js', 'icon.svg', 'index.html', 'native/boot.js', 'native/native.css', 'theme-init.js']);
+    for (const name of ['assets/main-AAAA.js', 'assets/shared-CCCC.js', 'assets/screen-BBBB.js', 'assets/main-DDDD.css', 'assets/icon-GGGG.svg', 'icon.svg', 'theme-init.js']) assert.equal(read(out, name), read(fixture, name), `${name} is copied, not changed`);
+    // The demo page, the demo's chunk and its photos stay out of the app.
+    for (const left of ['demo.html', 'assets/demo-FFFF.js', 'assets/001-HHHH.webp']) assert.ok(!existsSync(path.join(out, left)), left);
+    // The shell is bundled with the transport and the store driver; the interface's entry is loaded by it, not bundled into it.
+    const boot = read(out, 'native/boot.js');
+    assert.match(boot, /createTransport/);
+    assert.match(boot, /purchaseUpdated/);
+    assert.match(boot, /import\("\/assets\/main-AAAA\.js"\)/);
+    assert.doesNotMatch(boot, /synthetic records|shared = /);
   } finally { rmSync(out, { recursive: true, force: true }); }
 });
 
-test('index.html differs from the browser one only by what the app needs, and its policy lets the web view reach nothing but itself', () => {
+test('index.html starts the shell, not the interface, and its policy lets the web view reach nothing but itself', () => {
   const out = build();
   try {
     const html = read(out, 'index.html');
-    assert.match(html, /<script type="module" src="\/native\/boot\.js"><\/script>/);
-    assert.doesNotMatch(html, /src="\/app\.js"/, 'app.js is loaded by the shell after sign-in, not by the page');
-    assert.doesNotMatch(html, /manifest|apple-touch-icon/);
+    assert.deepEqual(html.match(/<script\b[^>]*>/g), ['<script src="./theme-init.js">', '<script type="module" src="./native/boot.js">'], 'the shell is the only module the page starts; it loads the interface after sign-in');
+    assert.match(html, /<link rel="stylesheet" crossorigin href="\.\/assets\/main-DDDD\.css">\n\s*<link rel="stylesheet" href="\.\/native\/native\.css">/, 'the interface\'s styles first, then the app\'s');
     assert.match(html, /viewport-fit=cover/);
-    assert.match(html, /<link rel="stylesheet" href="\/native\/native\.css">/);
     const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
     for (const directive of ["default-src 'self'", "script-src 'self'", "connect-src 'self'", "object-src 'none'", "frame-src 'none'", "form-action 'none'", "base-uri 'none'"]) assert.ok(csp.includes(directive), directive);
     assert.doesNotMatch(csp, /unsafe-eval|unsafe-inline'[^;]*script|\*/, 'no eval, no inline script, no wildcard');
     assert.match(csp, /img-src 'self' data: blob: https:/);
-    // Everything else in the page is the browser page.
-    const original = read(web, 'index.html');
-    const stripped = html.replace(/\n    <meta name="text-scale"[^\n]*/, '').replace(/\n    <meta http-equiv="Content-Security-Policy"[^\n]*/, '').replace(', viewport-fit=cover', '').replace('\n    <link rel="stylesheet" href="/native/native.css">', '').replace('/native/boot.js', '/app.js');
-    assert.equal(stripped, original.replace('    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">\n', '').replace('    <link rel="manifest" href="/manifest.webmanifest">\n', ''));
+    // Everything else in the page is the interface's page.
+    const stripped = html.replace(/\n    <meta name="text-scale"[^\n]*/, '').replace(/\n    <meta http-equiv="Content-Security-Policy"[^\n]*/, '').replace('    <link rel="stylesheet" href="./native/native.css">\n    <script type="module" src="./native/boot.js"></script>\n', '');
+    assert.equal(stripped, read(fixture, 'index.html').replace(/    <script type="module"[^\n]*\n/g, ''));
+  } finally { rmSync(out, { recursive: true, force: true }); }
+});
+
+test('a build that is not whole stops: no manifest, a file the manifest names that is missing, a reference to nothing, a script the app does not expect', () => {
+  const broken = interfaceBuild();
+  try {
+    unlinkSync(path.join(broken, 'assets/icon-GGGG.svg'));
+    assert.throws(() => build({}, broken), /icon-GGGG|ENOENT/);
+  } finally { rmSync(broken, { recursive: true, force: true }); }
+  const bare = interfaceBuild();
+  try {
+    rmSync(path.join(bare, '.vite'), { recursive: true });
+    assert.throws(() => build({}, bare), /--manifest/);
+  } finally { rmSync(bare, { recursive: true, force: true }); }
+  const dangling = interfaceBuild();
+  try {
+    writeFileSync(path.join(dangling, 'assets/main-AAAA.js'), 'import "./gone-ZZZZ.js";\n');
+    assert.throws(() => build({}, dangling), /gone-ZZZZ\.js, which is not in the bundle/);
+  } finally { rmSync(dangling, { recursive: true, force: true }); }
+  const foreign = interfaceBuild();
+  try {
+    writeFileSync(path.join(foreign, 'index.html'), read(foreign, 'index.html').replace('<script src="./theme-init.js"></script>', '<script src="./theme-init.js"></script>\n    <script src="https://cdn.example/x.js"></script>'));
+    assert.throws(() => build({}, foreign), /script the app does not expect/);
+  } finally { rmSync(foreign, { recursive: true, force: true }); }
+});
+
+// The real thing, when the interface's dependencies are installed (they are not in the mobile-only CI job).
+test('the real interface builds into the bundle, started by the shell, with nothing of the demo', { skip: !existsSync(path.join(ui, 'node_modules/vite/bin/vite.js')) && 'run npm ci in ui/ to include this check', timeout: 300_000 }, () => {
+  const out = mkdtempSync(path.join(tmpdir(), 'la-www-'));
+  try {
+    const env = { ...process.env, LA_WWW_DIR: out };
+    delete env.LA_UI_DIST;
+    execFileSync(process.execPath, [script], { env, stdio: 'pipe' });
+    const html = read(out, 'index.html');
+    assert.equal((html.match(/<script type="module"/g) || []).length, 1);
+    const entry = read(out, 'native/boot.js').match(/import\("(\/assets\/main-[\w-]+\.js)"\)/)[1];
+    assert.ok(existsSync(path.join(out, entry)), 'the entry the shell imports is in the bundle');
+    const files = [...walk(out)];
+    assert.ok(!files.some(file => /demo/.test(file)), 'no demo page, no demo chunk');
+    assert.ok(files.includes('theme-init.js') && files.includes('icon.svg'));
+    assert.ok(files.some(file => /^assets\/main-.*\.css$/.test(file)));
   } finally { rmSync(out, { recursive: true, force: true }); }
 });
 

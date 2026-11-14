@@ -27,8 +27,14 @@ export interface DeviceAccount {
  * not get from the store: it asks the app to buy or restore, receives the store's signed proof, and hands that
  * to the server (POST /api/purchases/apple|google), which is the only thing that can unlock an account.
  *
- * This is the seam for mobile/src: expose it as `purchases` on globalThis.__littleArchiveNative. Until the
- * app does, `Backend.purchases` is null and the unlock screen says the purchase happens in the app.
+ * The app provides it as `purchases` on globalThis.__littleArchiveNative (mobile/src/purchases.js), only for a hosted
+ * account: on a self-hosted server it is absent, nothing is for sale and nothing is gated. Without it,
+ * `Backend.purchases` is null and the unlock screen says the purchase happens in the app.
+ *
+ * The store holds a purchase open until the app says it has been delivered (Apple: the transaction is unfinished;
+ * Google: an unacknowledged purchase is refunded after three days). So the order is: the store hands over a proof,
+ * the interface gives it to the server, the server answers, and only then does `settled` tell the store. A proof the
+ * server could not be asked about stays open and is offered again at the next start.
  */
 export interface PurchaseBridge {
   /** Which store this build sells through. */
@@ -36,14 +42,22 @@ export interface PurchaseBridge {
   /**
    * Opens the store's sheet for the one-time unlock. `accountId` is the hosted account's UUID, which the app must
    * bind to the purchase (Apple: appAccountToken; Google: the obfuscated account id, lowercase hex SHA-256 of it).
-   * Resolves with the proof, or null when the person closed the sheet without buying.
+   * Resolves with the proof; with null when the person closed the sheet without buying; or with 'pending' when the
+   * store is holding the purchase back (Ask to Buy, or a payment that has not cleared) and there is nothing to send yet.
    */
-  buy(options: { accountId: string }): Promise<StoreProof | null>;
+  buy(options: { accountId: string }): Promise<StoreProof | null | 'pending'>;
   /** Asks the store for unlocks this store account already bought. An empty list means there is nothing to restore. */
   restore(): Promise<StoreProof[]>;
   /** The store's own localized price for the unlock, when it can give one. */
   price?(): Promise<string | null>;
+  /** The server's answer to a proof this bridge handed out, so the store can be told the purchase was delivered. Never throws into the caller. */
+  settled?(proof: StoreProof, answer: PurchaseAnswer): Promise<void>;
+  /** Called when the app itself, without a button press, got an unlock accepted (an approval that arrived later, a purchase left from the last start). */
+  onUnlocked?(listener: () => void): () => void;
 }
+
+/** What the server said: it unlocked the account (Google: `acknowledged` says whether it also acknowledged the purchase), or it refused the proof for good. */
+export type PurchaseAnswer = { outcome: 'unlocked'; acknowledged?: boolean } | { outcome: 'refused' };
 
 export interface Backend {
   readonly kind: BackendKind;

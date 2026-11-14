@@ -1,5 +1,5 @@
-// The first-launch screens: choose a server, connect, sign in. They use the interface's own stylesheet (styles.css) and its
-// tokens, so they look like the rest of the app, plus a few rules for the app only (native.css).
+// The first-launch screens: choose a server, connect, sign in. They are drawn by native.css with the React interface's design
+// tokens (ui/DESIGN.md), so they look like the rest of the app and nothing changes style at sign-in.
 //
 // Form practice: one <form> per screen with real labels; type, autocomplete, inputmode and enterkeyhint set so the
 // keyboard and password managers behave (an email is autocomplete="username", a sign-in password "current-password", a
@@ -106,6 +106,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       return new Promise(done => {
         const option = (value, title, text) => h('button', { type: 'button', class: 'native-choice', onClick: () => done(value) }, h('strong', {}, title), h('span', {}, text));
         frame(
+          h('p', { class: 'native-whisper' }, 'welcome home'),
           h('h1', {}, 'Where is your library?'),
           h('p', { class: 'native-lede' }, 'Little Archive keeps what you save in one place you control. Choose where that is.'),
           notice && h('div', { class: 'notice', role: 'status' }, notice),
@@ -120,6 +121,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       return new Promise(done => {
         const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser. It must start with https://.' });
         frame(
+          h('p', { class: 'native-whisper' }, 'your own server'),
           h('h1', {}, 'Connect to your server'),
           form({ fields: { server: address }, submitLabel: 'Connect', busyLabel: 'Connecting…', submit: async values => { done(await submit(values.server)); }, extra: [backButton(done)] }));
         address.control.focus();
@@ -131,6 +133,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       return new Promise(done => {
         const password = passwordField({ label: 'Owner password', name: 'password', autocomplete: 'current-password', enterkeyhint: 'go', hint: undefined });
         frame(
+          h('p', { class: 'native-whisper' }, 'owner sign-in'),
           h('h1', {}, 'Sign in'),
           h('p', { class: 'native-lede' }, `Connected to ${host}.`),
           notice && h('div', { class: 'notice', role: 'status' }, notice),
@@ -151,6 +154,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
           const tabs = h('div', { class: 'native-tabs', role: 'group', 'aria-label': 'Sign in or create an account' },
             ...[[false, 'Sign in'], [true, 'Create account']].map(([isCreate, label]) => h('button', { type: 'button', class: 'btn small', 'aria-pressed': String(creating === isCreate), onClick: () => { if (creating !== isCreate) { creating = isCreate; render(); } } }, label)));
           frame(
+            h('p', { class: 'native-whisper' }, 'a little archive account'),
             h('h1', {}, creating ? 'Create your account' : 'Welcome back'),
             h('p', { class: 'native-lede' }, creating ? 'Your library is private to you.' : `Sign in to your account on ${host}.`),
             tabs,

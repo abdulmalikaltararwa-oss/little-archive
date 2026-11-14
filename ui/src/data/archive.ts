@@ -374,6 +374,13 @@ export function createArchive({ backend, history = browserHistory(), notify = ()
 
   const stopShare = backend.onShare(fields => set({ pendingShare: parseSharedContent(fields) }));
 
+  // The app can get an unlock accepted on its own (a purchase approved later, one left over from the last start). What the
+  // account may use has changed, so look again; the server decides what that is.
+  const stopPurchases = backend.purchases?.onUnlocked?.(() => {
+    if (!authenticated) return;
+    void refreshMetadata().then(() => notify('Your unlock arrived. Everything is open.'), () => {});
+  });
+
   function select(id: string, on: boolean) {
     const selected = new Set(get().selected);
     if (on) {
@@ -403,6 +410,6 @@ export function createArchive({ backend, history = browserHistory(), notify = ()
     forgetShare: () => history.forgetShare(),
     setSettings: settings => set(state => ({ settings, revision: state.revision + 1 })),
     markSaved: id => { pendingSaved = id; set({ justSaved: '' }); },
-    dispose() { stopListening(); stopShare(); },
+    dispose() { stopListening(); stopShare(); stopPurchases?.(); },
   };
 }

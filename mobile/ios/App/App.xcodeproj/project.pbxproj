@@ -22,6 +22,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		D0D42425957BC70486ABBB76 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C1BD55B266F7872D5D0E819A /* PrivacyInfo.xcprivacy */; };
+		FD4EC41CB547DF9DDEEAB005 /* StorePurchasesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92F9868109BD7865D63172EB /* StorePurchasesPlugin.swift */; };
 		FEF8C62AF820F3D034C82358 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B00CC863A07EDB2C2D3C61 /* ShareViewController.swift */; };
 /* End PBXBuildFile section */
 
@@ -63,6 +64,7 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		5368096CD5030FB5EED335AE /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		81E63024A5A8D646B27CC90D /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
+		92F9868109BD7865D63172EB /* StorePurchasesPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StorePurchasesPlugin.swift; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		959AAA352105D6BAD0376C0F /* ShareInboxPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareInboxPlugin.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				959AAA352105D6BAD0376C0F /* ShareInboxPlugin.swift */,
 				E8B92DC40B4D356059E4516B /* App.entitlements */,
 				C1BD55B266F7872D5D0E819A /* PrivacyInfo.xcprivacy */,
+				92F9868109BD7865D63172EB /* StorePurchasesPlugin.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -216,6 +219,11 @@
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.InAppPurchase = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -275,6 +283,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				08C7258F9A4AE9EFC111A95E /* MainViewController.swift in Sources */,
 				437532B773753CABC0FF16BC /* ShareInboxPlugin.swift in Sources */,
+				FD4EC41CB547DF9DDEEAB005 /* StorePurchasesPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
