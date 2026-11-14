@@ -1,0 +1,42 @@
+{
+  "identifier" : "4C41D2A8",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "6746200001",
+      "localizations" : [
+        {
+          "description" : "Opens recipe cards, places on a map and asking your archive. Pay once, keep it.",
+          "displayName" : "Little Archive unlock",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "unlock_full",
+      "referenceName" : "Unlock (test)",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6746200000",
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
