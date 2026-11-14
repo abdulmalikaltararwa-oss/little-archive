@@ -41,7 +41,7 @@ from .enrich.images import reencode_image, write_asset
 from .enrich.routes import install_routes as install_enrichment_routes
 from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
-from .limits import BODY_METHODS, CLIENT, IDENTITY, RELEASES, HostedGuard, HostedLimits, Refusal, refusal_response, retry_after
+from .limits import CLIENT, IDENTITY, RELEASES, HostedGuard, HostedLimits, Refusal, refusal_response, retry_after
 from .metering import AccountMeters
 from .purchases.routes import install_routes as install_purchase_routes
 from .models import AccountDeletion, AIJobs, BulkAction, CollectionInput, CollectionPatch, DeviceLogin, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput

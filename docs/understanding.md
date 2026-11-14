@@ -48,12 +48,14 @@ Saving a link with `POST /api/items` still only stores the URL.
 
 - http and https only, ports 80 and 443 only, no credentials in the URL;
 - the host name is resolved by the server, and **every** returned address must be public. Loopback, private, link-local, shared-address, reserved, multicast and documentation ranges are refused, as are cloud metadata addresses and IPv6 forms that embed an IPv4 address (IPv4-mapped, NAT64, 6to4, Teredo). A name that resolves to a mix of public and private addresses is refused;
-- numeric host tricks (`2130706433`, `0x7f.1`, `127.1`) and single-label or local-by-convention names (`localhost`, `.local`, `.internal`) are refused;
+- numeric host tricks (`2130706433`, `0x7f.1`, `127.1`), names that only become addresses once normalised (full-width digits, circled digits, ideographic full stops), scoped addresses (`%`) and single-label or local-by-convention names (`localhost`, `.local`, `.internal`) are refused;
 - the connection is then made to the validated address, sending the original name as `Host` and as the TLS server name. A second DNS answer cannot move it (rebinding);
-- at most 4 redirects by default, no https-to-http downgrade, a total time budget, a size limit (2 MiB for pages), and a content-type allowlist per call;
+- at most 4 redirects by default, no https-to-http downgrade, a total time budget that also covers every name lookup and connection attempt (each gets what is left), a size limit (2 MiB for pages) that is applied to what is received and again to what is inflated (only gzip and deflate are understood; any other `Content-Encoding` is refused), and a content-type allowlist per call;
 - no cookies are sent or kept, environment proxy settings are ignored, and the User-Agent states what it is: `LittleArchive/<version> (self-hosted link reader; reads public page details for its owner)`, with your contact address appended if you set `LA_FETCH_CONTACT`.
 
 It does not rotate proxies, spoof a crawler or browser, solve challenges, or sign in. A site that refuses the request produces an error. It does not read `robots.txt`: a read is a link preview for one owner, started by that owner, not crawling. If that does not suit your deployment, leave fetching off. Instagram's pages carry a `noarchive` robots tag, which is guidance for search engines.
+
+A [hosted service](hosted-mode.md#server-side-requests) lets many accounts steer this fetcher; that deployment was reviewed separately, and the review is recorded there.
 
 Tests use an injected resolver and transport (no network). The refusal rules were also checked with the real resolver, and one real request to a public site confirmed that pinned-address connections still verify the certificate against the host name.
 

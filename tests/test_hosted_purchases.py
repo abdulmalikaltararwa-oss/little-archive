@@ -245,6 +245,32 @@ class AppleChainTests(PurchaseCase):
         with self.assertRaises(AppleVerificationError):
             verifier.transaction(chain.transaction())  # signed now, by a leaf that has expired
 
+    def test_a_hostile_token_gets_a_refusal_and_never_another_kind_of_error(self):
+        import random
+        verifier = AppleVerifier(BUNDLE, PRODUCT, roots=[self.chain.root_der])
+        good = self.chain.transaction()
+        self.assertEqual(verifier.transaction(good).product_id, PRODUCT)
+        generator = random.Random(20261114)
+        parts = good.split(".")
+        for number in range(400):
+            index = generator.randrange(3)
+            raw = bytearray(base64.urlsafe_b64decode(parts[index] + "=" * (-len(parts[index]) % 4)))
+            for _ in range(generator.randrange(1, 4)):
+                raw[generator.randrange(len(raw))] ^= 1 << generator.randrange(8)
+            mutated = list(parts)
+            mutated[index] = b64(bytes(raw))
+            try:
+                verifier.transaction(".".join(mutated))
+            except AppleVerificationError:
+                pass  # any refusal is fine; the point is that nothing else escapes
+        for hostile in (-10 ** 30, 10 ** 30, 10 ** 15, -1, 1.5, "1", True, [], {}):
+            for fields in ({"signedDate": hostile}, {"purchaseDate": hostile}, {"revocationDate": hostile}):
+                with self.assertRaises(AppleVerificationError, msg=str(fields)[:40]):
+                    verifier.transaction(self.chain.transaction(**fields))
+        user, auth = self.account()
+        for hostile in (-10 ** 30, 10 ** 30):
+            self.assert_invalid(auth, self.chain.transaction(signedDate=hostile), "a date too large for a calendar")
+
     def test_a_date_in_the_future_is_refused_and_a_weak_certificate_signature_too(self):
         user, auth = self.account()
         self.assert_invalid(auth, self.chain.transaction(signedDate=now_ms() + 3_600_000), "an hour ahead")

@@ -110,7 +110,19 @@ class AppleVerifier:
 
     # -- the signed container ------------------------------------------------------
     def _open(self, token):
-        """Verify a JWS end to end and return its payload as a dict. Raises AppleVerificationError('invalid')."""
+        """Verify a JWS end to end and return its payload as a dict. Raises AppleVerificationError('invalid').
+
+        Whatever a hostile token does to the parsers underneath (an unsupported key type, a number too large for a date), the
+        outcome is the same refusal and never another kind of error.
+        """
+        try:
+            return self._open_checked(token)
+        except AppleVerificationError:
+            raise
+        except Exception as exc:  # a certificate or number the libraries cannot handle is not a valid one
+            raise AppleVerificationError("invalid") from exc
+
+    def _open_checked(self, token):
         if not isinstance(token, str) or not 0 < len(token) <= MAX_JWS_BYTES or token.count(".") != 2 or not token.isascii():
             raise AppleVerificationError("invalid")
         head, body, sig = token.split(".")
@@ -125,9 +137,11 @@ class AppleVerifier:
             raise AppleVerificationError("invalid")
         now = self.clock()
         signed = payload.get("signedDate")
-        moment = now if not isinstance(signed, int) or isinstance(signed, bool) else min(signed / 1000, now)
-        if isinstance(signed, int) and not isinstance(signed, bool) and signed / 1000 > now + FUTURE_SECONDS:
-            raise AppleVerificationError("invalid")
+        moment = now
+        if signed is not None:
+            if not isinstance(signed, int) or isinstance(signed, bool) or not 0 <= signed < 10 ** 14 or signed / 1000 > now + FUTURE_SECONDS:
+                raise AppleVerificationError("invalid")
+            moment = min(signed / 1000, now)
         leaf = self._chain(chain, moment)
         signature = _b64(sig)
         if len(signature) != 64:

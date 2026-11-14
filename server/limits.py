@@ -18,7 +18,6 @@ Four things, none of which a client can switch off or choose:
 """
 from __future__ import annotations
 
-import asyncio
 from collections import OrderedDict
 import ipaddress
 import re
@@ -241,13 +240,3 @@ class HostedGuard:
         finally:
             for release in scope[RELEASES]:
                 release()
-
-
-def body_deadline(seconds):
-    """Used by the body reader: how long a client may take to deliver what it declared."""
-    return time.monotonic() + seconds
-
-
-async def read_with_timeout(receive, idle, deadline):
-    """One message from `receive`, or asyncio.TimeoutError once the client has been quiet for `idle` seconds or is past `deadline`."""
-    return await asyncio.wait_for(receive(), timeout=max(0.001, min(idle, deadline - time.monotonic())))

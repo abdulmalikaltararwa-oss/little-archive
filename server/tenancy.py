@@ -298,8 +298,9 @@ def isolate_shared_cache(service):
     still shared, which is the point of the cache. Call once per account library, before it is used.
     """
     from .enrich.cache import HostedCacheView
-    if service.cache is not None:
-        service.configure(cache=HostedCacheView(service.cache))
+    if service.cache is None:
+        return  # nothing is shared, so there is nothing to hide, and the counters keep recording tokens, bytes and seconds for the operator
+    service.configure(cache=HostedCacheView(service.cache))
     if getattr(service, "ledger", None) is not None:
         service.ledger.equalize = True
 
