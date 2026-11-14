@@ -302,6 +302,23 @@
   }
 }
 
+/* The page's first frame, before the app has started. Classes rather than style attributes: the server's
+   style policy (style-src 'self' plus a nonce) does not allow inline style attributes. */
+.boot {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+}
+.boot h1 {
+  font-size: 1.6rem;
+  margin: 0.8rem 0 0.3rem;
+}
+.boot-note {
+  padding: 30px;
+}
+
 /* Shared-element movement between a card and its detail. The browser animates; nothing is measured in JS. */
 ::view-transition-group(save-cover) {
   animation-duration: 420ms;

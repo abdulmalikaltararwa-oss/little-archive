@@ -8,7 +8,7 @@ import sys
 from package_extension import extension_files
 
 root = Path(__file__).resolve().parent.parent
-required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "web/index.html", "web/app.js", "web/styles.css", "web/icon.svg", "web/manifest.webmanifest", "web/icons/icon-192.png", "web/icons/icon-512.png", "web/icons/icon-maskable-512.png", "web/apple-touch-icon.png", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md", "docs/phone.md"]
+required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "ui/index.html", "ui/demo.html", "ui/package.json", "ui/package-lock.json", "ui/src/main.tsx", "ui/src/data/archive.ts", "ui/public/icon.svg", "ui/public/theme-init.js", "ui/public/manifest.webmanifest", "ui/public/icons/icon-192.png", "ui/public/icons/icon-512.png", "ui/public/icons/icon-maskable-512.png", "ui/public/apple-touch-icon.png", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md", "docs/phone.md"]
 errors = ["Missing required file: " + p for p in required if not (root / p).is_file()]
 manifest_path = root / "extension/manifest.json"
 if manifest_path.is_file():
@@ -26,9 +26,12 @@ try:
 except (OSError, ValueError, TypeError) as exc:
     errors.append("Extension package validation failed: " + str(exc))
 tracked = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root, capture_output=True, check=True).stdout.decode().split("\0")
+# ui/src/data is the interface's data layer (source code), not a runtime data directory.
+INTERFACE_DATA_LAYER = ("ui", "src", "data")
 for name in filter(None, tracked):
     p = Path(name)
-    if p.name == ".env" or p.suffix in {".sqlite", ".sqlite3", ".db", ".zip"} or any(x in p.parts for x in {"data", "node_modules", "__pycache__"}):
+    folders = p.parts[3:] if p.parts[:3] == INTERFACE_DATA_LAYER else p.parts
+    if p.name == ".env" or p.suffix in {".sqlite", ".sqlite3", ".db", ".zip"} or any(x in folders for x in {"data", "node_modules", "__pycache__", "dist"}):
         errors.append("Runtime/private file in source package: " + name)
 if errors:
     print("\n".join(errors), file=sys.stderr)

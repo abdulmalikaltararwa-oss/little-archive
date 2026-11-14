@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
- * Render the installable-app PNG icons from web/icon.svg.
+ * Render the installable-app PNG icons from ui/public/icon.svg.
  *
  *   npm run build:icons
  *
  * Uses the Chromium that the browser tests already pin (npx playwright install chromium).
  * The PNGs are committed, so a normal checkout, container build or test run needs no
- * rendering. Run this only after web/icon.svg changes, then review the four files.
+ * rendering. Run this only after ui/public/icon.svg changes, then review the four files.
+ * (The old buildless interface in web/ keeps its own copies, which are no longer served.)
  *
- *   web/icons/icon-192.png          192x192  any      rounded tile, transparent corners
- *   web/icons/icon-512.png          512x512  any      rounded tile, transparent corners
- *   web/icons/icon-maskable-512.png 512x512  maskable full-bleed tile; the mark sits inside the safe circle
- *   web/apple-touch-icon.png        180x180  iOS      full-bleed and opaque (iOS rounds it, and fills transparency with black)
+ *   ui/public/icons/icon-192.png          192x192  any      rounded tile, transparent corners
+ *   ui/public/icons/icon-512.png          512x512  any      rounded tile, transparent corners
+ *   ui/public/icons/icon-maskable-512.png 512x512  maskable full-bleed tile; the mark sits inside the safe circle
+ *   ui/public/apple-touch-icon.png        180x180  iOS      full-bleed and opaque (iOS rounds it, and fills transparency with black)
  */
 import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -19,15 +20,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const source = await readFile(path.join(root, 'web/icon.svg'), 'utf8');
-if (!source.includes('rx="20"')) throw new Error('web/icon.svg no longer has the rounded tile this script squares off for the full-bleed icons. Update the script.');
+const source = await readFile(path.join(root, 'ui/public/icon.svg'), 'utf8');
+if (!source.includes('rx="20"')) throw new Error('ui/public/icon.svg no longer has the rounded tile this script squares off for the full-bleed icons. Update the script.');
 const fullBleed = source.replace('rx="20"', 'rx="0"');
 
 const icons = [
-  { file: 'web/icons/icon-192.png', size: 192, svg: source },
-  { file: 'web/icons/icon-512.png', size: 512, svg: source },
-  { file: 'web/icons/icon-maskable-512.png', size: 512, svg: fullBleed },
-  { file: 'web/apple-touch-icon.png', size: 180, svg: fullBleed },
+  { file: 'ui/public/icons/icon-192.png', size: 192, svg: source },
+  { file: 'ui/public/icons/icon-512.png', size: 512, svg: source },
+  { file: 'ui/public/icons/icon-maskable-512.png', size: 512, svg: fullBleed },
+  { file: 'ui/public/apple-touch-icon.png', size: 180, svg: fullBleed },
 ];
 
 const browser = await chromium.launch();

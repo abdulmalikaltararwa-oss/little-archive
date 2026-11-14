@@ -10,6 +10,7 @@ import { DialogHost } from '@/features/dialogs/host';
 import { LibraryScreen, SEARCH_INPUT_ID } from '@/features/library/library-screen';
 import { FeatureScreen } from '@/features/screens';
 import { Shell } from '@/features/shell/shell';
+import { cspNonce } from '@/lib/nonce';
 import { ArchiveProvider } from './archive-context';
 import { openDialog, useConfirm, useDialogs } from './ui-state';
 
@@ -75,7 +76,7 @@ export function App({ archive }: { archive: Archive }) {
 
   return (
     <ArchiveProvider archive={archive}>
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion="user" nonce={cspNonce()}>
         <a href="#main" className="fixed start-3 -top-20 z-[200] rounded-md border-2 border-sage bg-card px-4 py-3 text-sm font-semibold text-ink focus:top-3">Skip to content</a>
         {phase === 'booting' ? <BootScreen /> : null}
         {phase === 'boot-error' ? <BootScreen error={bootError} onRetry={() => void archive.boot()} /> : null}

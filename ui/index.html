@@ -12,20 +12,22 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Little Archive — Your saves, together</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" sizes="180x180">
+    <link rel="manifest" href="./manifest.webmanifest">
     <!-- Sets the theme before first paint. A file, not an inline script: the server's policy allows scripts from 'self' only. -->
     <script src="./theme-init.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
     <div id="app">
-      <main id="main" style="min-height:100dvh;display:grid;place-items:center;text-align:center;font-family:system-ui,sans-serif">
+      <main id="main" class="boot">
         <div>
           <img src="./icon.svg" alt="" width="56" height="56">
-          <h1 style="font-size:1.6rem;margin:.8rem 0 .3rem">Little Archive</h1>
+          <h1>Little Archive</h1>
           <p>Opening your little corner of the internet…</p>
         </div>
       </main>
     </div>
-    <noscript><p style="padding:30px">Little Archive needs JavaScript to browse and organize your library. Please enable it and reload.</p></noscript>
+    <noscript><p class="boot-note">Little Archive needs JavaScript to browse and organize your library. Please enable it and reload.</p></noscript>
   </body>
 </html>
