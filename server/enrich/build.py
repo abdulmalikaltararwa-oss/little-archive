@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from .cache import PublicPostCache
+from ..guided_import import GuidedImportLimits, GuidedImports
 from .features import FeatureSettings, ensure_features_schema
 from .netfetch import SafeFetcher, default_user_agent
 from .places import Geocoder
@@ -55,6 +56,7 @@ def build_enrichment(store, config, environ=None) -> EnrichmentService:
     # Optional, operator-configured geocoder for places; None unless LA_GEOCODER_URL is set. Never used without a request asking for it.
     service.features_settings = FeatureSettings.from_env(values)
     service.geocoder = Geocoder(service.features_settings) if service.features_settings.geocoding_enabled else None
+    service.guided = GuidedImports(store, GuidedImportLimits.from_config(config, values))
     service.worker = UnderstandingWorker(store, config, service)
     store.item_hooks.append(service.item_hook)
     return service

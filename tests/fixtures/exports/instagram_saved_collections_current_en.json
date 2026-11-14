@@ -1,0 +1,370 @@
+[
+  {
+    "timestamp": 1731100000,
+    "media": [],
+    "label_values": [
+      {
+        "label": "Name",
+        "value": "Recipes"
+      },
+      {
+        "label": "Type",
+        "value": "Collection"
+      },
+      {
+        "label": "Privacy",
+        "value": "Private"
+      },
+      {
+        "label": "Update time",
+        "timestamp_value": 1731100000
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/p/SYNTHaaa001/",
+                "href": "https://www.instagram.com/p/SYNTHaaa001/"
+              },
+              {
+                "label": "Caption",
+                "value": "Caf\u00e9 style lemon pancakes"
+              },
+              {
+                "label": "Title",
+                "value": ""
+              },
+              {
+                "dict": [],
+                "title": "Hashtags"
+              },
+              {
+                "dict": [
+                  {
+                    "dict": [
+                      {
+                        "label": "URL",
+                        "value": "https://www.instagram.com/example_baker"
+                      },
+                      {
+                        "label": "Name",
+                        "value": "example_baker"
+                      },
+                      {
+                        "label": "Username",
+                        "value": "example_baker"
+                      }
+                    ],
+                    "title": ""
+                  }
+                ],
+                "title": "Owner"
+              },
+              {
+                "dict": [],
+                "title": "Brand partner"
+              }
+            ],
+            "title": ""
+          },
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/reel/SYNTHaaa002/",
+                "href": "https://www.instagram.com/reel/SYNTHaaa002/"
+              },
+              {
+                "label": "Caption",
+                "value": "Quick garlic noodles"
+              },
+              {
+                "label": "Title",
+                "value": ""
+              },
+              {
+                "dict": [],
+                "title": "Hashtags"
+              },
+              {
+                "dict": [
+                  {
+                    "dict": [
+                      {
+                        "label": "URL",
+                        "value": "https://www.instagram.com/example_cook"
+                      },
+                      {
+                        "label": "Name",
+                        "value": "example_cook"
+                      },
+                      {
+                        "label": "Username",
+                        "value": "example_cook"
+                      }
+                    ],
+                    "title": ""
+                  }
+                ],
+                "title": "Owner"
+              },
+              {
+                "dict": [],
+                "title": "Brand partner"
+              }
+            ],
+            "title": ""
+          },
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/p/SYNTHaaa006/",
+                "href": "https://www.instagram.com/p/SYNTHaaa006/"
+              },
+              {
+                "label": "Caption",
+                "value": "Only in a collection: one-pan lasagne"
+              },
+              {
+                "label": "Title",
+                "value": ""
+              },
+              {
+                "dict": [],
+                "title": "Hashtags"
+              },
+              {
+                "dict": [
+                  {
+                    "dict": [
+                      {
+                        "label": "URL",
+                        "value": "https://www.instagram.com/example_cook"
+                      },
+                      {
+                        "label": "Name",
+                        "value": "example_cook"
+                      },
+                      {
+                        "label": "Username",
+                        "value": "example_cook"
+                      }
+                    ],
+                    "title": ""
+                  }
+                ],
+                "title": "Owner"
+              },
+              {
+                "dict": [],
+                "title": "Brand partner"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Media"
+      }
+    ],
+    "fbid": "1801731100000"
+  },
+  {
+    "timestamp": 1731100100,
+    "media": [],
+    "label_values": [
+      {
+        "label": "Name",
+        "value": "Travel"
+      },
+      {
+        "label": "Type",
+        "value": "Collection"
+      },
+      {
+        "label": "Privacy",
+        "value": "Private"
+      },
+      {
+        "label": "Update time",
+        "timestamp_value": 1731100100
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/p/SYNTHaaa003/",
+                "href": "https://www.instagram.com/p/SYNTHaaa003/"
+              },
+              {
+                "label": "Caption",
+                "value": "Labneh"
+              },
+              {
+                "label": "Title",
+                "value": ""
+              },
+              {
+                "dict": [],
+                "title": "Hashtags"
+              },
+              {
+                "dict": [
+                  {
+                    "dict": [
+                      {
+                        "label": "URL",
+                        "value": "https://www.instagram.com/example_labneh"
+                      },
+                      {
+                        "label": "Name",
+                        "value": "example_labneh"
+                      },
+                      {
+                        "label": "Username",
+                        "value": "example_labneh"
+                      }
+                    ],
+                    "title": ""
+                  }
+                ],
+                "title": "Owner"
+              },
+              {
+                "dict": [],
+                "title": "Brand partner"
+              }
+            ],
+            "title": ""
+          },
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/p/SYNTHaaa007/",
+                "href": "https://www.instagram.com/p/SYNTHaaa007/"
+              },
+              {
+                "label": "Caption",
+                "value": "Harbour at dusk"
+              },
+              {
+                "label": "Title",
+                "value": ""
+              },
+              {
+                "dict": [],
+                "title": "Hashtags"
+              },
+              {
+                "dict": [
+                  {
+                    "dict": [
+                      {
+                        "label": "URL",
+                        "value": "https://www.instagram.com/example_travel"
+                      },
+                      {
+                        "label": "Name",
+                        "value": "example_travel"
+                      },
+                      {
+                        "label": "Username",
+                        "value": "example_travel"
+                      }
+                    ],
+                    "title": ""
+                  }
+                ],
+                "title": "Owner"
+              },
+              {
+                "dict": [],
+                "title": "Brand partner"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Media"
+      }
+    ],
+    "fbid": "1801731100100"
+  },
+  {
+    "timestamp": 1731100200,
+    "media": [],
+    "label_values": [
+      {
+        "label": "Type",
+        "value": "Collection"
+      },
+      {
+        "label": "Privacy",
+        "value": "Private"
+      },
+      {
+        "label": "Update time",
+        "timestamp_value": 1731100200
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/p/SYNTHaaa008/",
+                "href": "https://www.instagram.com/p/SYNTHaaa008/"
+              },
+              {
+                "label": "Caption",
+                "value": "A collection without a name"
+              },
+              {
+                "label": "Title",
+                "value": ""
+              },
+              {
+                "dict": [],
+                "title": "Hashtags"
+              },
+              {
+                "dict": [
+                  {
+                    "dict": [
+                      {
+                        "label": "URL",
+                        "value": "https://www.instagram.com/example_travel"
+                      },
+                      {
+                        "label": "Name",
+                        "value": "example_travel"
+                      },
+                      {
+                        "label": "Username",
+                        "value": "example_travel"
+                      }
+                    ],
+                    "title": ""
+                  }
+                ],
+                "title": "Owner"
+              },
+              {
+                "dict": [],
+                "title": "Brand partner"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Media"
+      }
+    ],
+    "fbid": "1801731100200"
+  }
+]

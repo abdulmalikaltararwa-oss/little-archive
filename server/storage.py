@@ -75,6 +75,12 @@ def normalize_url(raw):
         raise ValueError("Use a canonical TikTok video or photo link.")
     if host in {"vm.tiktok.com", "vt.tiktok.com"}:
         raise ValueError("Open the TikTok short link and copy the full post URL before importing.")
+    if host in {"tiktokv.com", "www.tiktokv.com", "m.tiktokv.com"}:
+        # The link form TikTok's own data export uses for every favorite video. Its identity is the numeric video id.
+        m = re.fullmatch(r"/share/video/(\d+)/?", p.path)
+        if m:
+            return "tiktok", m[1], f"https://www.tiktokv.com/share/video/{m[1]}/", "video"
+        raise ValueError("Use a TikTok video link.")
     query = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not k.lower().startswith("utm_") and k.lower() not in {"fbclid", "gclid", "igsh", "igshid"}]
     canonical = urlunsplit((p.scheme.lower(), p.netloc.lower(), p.path or "/", urlencode(query), p.fragment))
     return "web", hashlib.sha256(canonical.encode()).hexdigest(), canonical, "link"

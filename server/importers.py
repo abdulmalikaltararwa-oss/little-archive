@@ -238,6 +238,13 @@ def _instagram(entries: object) -> list[dict]:
     for entry in entries[:MAX_ITEMS + 1]:
         if not isinstance(entry, dict):
             continue
+        if "label_values" in entry:
+            # The current Instagram layout (label and value pairs). Read by the export reader, which also handles other languages.
+            from .exports import instagram_label_record
+            rec = instagram_label_record(entry)
+            if rec:
+                out.append(rec)
+            continue
         direct = _record(entry, source=True)
         if direct:
             out.append(direct)
@@ -456,6 +463,8 @@ def _txt(data: bytes, filename: str) -> dict:
     items = []
     for line in text.splitlines():
         line = line.strip()
+        if re.fullmatch(r"[-=_*#\s]{3,}", line):
+            continue    # a banner line around a section heading, not a heading itself
         key = _key(line.rstrip(":"))
         if key in FAVORITE_KEYS:
             active, recognized, pending_date = True, True, None
@@ -471,7 +480,7 @@ def _txt(data: bytes, filename: str) -> dict:
             if active:
                 rec = _record({"url": match[1], "saved_at": pending_date}, source=True)
                 host = (urlsplit(rec["url"]).hostname or "").lower() if rec else ""
-                if rec and (host == "tiktok.com" or host.endswith(".tiktok.com")):
+                if rec and (host in {"tiktok.com", "tiktokv.com"} or host.endswith((".tiktok.com", ".tiktokv.com"))):
                     items.append(rec)
                     if len(items) > MAX_ITEMS:
                         raise ImportFormatError("This file exceeds the 50,000-record import limit.")
