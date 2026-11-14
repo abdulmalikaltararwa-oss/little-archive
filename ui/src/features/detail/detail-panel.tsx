@@ -203,6 +203,7 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
         </span>
         <button
           type="button"
+          data-detail-focus="favorite"
           aria-pressed={item.favorite}
           aria-busy={favoriteBusy || undefined}
           // Not `disabled`: that would drop the keyboard's focus while the change is saved. useBusy refuses a second run.
@@ -419,8 +420,12 @@ export function DetailPanel() {
     archive.api.item(id).then(
       item => {
         if (stale) return;
+        // Where the keyboard is, if it is already inside the form: the form starts again from the full record, and the
+        // control that held focus is replaced, so focus is put back on its successor rather than left on the page.
+        const held = panel.current?.contains(document.activeElement) ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-detail-focus]')?.dataset.detailFocus : undefined;
         // Edits typed in the instant before the full record arrived are kept: the form is only restarted when it is clean.
         setLoaded(current => { const base = current.id === id ? current.version : 0; return { id, item, error: '', version: dirtyRef.current ? base : base + 1 }; });
+        if (held && !dirtyRef.current) requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>(`[data-detail-focus="${held}"]`)?.focus({ preventScroll: true }));
       },
       error => { if (!stale) setLoaded(current => ({ id, item: current.id === id ? current.item : null, error: errorMessage(error), version: current.id === id ? current.version : 0 })); },
     );
