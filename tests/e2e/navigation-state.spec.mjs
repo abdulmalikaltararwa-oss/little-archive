@@ -1,5 +1,5 @@
 import {
-  test, expect, apiAction, cards, chooseView, closeDialog, detailPanel, importJSON, isWide, loadedCount, login, navigation, openItem, saveButton,
+  test, expect, apiAction, cards, chooseView, closeDialog, detailPanel, importJSON, isWide, loadedCount, login, navigation, saveButton,
   saveCount, search, searchBox, settingsButton, sortBy, uniqueName, waitForItems,
 } from './fixtures.mjs';
 
@@ -76,16 +76,36 @@ async function expectWindowToMatch(page, list) {
   for (const [place, id] of shown) expect(id, `place ${place}`).toBe(list[place - 1].id);
 }
 
-/** Scrolls until the save at `index` of the set is in the page, then puts it in view. */
+/** Waits until the page has stopped moving: the same scroll position on several frames in a row. */
+async function scrollSettled(page) {
+  await page.evaluate(() => new Promise(resolve => {
+    let last = scrollY;
+    let still = 0;
+    const frame = () => {
+      still = scrollY === last ? still + 1 : 0;
+      last = scrollY;
+      if (still >= 4) resolve(); else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }));
+}
+
+/**
+ * Scrolls until the save at `index` of the set is in the page, then puts it in the middle of the screen and waits for the
+ * page to be still. The page is moved by script, in whole steps, rather than by the wheel: where a browser eases a wheel
+ * turn (smooth scrolling) the page is still moving when the card first appears, and a card put "in view" on the way can
+ * end up at the very top, where the test's assumptions about what else is on screen do not hold.
+ */
 async function bringIntoView(page, id, index) {
   const card = page.locator(`[data-item-id="${id}"]`);
   for (let attempt = 0; attempt < 150 && !(await card.count()); attempt++) {
     const places = (await inventory(page)).map(entry => entry[0]);
-    await page.mouse.wheel(0, places.length && index + 1 < Math.min(...places) ? -900 : 900);
-    await page.waitForTimeout(30);
+    await page.evaluate(distance => scrollBy({ top: distance, behavior: 'instant' }), places.length && index + 1 < Math.min(...places) ? -900 : 900);
+    await scrollSettled(page);
   }
   await expect(card).toHaveCount(1);
-  await card.scrollIntoViewIfNeeded();
+  await card.evaluate(node => node.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  await scrollSettled(page);
   return card;
 }
 
@@ -105,7 +125,8 @@ test('favoriting and editing retain every loaded page, their nodes, scroll, and 
   const before = await settledInventory(page);
   await card.evaluate(node => { window.retainedArchiveCard = node; });
 
-  await apiAction(page, 'PATCH', `/api/items/${id}`, () => favorite.click());
+  // Pressed, not clicked: this is about where the keyboard's focus stays, and Safari does not give a button focus when it is clicked.
+  await apiAction(page, 'PATCH', `/api/items/${id}`, () => favorite.press('Enter'));
   await expect(card.getByRole('button', { name: 'Remove from favorites', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(saveCount(page)).toHaveText('260 saves');
   expect(await loadedCount(page)).toBe(260);
@@ -124,7 +145,7 @@ test('favoriting and editing retain every loaded page, their nodes, scroll, and 
   await expect(page).toHaveURL(new RegExp(`item=${id}`));
   const detailFavorite = detail.getByRole('button', { name: 'Remove from favorites', exact: true });
   await detailFavorite.focus();
-  await apiAction(page, 'PATCH', `/api/items/${id}`, () => detailFavorite.click());
+  await apiAction(page, 'PATCH', `/api/items/${id}`, () => detailFavorite.press('Enter'));
   await expect(detail.getByRole('button', { name: 'Add to favorites', exact: true })).toBeEnabled();
   await expect(detail.getByRole('button', { name: 'Add to favorites', exact: true })).toBeFocused();
   await expect(card.locator('[data-card-control="favorite"]')).toHaveAttribute('aria-pressed', 'false');
@@ -140,7 +161,7 @@ test('favoriting and editing retain every loaded page, their nodes, scroll, and 
     const url = new URL(request.url());
     if (request.method() === 'GET' && url.pathname === '/api/items') reads.push({ offset: Number(url.searchParams.get('offset')), limit: Number(url.searchParams.get('limit')) });
   });
-  await apiAction(page, 'PATCH', `/api/items/${id}`, () => save.click());
+  await apiAction(page, 'PATCH', `/api/items/${id}`, () => save.press('Enter'));
   await expect(page.getByRole('status').filter({ hasText: 'Your changes are saved.' })).toBeVisible();
   await expect(detail.getByLabel('Your notes', { exact: true })).toHaveValue(notes);
   await expect(detail.getByRole('button', { name: 'Save changes', exact: true })).toBeFocused();
@@ -180,7 +201,9 @@ test('leaving Favorites and editing a sorted title refresh the loaded window wit
     return { id: onScreen[0].dataset.itemId, place: Number(onScreen[0].getAttribute('aria-posinset')), top: onScreen[0].getBoundingClientRect().top };
   }, removed.id);
   expect(anchor.place, 'the card that leaves is not the first one on screen').toBeLessThan(91);
-  await apiAction(page, 'PATCH', `/api/items/${removed.id}`, () => removedCard.getByRole('button', { name: 'Remove from favorites', exact: true }).click());
+  // Pressed, not clicked: the keyboard holds focus on the card that leaves. (Safari hands a clicked button's focus to the page's
+  // main area instead, so a click never puts the keyboard on the card.)
+  await apiAction(page, 'PATCH', `/api/items/${removed.id}`, () => removedCard.getByRole('button', { name: 'Remove from favorites', exact: true }).press('Enter'));
   await expect(removedCard).toHaveCount(0);
   await expect(saveCount(page)).toHaveText('120 saves');
   await expect(page.getByRole('button', { name: /^Load more/ })).toHaveCount(0);
@@ -195,7 +218,10 @@ test('leaving Favorites and editing a sorted title refresh the loaded window wit
 
   const edited = favorites[85];
   await bringIntoView(page, edited.id, 85);
-  const detail = await openItem(page, edited.title);
+  // Opened with the keyboard, which is what leaves focus on the card to return to (Safari gives a clicked button no focus).
+  await page.getByRole('button', { name: `Open ${edited.title}`, exact: true }).press('Enter');
+  const detail = detailPanel(page);
+  await expect(detail.getByLabel('Title', { exact: true })).toHaveValue(edited.title);
   const renamed = `A renamed journal ${key}`;
   await detail.getByLabel('Title', { exact: true }).fill(renamed);
   await apiAction(page, 'PATCH', `/api/items/${edited.id}`, () => detail.getByRole('button', { name: 'Save changes', exact: true }).click());
@@ -226,6 +252,10 @@ test('favoriting a Rediscover result keeps the same sampled inventory and order'
   await expect(saveCount(page)).toHaveText('60 of 75 saves');
   const before = await settledInventory(page);
   expect(before.length).toBeGreaterThan(5);
+  // A new sort lists the saves in another order. The page stays where it was (the top); it does not follow the card that used
+  // to be first to wherever the new order puts it.
+  expect(await scrollY(page)).toBe(0);
+  expect(before[0][0]).toBe(1);
   const [place, id] = before[Math.min(before.length - 1, 12)];
   const card = page.locator(`[data-item-id="${id}"]`);
   await card.scrollIntoViewIfNeeded();
@@ -480,7 +510,7 @@ test.describe('on a phone', () => {
   });
 });
 
-test('on a wide screen the sidebar is the navigation and keeps the current view marked', async ({ page }) => {
+test('on a wide screen the sidebar is the navigation and keeps the current view marked', async ({ page, browserName }) => {
   test.skip(!isWide(page), 'the sidebar is the wide layout');
   await login(page);
   const nav = await navigation(page);
@@ -493,7 +523,8 @@ test('on a wide screen the sidebar is the navigation and keeps the current view 
   await page.reload();
   await waitForItems(page);
   await expect(page.locator('#view-title')).toHaveText('Your favorites');
-  await page.keyboard.press('Tab');
+  // Safari on a Mac moves between controls with Tab but only stops at links with Option+Tab (its default setting).
+  await page.keyboard.press(browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab');
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
   await page.getByRole('button', { name: 'Search or jump to anything', exact: true }).click();
   const palette = page.getByRole('dialog', { name: 'Search or jump to anything', exact: true });
