@@ -221,5 +221,41 @@ class ImageRecipeTests(unittest.TestCase):
             self.assertNotIn("webui", text)
 
 
+class WorkflowTests(unittest.TestCase):
+    """CI is not run here. These keep its wiring honest: a job that needs the built interface builds it first."""
+
+    NEEDS_THE_BUILD = ("unittest discover", "native_smoke.py", "test:e2e", "scripts/build_demo.py")
+
+    def jobs(self, name):
+        text = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        body = re.split(r"(?m)^jobs:\n", text)[1]
+        return {match.group(1): match.group(0) for match in re.finditer(r"(?ms)^  ([a-z-]+):\n.*?(?=^  [a-z-]+:\n|\Z)", body)}
+
+    def test_every_job_that_needs_the_interface_builds_it_before_it_runs_anything(self):
+        for workflow in ("checks.yml", "release-validation.yml", "demo-pages.yml"):
+            for job, text in self.jobs(workflow).items():
+                steps = text.split("\n      - ")
+                needed = [index for index, step in enumerate(steps) if any(word in step for word in self.NEEDS_THE_BUILD) and "working-directory: ui" not in step]
+                if not needed:
+                    continue
+                built = [index for index, step in enumerate(steps) if "npm run build" in step and "working-directory: ui" in step]
+                self.assertTrue(built, f"{workflow}: job {job} runs the server or the demo build but never builds ui/")
+                self.assertLess(min(built), min(needed), f"{workflow}: job {job} builds ui/ after using it")
+
+    def test_node_is_24_everywhere_and_the_interface_is_tested_in_ci(self):
+        root = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        for path in root.glob("*.yml"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"node-version: '2[0-3]'", path.name)
+        checks = (root / "checks.yml").read_text(encoding="utf-8")
+        self.assertRegex(checks, r"- run: npm test\n\s+working-directory: ui")
+        self.assertRegex(checks, r"- run: npm run build\n\s+working-directory: ui")
+
+    def test_the_interface_changes_trigger_the_workflows_that_publish_or_validate_it(self):
+        root = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        for name in ("demo-pages.yml", "release-validation.yml", "container-image.yml"):
+            self.assertIn("'ui/**'", (root / name).read_text(encoding="utf-8"), name)
+
+
 if __name__ == "__main__":
     unittest.main()
