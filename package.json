@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "python3 scripts/dev.py",
     "test:web": "node --test web/*.test.mjs",
+    "test:mobile": "npm --prefix mobile test",
     "build:demo": "python3 scripts/build_demo.py",
     "build:icons": "node scripts/build_icons.mjs",
     "test:extension": "node --test extension/tests/*.test.mjs",
