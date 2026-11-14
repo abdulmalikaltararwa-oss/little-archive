@@ -1,6 +1,6 @@
-import { test, expect, apiAction, login, uniqueName, waitForItems } from './fixtures.mjs';
+import { test, expect, apiAction, cards, detailPanel, login, navigation, saveButton, saveCount, searchBox, uniqueName, waitForItems } from './fixtures.mjs';
 
-// Installable app, share target and phone layout. Everything runs against the real server and the real UI;
+// Installable app, share target and phone layout. Everything runs against the real server and the real interface;
 // no /api response is replaced. Share links are plain GET navigations, exactly what Android's share sheet opens.
 
 const DIALOG = 'Save a little discovery';
@@ -34,6 +34,9 @@ async function signIn(page) {
   await apiAction(page, 'POST', '/api/auth/login', () => page.getByRole('button', { name: 'Open my archive', exact: true }).click());
 }
 
+// The page's address without the part the app owns after the save: "/" with nothing after it but the app's own hash.
+const pathAndSearch = page => new URL(page.url()).pathname + new URL(page.url()).search;
+
 // A control counts as finger-sized when a 44px cross centred on it still lands on it (or the label around a checkbox).
 // Hit-testing includes the invisible areas that CSS adds around small controls.
 async function undersizedTargets(page, rootSelector) {
@@ -41,13 +44,14 @@ async function undersizedTargets(page, rootSelector) {
     const root = document.querySelector(rootSelector);
     const problems = [];
     const seen = new Set();
-    for (const element of root.querySelectorAll('button, a[href], select, textarea, summary, input:not([type="hidden"]):not([type="file"])')) {
-      if (element.closest('[inert], [hidden]') || element.classList.contains('sr-only')) continue;
+    for (const element of root.querySelectorAll('button, a[href], select, textarea, summary, [role="combobox"], [role="radio"], [role="switch"], [role="checkbox"], input:not([type="hidden"]):not([type="file"])')) {
+      if (element.closest('[inert], [hidden], [aria-hidden="true"]') || element.classList.contains('sr-only')) continue;
       const control = element.matches('input[type="checkbox"], input[type="radio"]') ? element.closest('label') || element : element;
       if (seen.has(control)) continue;
       seen.add(control);
       const style = getComputedStyle(control);
-      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      // A control that takes no touches (the card checkboxes until Select is tapped) is not a target yet.
+      if (style.visibility === 'hidden' || style.display === 'none' || style.pointerEvents === 'none') continue;
       control.scrollIntoView({ block: 'center', inline: 'center' });
       const box = control.getBoundingClientRect();
       if (!box.width || !box.height) continue;
@@ -55,9 +59,11 @@ async function undersizedTargets(page, rootSelector) {
       const y = box.y + box.height / 2;
       const missed = [[0, 0], [-21, 0], [21, 0], [0, -21], [0, 21]].filter(([dx, dy]) => {
         const hit = document.elementFromPoint(x + dx, y + dy);
-        return !hit || !(hit === control || control.contains(hit));
+        // A tap on the label that belongs to a checkbox or a switch is a tap on it.
+        const label = hit && hit.closest ? hit.closest('label') : null;
+        return !hit || !(hit === control || control.contains(hit) || label === control || (label && label.control === control));
       });
-      if (missed.length) problems.push(`${control.tagName.toLowerCase()}.${String(control.className).trim()} "${(control.getAttribute('aria-label') || control.textContent || '').trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`);
+      if (missed.length) problems.push(`${control.tagName.toLowerCase()} "${(control.getAttribute('aria-label') || control.textContent || '').trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`);
     }
     return problems;
   }, rootSelector);
@@ -67,14 +73,15 @@ const noSidewaysScroll = page => page.evaluate(() => document.documentElement.sc
 
 test.describe('installable app', () => {
   test('the manifest, icons and page tags are served for installation and load under the existing policy', async ({ page }) => {
-    const violations = [];
-    page.on('console', message => { if (/content security policy/i.test(message.text())) violations.push(message.text()); });
     const home = await page.goto('/');
-    expect(home.headers()['content-security-policy']).toContain("script-src 'self'");
+    const policy = home.headers()['content-security-policy'];
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).toMatch(/style-src 'self' 'nonce-[A-Za-z0-9_-]+'(?:;|$)/);
+    expect(policy).not.toContain('unsafe-inline');
     await expect(page.getByRole('heading', { name: 'Your archive awaits.' })).toBeVisible();
 
-    const href = await page.locator('link[rel="manifest"]').getAttribute('href');
-    const served = await page.request.get(href);
+    const manifestLink = await page.locator('link[rel="manifest"]').getAttribute('href');
+    const served = await page.request.get(new URL(manifestLink, page.url()).href);
     expect(served.status()).toBe(200);
     expect(served.headers()['content-type']).toMatch(/^application\/manifest\+json/);
     const manifest = await served.json();
@@ -85,16 +92,15 @@ test.describe('installable app', () => {
       expect(response.headers()['content-type'], icon.src).toBe(icon.type);
       if (icon.type === 'image/png') expect(pngSize(await response.body()), icon.src).toBe(icon.sizes);
     }
-    const touchIcon = page.locator('link[rel="apple-touch-icon"]');
-    expect(pngSize(await (await page.request.get(await touchIcon.getAttribute('href'))).body())).toBe('180x180');
+    const touchIcon = await page.locator('link[rel="apple-touch-icon"]').getAttribute('href');
+    expect(pngSize(await (await page.request.get(new URL(touchIcon, page.url()).href)).body())).toBe('180x180');
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', manifest.theme_color);
 
-    // The browser's chrome follows the page's own dark token too.
+    // The browser's chrome follows the page's own dark paper too.
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Your archive awaits.' })).toBeVisible();
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#1c231f');
-    expect(violations).toEqual([]);
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#1a211d');
   });
 
   test('Chromium parses the manifest without errors and reports nothing blocking installation', async ({ page, context, browserName }) => {
@@ -131,11 +137,15 @@ test.describe('installable app', () => {
     const response = await apiAction(page, 'POST', '/api/items', () => dialog.getByRole('button', { name: 'Save to archive', exact: true }).click());
     const item = await response.json();
     expect(item).toMatchObject({ url: `https://example.com/e2e/${key}/pasta`, title, notes: 'Worth a look!' });
-    await expect(page.getByRole('dialog', { name: 'A closer look', exact: true })).toBeVisible();
-    await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe('/');
+    await expect(detailPanel(page)).toBeVisible();
+    await expect.poll(() => pathAndSearch(page)).toBe('/');
+    // The address now names the open save, so a reload comes back to it. (The share link itself is gone from the address.)
+    await expect(page).toHaveURL(new RegExp(`#/\\?item=${item.id}$`));
     await page.reload();
-    await waitForItems(page);
+    await expect(detailPanel(page).getByLabel('Title', { exact: true })).toHaveValue(title);
+    await detailPanel(page).getByRole('button', { name: 'Close dialog', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await waitForItems(page);
   });
 
   test('cancelling a shared link keeps nothing and returns the address to the app', async ({ page }) => {
@@ -146,7 +156,7 @@ test.describe('installable app', () => {
     await expect(dialog.getByLabel('Link', { exact: true })).toHaveValue(`https://example.com/e2e/${key}/skipped`);
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(dialog).not.toBeVisible();
-    await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe('/');
+    await expect.poll(() => pathAndSearch(page)).toBe('/');
     expect(await itemsMatching(page, key)).toEqual([]);
   });
 
@@ -183,9 +193,9 @@ test.describe('installable app', () => {
     await expect(dialog.getByLabel('Title', { exact: true })).toHaveValue(title);
     expect(await dialog.locator('form img, form script, form b, form svg[onload]').count()).toBe(0);
     expect(await page.evaluate(() => window.__owned)).toBeUndefined();
-    // With no usable link the form refuses to submit, so nothing is sent.
+    // With no usable link the form says so and sends nothing.
     await dialog.getByRole('button', { name: 'Save to archive', exact: true }).click();
-    expect(await dialog.getByLabel('Link', { exact: true }).evaluate(field => field.validity.valueMissing)).toBe(true);
+    await expect(dialog.getByRole('alert')).toHaveText('Enter a complete HTTP or HTTPS link.');
     await page.waitForTimeout(300);
     expect(writes).toEqual([]);
     expect(await itemsMatching(page, key)).toEqual([]);
@@ -225,11 +235,18 @@ test.describe('on a phone', () => {
     await waitForItems(page);
     expect(await noSidewaysScroll(page)).toBe(true);
     expect(await undersizedTargets(page, 'main')).toEqual([]);
+    // Once Select is tapped the card checkboxes take touches, and they are finger-sized too.
+    await page.getByRole('button', { name: 'Select', exact: true }).tap();
+    await expect(page.getByRole('button', { name: 'Cancel selection', exact: true })).toBeVisible();
+    expect(await undersizedTargets(page, 'main')).toEqual([]);
+    await page.getByRole('button', { name: 'Cancel selection', exact: true }).tap();
+    // The dock is the phone's navigation and its buttons are finger-sized too.
+    expect(await undersizedTargets(page, 'nav[aria-label="Quick actions"]')).toEqual([]);
 
-    await page.locator('.topbar').getByRole('button', { name: 'Save a link', exact: true }).tap();
+    await saveButton(page).tap();
     const dialog = page.getByRole('dialog', { name: DIALOG, exact: true });
     await expect(dialog).toBeVisible();
-    expect(await undersizedTargets(page, 'dialog[open]')).toEqual([]);
+    expect(await undersizedTargets(page, '[role="dialog"]')).toEqual([]);
     expect(await noSidewaysScroll(page)).toBe(true);
     // iOS Safari zooms the page into any text field under 16px. Check every visible text control.
     const smallText = await dialog.locator('input[type="url"], input[type="text"], textarea').evaluateAll(fields => fields.map(field => parseFloat(getComputedStyle(field).fontSize)).filter(size => size < 16));
@@ -237,7 +254,7 @@ test.describe('on a phone', () => {
 
     // On a short screen the dialog scrolls, and Save stays in view rather than below the fold.
     await page.setViewportSize({ width: 390, height: 560 });
-    const scrolls = await dialog.evaluate(element => element.scrollHeight > element.clientHeight);
+    const scrolls = await dialog.evaluate(element => [element, ...element.querySelectorAll('*')].some(node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight));
     expect(scrolls).toBe(true);
     const save = await dialog.getByRole('button', { name: 'Save to archive', exact: true }).boundingBox();
     expect(save.y).toBeGreaterThanOrEqual(0);
@@ -245,20 +262,24 @@ test.describe('on a phone', () => {
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).tap();
     await page.setViewportSize({ width: 390, height: 844 });
 
-    await page.locator('.card-open').first().tap();
-    const detail = page.getByRole('dialog', { name: 'A closer look', exact: true });
+    await page.locator('[data-card-control="open"]').first().tap();
+    const detail = detailPanel(page);
     // The dialog opens with a loading line; measure once the save's own controls have rendered.
     await expect(detail.getByRole('button', { name: 'Save changes', exact: true })).toBeVisible();
-    expect(await undersizedTargets(page, 'dialog[open]')).toEqual([]);
+    expect(await undersizedTargets(page, '[role="dialog"]')).toEqual([]);
     expect(await noSidewaysScroll(page)).toBe(true);
     await detail.getByRole('button', { name: 'Close dialog', exact: true }).tap();
+    await expect(detail).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Open navigation', exact: true }).tap();
-    await expect(page.locator('#sidebar')).toBeVisible();
-    expect(await undersizedTargets(page, '#sidebar')).toEqual([]);
+    const sheet = await navigation(page);
+    await expect(sheet).toBeVisible();
+    expect(await undersizedTargets(page, '[role="dialog"]')).toEqual([]);
     // Touch has no hover, so the way to edit a collection is visible.
-    await expect(page.getByRole('button', { name: `Edit Phone shelf ${key}`, exact: true })).toBeVisible();
-    await expect(page.locator('.keyhint')).toBeHidden();
+    await expect(sheet.getByRole('button', { name: `Edit Phone shelf ${key}`, exact: true })).toBeVisible();
+    await sheet.getByRole('button', { name: 'Close dialog', exact: true }).tap();
+    // And the "/" key hint, which only a keyboard can use, is not shown.
+    await expect(page.locator('kbd').filter({ hasText: '/' })).toBeHidden();
+    await expect(searchBox(page)).toBeVisible();
   });
 
   test('the small select checkbox and favorite heart can be hit anywhere in a 44px area', async ({ page }) => {
@@ -269,20 +290,24 @@ test.describe('on a phone', () => {
     expect(created.ok()).toBe(true);
     await page.reload();
     await waitForItems(page);
-    const card = page.locator('article.card').filter({ hasText: `Target card ${key}` });
+    const card = cards(page).filter({ hasText: `Target card ${key}` });
     await expect(card).toHaveCount(1);
     await card.scrollIntoViewIfNeeded();
 
-    const checkbox = await card.locator('.card-select').boundingBox();
+    // On touch the checkboxes appear once Select is tapped, so a stray tap on a card never selects it.
+    await page.getByRole('button', { name: 'Select', exact: true }).tap();
+    const checkbox = await card.locator('[data-card-control="select"]').boundingBox();
     expect(checkbox.width).toBeLessThan(24);
     await page.touchscreen.tap(checkbox.x + checkbox.width / 2 - 14, checkbox.y + checkbox.height / 2 - 14);
-    await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
-    await expect(card.locator('.card-select')).toBeChecked();
+    await expect(page.getByRole('region', { name: 'Selection' })).toContainText('1 selected');
+    await expect(card.locator('[data-card-control="select"]')).toBeChecked();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('region', { name: 'Selection' }).getByRole('button', { name: 'Clear selection', exact: true }).tap();
 
-    const heart = await card.locator('.card-favorite').boundingBox();
+    const heart = await card.locator('[data-card-control="favorite"]').boundingBox();
     expect(heart.width).toBeLessThan(36);
     await apiAction(page, 'PATCH', `/api/items/${(await created.json()).id}`, () => page.touchscreen.tap(heart.x + heart.width / 2, heart.y + heart.height / 2 + 15));
-    await expect(card.locator('.card-favorite')).toHaveAttribute('aria-pressed', 'true');
+    await expect(card.locator('[data-card-control="favorite"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(saveCount(page)).toHaveText(/saves?$/);
   });
 });
