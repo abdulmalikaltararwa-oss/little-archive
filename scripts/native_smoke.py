@@ -88,9 +88,10 @@ class NativeHarness:
 
     def copy_source(self):
         self.checkout.mkdir()
-        for directory in ("server", "web"):
+        # The server and the built interface (ui/dist, which the server serves from a checkout).
+        for directory in ("server", "ui/dist"):
             source = ROOT / directory
-            require(source.is_dir(), "The candidate source is missing an application directory.")
+            require(source.is_dir(), "The candidate source is missing an application directory. The interface is built with `npm ci && npm run build` in ui/.")
             require(not any(path.is_symlink() for path in source.rglob("*")), "Native verification requires regular source files, not symlinks.")
             shutil.copytree(source, self.checkout / directory, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         (self.checkout / "scripts").mkdir()
@@ -230,6 +231,11 @@ class NativeHarness:
         source, owner = self.start("initial")
         anonymous = Client(owner.origin)
         anonymous.request("GET", "/api/items", expected=401)
+        page = anonymous.request("GET", "/").decode("utf-8")
+        require('<div id="app">' in page and 'property="csp-nonce"' in page, "The native application did not serve the web interface.")
+        require(b"Little Archive" in anonymous.request("GET", "/manifest.webmanifest"), "The native application did not serve the web app manifest.")
+        anonymous.request("GET", "/app.js", expected=404)
+        self.record("native_serves_the_built_web_interface_and_not_the_old_one")
         owner.login(initial_password)
         initial_cookie = owner.cookie()
         self.secrets += [initial_cookie, owner.csrf]

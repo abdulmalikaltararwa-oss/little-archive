@@ -162,7 +162,7 @@ class UpgradeHarness(Harness):
         code = """from pathlib import Path
 import hashlib
 root=Path('/app'); digest=hashlib.sha256()
-for folder in ('server', 'web'):
+for folder in ('server', 'web', 'webui'):
     for path in sorted((root/folder).rglob('*')):
         if path.is_file() and '__pycache__' not in path.parts and path.suffix != '.pyc':
             digest.update(path.relative_to(root).as_posix().encode()); digest.update(bytes([0]))
