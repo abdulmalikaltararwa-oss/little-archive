@@ -155,6 +155,8 @@ export function Gallery() {
   const remotePreviews = useArchiveState(state => state.settings.remote_previews);
   const fresh = useArchiveState(state => state.justSaved);
   const openItem = useArchiveState(state => state.loc.item);
+  // Which saves are listed: a search, a filter or a sort that changes this lists different saves, not the same ones again.
+  const view = useArchiveState(state => JSON.stringify(state.filters));
   const morphId = useMorph(state => state.coverId);
 
   const host = useRef<HTMLDivElement>(null);
@@ -164,8 +166,8 @@ export function Gallery() {
   const wall = useMemo(() => layoutWall(source, width), [source, width]);
   const [range, setRange] = useState<[number, number]>([0, -1]);
   const [focused, setFocused] = useState(-1);
-  // The reading position: the first card on screen and where its top edge sits.
-  const anchor = useRef<{ id: string; top: number } | null>(null);
+  // The reading position: the first card on screen and where its top edge sits, for the view it was read in.
+  const anchor = useRef<{ id: string; top: number; view: string } | null>(null);
 
   useLayoutEffect(() => {
     const node = host.current;
@@ -184,14 +186,16 @@ export function Gallery() {
     setRange(previous => (previous[0] === next[0] && previous[1] === next[1] ? previous : next));
     if (loading) return;
     const [first, last] = windowRange(wall.tiles, -top, -top + innerHeight);
-    anchor.current = last >= first && items[first] ? { id: items[first].id, top: top + wall.tiles[first]!.y } : null;
-  }, [wall, items, loading]);
+    anchor.current = last >= first && items[first] ? { id: items[first].id, top: top + wall.tiles[first]!.y, view } : null;
+  }, [wall, items, loading, view]);
 
-  // When loaded saves change (an edit, a refetch of the loaded window), keep the first visible card where it was.
+  // When loaded saves change (an edit, a refetch of the loaded window), keep the first visible card where it was. That
+  // is for the same list again: when the view itself changes, the card that was first on screen is only somewhere in the
+  // new order, and following it would throw the page to wherever that is.
   const seen = useRef(revision);
   useLayoutEffect(() => {
     const node = host.current;
-    if (node && seen.current !== revision && anchor.current) {
+    if (node && seen.current !== revision && anchor.current?.view === view) {
       const index = items.findIndex(item => item.id === anchor.current!.id);
       const tile = index >= 0 ? wall.tiles[index] : undefined;
       if (tile) {
@@ -201,7 +205,7 @@ export function Gallery() {
     }
     seen.current = revision;
     measure();
-  }, [revision, wall, items, measure]);
+  }, [revision, view, wall, items, measure]);
 
   useEffect(() => {
     let frame = 0;
