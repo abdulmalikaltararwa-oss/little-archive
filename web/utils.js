@@ -89,3 +89,87 @@ export function errorMessage(error) {
   if (typeof error === 'string') return error;
   return error?.message || 'Something went wrong. Please try again.';
 }
+
+// Sharing into the app. On Android the installed app is offered in the share
+// sheet and opens /share?title=&text=&url= (see manifest.webmanifest). Whatever
+// arrives there is untrusted: it is reduced to plain strings that only ever
+// prefill form fields, never markup, and nothing is saved until the owner taps Save.
+export const SHARE_PATH = '/share';
+const SHARE_LIMITS = { raw: 20000, url: 4096, title: 500, notes: 4000 };
+// A link in prose ends at whitespace, a quote or an angle bracket.
+const LINK_IN_TEXT = /https?:\/\/[^\s<>"'`\u00AB\u00BB\u2018-\u201D]+/giu;
+// Control, format (zero-width, bidi), surrogate and separator characters can hide or reorder what a link says.
+const HIDDEN_CHARACTERS = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
+const TRAILING_PUNCTUATION = /[.,;:!?\u060C\u061B\u061F\u3002\uFF0C\uFF01\uFF1F]/u;
+const CLOSERS = { ')': '(', ']': '[', '}': '{' };
+
+function occurrences(text, character) { return text.split(character).length - 1; }
+
+// Prose punctuation after a link is not part of it; a closing bracket is only when it has no opener in the link.
+function trimLink(link) {
+  let value = link;
+  for (let last = value.at(-1); last; last = value.at(-1)) {
+    const opener = CLOSERS[last];
+    if (!TRAILING_PUNCTUATION.test(last) && !(opener && occurrences(value, last) > occurrences(value, opener))) break;
+    value = value.slice(0, -1);
+  }
+  return value;
+}
+
+function plausibleHost(href) {
+  const { hostname } = new URL(href);
+  return hostname.includes('.') || hostname === 'localhost' || hostname.startsWith('[');
+}
+
+function limitText(value, max) { return Array.from(value).slice(0, max).join(''); }
+
+function candidateLinks(value) {
+  const links = [];
+  for (const match of value.matchAll(LINK_IN_TEXT)) {
+    const candidate = trimLink(match[0]);
+    if (candidate.length > SHARE_LIMITS.url || HIDDEN_CHARACTERS.test(candidate)) continue;
+    const href = safeURL(candidate);
+    if (href && href.length <= SHARE_LIMITS.url && plausibleHost(href)) links.push({ href, token: match[0] });
+  }
+  return links;
+}
+
+function singleLine(value, max) {
+  return limitText(value.replace(BIDI_CONTROLS, '').replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim(), max);
+}
+
+function multiLine(value, max) {
+  const text = value.replace(BIDI_CONTROLS, '').replace(/\r\n?|\u2028|\u2029/g, '\n')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, character => (character === '\n' ? character : ' ')).replace(/[^\S\n]+/g, ' ');
+  return limitText(text.split('\n').map(line => line.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim(), max);
+}
+
+// Pure parser for the three share fields. The first usable link wins, looked for in
+// url, then text, then title: Android apps usually put the link inside the text.
+export function parseSharedContent({ title = '', text = '', url = '' } = {}) {
+  const raw = { title: String(title ?? ''), text: String(text ?? ''), url: String(url ?? '') };
+  for (const key of Object.keys(raw)) raw[key] = raw[key].slice(0, SHARE_LIMITS.raw);
+  const shared = Object.values(raw).some(value => value.trim());
+  let link = null;
+  for (const key of ['url', 'text', 'title']) { link = candidateLinks(raw[key])[0]; if (link) break; }
+  const withoutLinks = (value, keep) => value.replace(LINK_IN_TEXT, token => (keep(token) ? token : ' '));
+  const isChosen = token => Boolean(link) && safeURL(trimLink(token)) === link.href;
+  const heading = singleLine(withoutLinks(raw.title, () => false), SHARE_LIMITS.title);
+  // Other links in the text stay in the notes, so nothing the person shared is dropped.
+  const notes = multiLine(withoutLinks(raw.text, token => !isChosen(token)), SHARE_LIMITS.notes);
+  return { shared, url: link?.href || '', title: heading, notes: notes === heading ? '' : notes };
+}
+
+// Reads a share launch from a Location-like object. Anything that is not the share path is not a share.
+export function readShareTarget(location) {
+  if (!location || location.pathname !== SHARE_PATH) return null;
+  const params = new URLSearchParams(location.search);
+  return parseSharedContent({ title: params.get('title') ?? '', text: params.get('text') ?? '', url: params.get('url') ?? '' });
+}
+
+// TikTok's own share sheet often produces short links. The server never follows links, so it cannot save them.
+export function isTikTokShortLink(value) {
+  const url = safeURL(value);
+  return Boolean(url) && ['vm.tiktok.com', 'vt.tiktok.com'].includes(new URL(url).hostname);
+}

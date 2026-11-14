@@ -1,4 +1,4 @@
-import { PLATFORM_NAMES, STATUS_NAMES, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage } from './utils.js';
+import { PLATFORM_NAMES, STATUS_NAMES, SHARE_PATH, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage, readShareTarget, isTikTokShortLink } from './utils.js';
 
 const app = document.getElementById('app');
 const IS_DEMO = document.documentElement.dataset.demo === 'true';
@@ -8,6 +8,9 @@ const state = {
   filters: { q: '', platform: '', collection_id: '', tag: '', status: '', favorite: false, needs_review: false, sort: 'recent' },
   view: 'all', selected: new Set(), selecting: false, loading: false, request: 0, theme: 'system', detail: null,
 };
+// A link shared from the phone's share sheet waits here, through sign-in, until the owner reviews it.
+// The demo has no share target and never reads one.
+let pendingShare = IS_DEMO ? null : readShareTarget(location);
 let dom = {};
 let uid = 0;
 let lastFocusedControl = null;
@@ -144,7 +147,8 @@ function applyTheme(theme) {
   state.theme = theme;
   const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]').content = dark ? '#202722' : '#F7F4EF';
+  // The browser (and an installed app's title bar) follows the page's own background token. The fallback matches styles.css.
+  document.querySelector('meta[name="theme-color"]').content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || (dark ? '#1c231f' : '#f8f3ea');
   if (!IS_DEMO) try { localStorage.setItem('little-archive-theme', theme); } catch { /* Storage is optional for appearance. */ }
 }
 try { applyTheme(IS_DEMO ? 'system' : ['light', 'dark', 'system'].includes(localStorage.getItem('little-archive-theme')) ? localStorage.getItem('little-archive-theme') : 'system'); } catch { applyTheme('system'); }
@@ -173,7 +177,8 @@ function renderLogin(message = '') {
     finally { submit.disabled = false; }
   } }, error, field('Password', password), submit);
   const story = h('section', { class: 'login-story', 'aria-label': 'About Little Archive' }, brand(), h('div', {}, h('div', { class: 'eyebrow' }, 'A home for your curious mind'), h('h1', {}, 'Good things,', h('br'), 'kept close.'), h('p', {}, 'Your saved posts, ideas, and little discoveries. Together in a space that belongs to you.'), paperArt()), h('div', { class: 'login-footer' }, icon('shield'), 'Open source. Self-hosted. Yours to keep.'));
-  const panel = h('main', { class: 'login-panel', id: 'main' }, h('div', { class: 'login-box' }, h('div', { class: 'eyebrow' }, 'Welcome home'), h('h2', {}, 'Your archive awaits.'), h('p', {}, 'Sign in to pick up where your curiosity left off.'), form, h('p', { class: 'login-help' }, 'Use the owner password configured when this instance was installed. Need to reset it? Your server administrator can use the local password-reset command.')));
+  const shareNote = pendingShare?.shared ? h('div', { class: 'notice', role: 'status' }, pendingShare.url ? `Sign in to review and save the link you shared from ${hostLabel(pendingShare.url)}. It is waiting for you.` : 'Sign in to finish saving what you shared.') : null;
+  const panel = h('main', { class: 'login-panel', id: 'main' }, h('div', { class: 'login-box' }, h('div', { class: 'eyebrow' }, 'Welcome home'), h('h2', {}, 'Your archive awaits.'), h('p', {}, 'Sign in to pick up where your curiosity left off.'), shareNote, form, h('p', { class: 'login-help' }, 'Use the owner password configured when this instance was installed. Need to reset it? Your server administrator can use the local password-reset command.')));
   app.append(h('div', { class: 'login-screen' }, story, panel));
   document.title = 'Little Archive — Welcome home';
 }
@@ -184,6 +189,21 @@ async function initializeLibrary() {
   catch (error) {
     if (state.authenticated) renderLoadError(error);
   }
+  presentSharedLink();
+}
+
+// A shared link only opens the ordinary save dialog, prefilled. Saving stays an explicit tap.
+function presentSharedLink() {
+  const share = pendingShare;
+  if (!share || !state.authenticated) return;
+  pendingShare = null;
+  openAdd(share);
+}
+
+// The shared text stays in the address until the dialog is dismissed, so a reload during sign-in
+// does not lose it. After that the address goes back to the app's own.
+function forgetSharedAddress() {
+  if (location.pathname === SHARE_PATH) history.replaceState(null, '', '/');
 }
 
 function renderShell() {
@@ -193,7 +213,7 @@ function renderShell() {
   menu.setAttribute('aria-controls', 'sidebar'); menu.setAttribute('aria-expanded', 'false');
   const scrim = h('div', { class: 'mobile-scrim', 'aria-hidden': 'true', onClick: () => setNavigation(false) });
   const importButton = btn('Import', 'upload', openImport);
-  const addButton = btn('Save a link', 'plus', openAdd, 'primary');
+  const addButton = btn('Save a link', 'plus', () => openAdd(), 'primary');
   const topbar = h('header', { class: 'topbar' }, menu, h('span', { class: 'topbar-label' }, 'A little space for everything you love'), h('div', { class: 'topbar-actions' }, importButton, addButton));
   const hero = h('section', { class: 'hero', 'aria-label': 'Your personal archive' }, h('div', { class: 'hero-copy' }, h('div', { class: 'eyebrow' }, 'Collect a little. Discover a lot.'), h('h1', {}, 'Good things, kept close.'), h('p', {}, 'The recipe. The idea. That thing you wanted to try. Find your little discoveries again.')), paperArt());
   const title = h('h2', { tabindex: '-1' }, 'All saves');
@@ -437,7 +457,7 @@ function renderItems({ preservePosition = false } = {}) {
   if (!state.items.length) {
     const libraryEmpty = !state.stats.total && !state.stats.archived;
     const clear = () => setView('all');
-    dom.grid.replaceChildren(h('section', { class: 'empty-state' }, h('div', { class: 'empty-illustration' }, icon(libraryEmpty ? 'bookmark' : 'search')), h('h3', {}, libraryEmpty ? 'Every collection starts somewhere.' : 'Nothing here just yet.'), h('p', {}, libraryEmpty ? 'Save your first link, bring in an export, or explore with a small collection of clearly labeled demo saves.' : 'Try a different search or filter. Your next rediscovery might be one collection over.'), h('div', { class: 'empty-actions' }, libraryEmpty ? [btn('Save a link', 'plus', openAdd, 'primary'), btn('Import your saves', 'upload', openImport), btn('Try demo saves', 'sparkles', event => addDemo(event.currentTarget), 'ghost')] : [btn('Clear filters', 'x', clear, 'primary')])));
+    dom.grid.replaceChildren(h('section', { class: 'empty-state' }, h('div', { class: 'empty-illustration' }, icon(libraryEmpty ? 'bookmark' : 'search')), h('h3', {}, libraryEmpty ? 'Every collection starts somewhere.' : 'Nothing here just yet.'), h('p', {}, libraryEmpty ? 'Save your first link, bring in an export, or explore with a small collection of clearly labeled demo saves.' : 'Try a different search or filter. Your next rediscovery might be one collection over.'), h('div', { class: 'empty-actions' }, libraryEmpty ? [btn('Save a link', 'plus', () => openAdd(), 'primary'), btn('Import your saves', 'upload', openImport), btn('Try demo saves', 'sparkles', event => addDemo(event.currentTarget), 'ghost')] : [btn('Clear filters', 'x', clear, 'primary')])));
   } else {
     const existing = new Map([...dom.grid.querySelectorAll('[data-item-id]')].map(card => [card.dataset.itemId, card]));
     let cursor = dom.grid.firstChild;
@@ -476,6 +496,8 @@ function renderCard(item) {
     if (event.target.checked && state.selected.size >= 200) { event.target.checked = false; toast('Select up to 200 saves, or use Organize to update every match.'); return; }
     event.target.checked ? state.selected.add(item.id) : state.selected.delete(item.id); renderSelection();
   } });
+  // The label is a finger-sized hit area around the small checkbox; it has no effect with a mouse.
+  const selectArea = h('label', { class: 'card-select-hit' }, checkbox);
   const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => {
     const trigger = event.currentTarget;
     const hadFocus = document.activeElement === trigger;
@@ -486,7 +508,7 @@ function renderCard(item) {
     });
   }, 'card-favorite');
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
-  card.append(open, checkbox, favorite); return card;
+  card.append(open, selectArea, favorite); return card;
 }
 
 function renderSelection() {
@@ -566,17 +588,22 @@ function collectionChecklist(selected = []) {
   return { element: list, values: () => [...list.querySelectorAll('input:checked')].map(x => x.value) };
 }
 
-function openAdd() {
-  const m = modal('Save a little discovery');
-  const url = h('input', { type: 'url', required: true, placeholder: 'https://…', autocomplete: 'url' });
-  const title = h('input', { type: 'text', maxlength: 500, placeholder: 'Give it a name you’ll remember', dir: 'auto' });
-  const notes = h('textarea', { placeholder: 'What caught your eye?', maxlength: 20000, dir: 'auto' });
+// `share` is a link handed over by the phone's share sheet (see parseSharedContent). It only prefills the
+// form as text; the person reviews it and taps Save.
+function openAdd(share = null) {
+  const m = modal('Save a little discovery', share ? { onClose: forgetSharedAddress } : {});
+  const url = h('input', { type: 'url', required: true, placeholder: 'https://…', autocomplete: 'url', value: share?.url || '' });
+  const title = h('input', { type: 'text', maxlength: 500, placeholder: 'Give it a name you’ll remember', dir: 'auto', value: share?.title || '' });
+  const notes = h('textarea', { placeholder: 'What caught your eye?', maxlength: 20000, dir: 'auto', value: share?.notes || '' });
   const tags = h('input', { type: 'text', placeholder: 'design, weekend ideas, food', dir: 'auto' });
   const collections = collectionChecklist();
-  const form = h('form', {}, h('p', { class: 'dialog-description' }, 'Keep a post, article, video, or any link worth coming back to.'), field('Link', url), field('Title', title), field('Your notes', notes), field('Topics', tags, 'Separate topics with commas.'), h('div', { class: 'form-field' }, h('span', { class: 'field-label' }, 'Collections'), collections.element));
+  const notices = [];
+  if (share?.shared) notices.push(h('div', { class: 'notice', role: 'status' }, h('strong', {}, 'Shared with Little Archive. '), share.url ? `Check the link from ${hostLabel(share.url)}, then tap Save.` : 'We could not find a web link in it. Paste the link below.'));
+  if (share?.url && isTikTokShortLink(share.url)) notices.push(h('div', { class: 'notice', role: 'status' }, 'This is a TikTok short link, which Little Archive cannot save. Open the video in your browser, then share or copy its full link.'));
+  const form = h('form', {}, ...notices, h('p', { class: 'dialog-description' }, 'Keep a post, article, video, or any link worth coming back to.'), field('Link', url), field('Title', title), field('Your notes', notes), field('Topics', tags, 'Separate topics with commas.'), h('div', { class: 'form-field' }, h('span', { class: 'field-label' }, 'Collections'), collections.element));
   const error = formError(form);
   const save = h('button', { class: 'btn primary', type: 'submit' }, icon('bookmark'), 'Save to archive');
-  form.append(h('div', { class: 'flex-wrap' }, btn('Cancel', null, m.close), save));
+  form.append(h('div', { class: 'flex-wrap form-actions' }, btn('Cancel', null, m.close), save));
   form.addEventListener('submit', async e => {
     e.preventDefault(); error.clear(); save.disabled = true;
     try {
@@ -585,7 +612,10 @@ function openAdd() {
       m.close(); await refreshLibrary(); toast('A little discovery, safely kept.'); openDetail(item.id);
     } catch (e) { error.show(e); } finally { save.disabled = false; }
   });
-  m.body.append(form); url.focus();
+  m.body.append(form);
+  // A link that arrived ready to review keeps the on-screen keyboard closed so Save stays in view: focus rests on
+  // the dialog itself (named by its heading) instead of a field or the close button.
+  if (share?.url) { m.dialog.tabIndex = -1; m.dialog.focus({ preventScroll: true }); } else url.focus();
 }
 
 function openCollection(collection = null) {

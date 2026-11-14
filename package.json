@@ -8,6 +8,7 @@
     "dev": "python3 scripts/dev.py",
     "test:web": "node --test web/*.test.mjs",
     "build:demo": "python3 scripts/build_demo.py",
+    "build:icons": "node scripts/build_icons.mjs",
     "test:extension": "node --test extension/tests/*.test.mjs",
     "test:e2e": "node tests/e2e/run.mjs",
     "test:e2e:ai": "node tests/e2e/run.mjs --config tests/e2e/ai/playwright.config.mjs",
