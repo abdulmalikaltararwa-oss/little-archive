@@ -8,6 +8,7 @@ import tempfile
 from uuid import uuid4
 import zipfile
 
+from .enrich.features import FEATURES_SCHEMA
 from .enrich.schema import ENRICH_SCHEMA
 from .storage import LibraryClosed, now, json_text, SCHEMA
 
@@ -133,8 +134,11 @@ def restore_backup(archive, destination):
                 reference.executescript(SCHEMA)
                 base = schema_signature(reference)
                 reference.executescript(ENRICH_SCHEMA)
-                # A backup is valid with or without the additive understanding tables.
-                if schema_signature(c) not in (base, schema_signature(reference)):
+                enriched = schema_signature(reference)
+                reference.executescript(FEATURES_SCHEMA)
+                # A backup is valid with or without the additive tables: the base library, then the understanding
+                # tables, then the recipe, places and guided-import tables.
+                if schema_signature(c) not in (base, enriched, schema_signature(reference)):
                     raise ValueError("Backup database schema differs from the supported version.")
             if c.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or c.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("Database integrity check failed.")
@@ -154,6 +158,9 @@ def restore_backup(archive, destination):
             c.execute("UPDATE meta SET value=? WHERE key='instance_id'", (str(uuid4()),))
             c.execute("UPDATE import_runs SET status='cancelled',coverage='partial',token_id=NULL WHERE status='running'")
             c.execute("UPDATE ai_jobs SET status='failed',error='Restored backup: queue explicitly to resume.' WHERE status IN ('queued','running')")
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='guided_imports'").fetchone():
+                # The staged export file is not part of a backup, so a half-done guided import cannot continue; its saves are kept.
+                c.execute("UPDATE guided_imports SET state='failed',error='Restored backup: add the export file again to continue.' WHERE state IN ('uploading','previewed','importing')")
             c.commit()
         os.rename(target, destination)
     return manifest

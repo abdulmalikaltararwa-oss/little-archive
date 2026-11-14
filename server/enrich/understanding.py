@@ -388,6 +388,45 @@ class OllamaProvider:
             if owned:
                 client.close()
 
+    def complete_json(self, system: str, user: str, schema: dict, *, max_tokens: int = 1024):
+        """One schema-constrained JSON answer for a feature that is not classification (recipes, places, ask).
+
+        The caller validates the object against the text it supplied; this only guarantees valid,
+        bounded JSON. Returns ``(object, ProviderUsage)``.
+        """
+        size = len(system) + len(user)
+        request = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "format": schema, "stream": False, "think": False,
+            "options": {"temperature": 0, "num_ctx": 4096 if size < 9000 else 8192 if size < 24000 else 16384, "num_predict": max(64, min(int(max_tokens), 4096))},
+            "keep_alive": "1m",
+        }
+        owned = self.client is None
+        client = self.client or httpx.Client(timeout=httpx.Timeout(120, connect=5, write=10, pool=5), follow_redirects=False, trust_env=False)
+        try:
+            with client.stream("POST", self.base_url + "/api/chat", json=request) as response:
+                if response.status_code != 200:
+                    raise ProviderError("The local model service rejected the request; check its configuration and model availability.")
+                raw = _read_limited(response)
+            body = json.loads(raw)
+            if not isinstance(body, dict) or body.get("done") is not True or body.get("done_reason") == "length":
+                raise ProviderError("The model response was incomplete; nothing was accepted.")
+            message = body.get("message")
+            text = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(text, str) or len(text) > 64000:
+                raise ProviderError("The model returned invalid structured output.")
+            return json.loads(text), ProviderUsage(1, _int(body.get("prompt_eval_count")), _int(body.get("eval_count")))
+        except httpx.TimeoutException as exc:
+            raise ProviderError("The local model timed out. Try a smaller model or retry later.", retryable=True) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError("The local model service could not be reached.", retryable=True) from exc
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, KeyError, RecursionError) as exc:
+            raise ProviderError("The model returned malformed structured output; nothing was accepted.") from exc
+        finally:
+            if owned:
+                client.close()
+
 
 class GeminiProvider:
     """Google Gemini over its HTTP API. The key comes from the environment and travels in a header, never in a URL."""
@@ -460,6 +499,60 @@ class GeminiProvider:
             usage_meta = answer.get("usageMetadata") if isinstance(answer.get("usageMetadata"), dict) else {}
             outcomes = _outcomes(batch, json.loads(text), extended, collections)
             return outcomes, ProviderUsage(1, _int(usage_meta.get("promptTokenCount")), _int(usage_meta.get("candidatesTokenCount")))
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, KeyError, RecursionError, ValueError) as exc:
+            if isinstance(exc, ProviderError):
+                raise
+            raise ProviderError("The model returned malformed structured output; nothing was accepted.") from exc
+        finally:
+            if owned:
+                client.close()
+
+    def complete_json(self, system: str, user: str, schema: dict, *, max_tokens: int = 1024):
+        """One schema-constrained JSON answer for a feature that is not classification. See OllamaProvider.complete_json."""
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": schema, "temperature": 0, "maxOutputTokens": max(64, min(int(max_tokens), 8192))},
+        }
+        owned = self.client is None
+        client = self.client or httpx.Client(timeout=httpx.Timeout(90, connect=5, write=10, pool=5), follow_redirects=False, trust_env=False)
+        try:
+            for attempt in (1, 2):
+                try:
+                    with client.stream("POST", f"{self.base_url}/models/{self.model}:generateContent", json=body, headers={"x-goog-api-key": self._key}) as response:
+                        status = response.status_code
+                        retry_after = response.headers.get("retry-after", "")
+                        raw = _read_limited(response) if status == 200 else b""
+                except httpx.TimeoutException as exc:
+                    raise ProviderError("The hosted model service timed out. Try again later.", retryable=True) from exc
+                except httpx.HTTPError as exc:
+                    raise ProviderError("The hosted model service could not be reached.", retryable=True) from exc
+                if status in {429, 500, 502, 503, 504} and attempt == 1:
+                    self.sleep(min(float(retry_after), 5.0) if retry_after.replace(".", "", 1).isdigit() else 1.0)
+                    continue
+                break
+            if status == 429:
+                raise ProviderError("The hosted model service is limiting requests. Try again later.", retryable=True)
+            if status >= 500:
+                raise ProviderError("The hosted model service is unavailable. Try again later.", retryable=True)
+            if status != 200:
+                raise ProviderError("The hosted model service rejected the request; check the API key and model name.")
+            answer = json.loads(raw)
+            if not isinstance(answer, dict):
+                raise ProviderError("The model returned invalid structured output.")
+            feedback = answer.get("promptFeedback")
+            candidates = answer.get("candidates")
+            if (isinstance(feedback, dict) and feedback.get("blockReason")) or not isinstance(candidates, list) or not candidates:
+                raise ProviderError("The hosted model service declined to process this text.")
+            candidate = candidates[0] if isinstance(candidates[0], dict) else {}
+            if candidate.get("finishReason") not in {None, "STOP"}:
+                raise ProviderError("The model response was incomplete; nothing was accepted.")
+            parts = (candidate.get("content") or {}).get("parts") if isinstance(candidate.get("content"), dict) else None
+            text = "".join(p["text"] for p in parts if isinstance(p, dict) and isinstance(p.get("text"), str)) if isinstance(parts, list) else ""
+            if not text or len(text) > 64000:
+                raise ProviderError("The model returned invalid structured output.")
+            usage_meta = answer.get("usageMetadata") if isinstance(answer.get("usageMetadata"), dict) else {}
+            return json.loads(text), ProviderUsage(1, _int(usage_meta.get("promptTokenCount")), _int(usage_meta.get("candidatesTokenCount")))
         except (json.JSONDecodeError, UnicodeDecodeError, TypeError, KeyError, RecursionError, ValueError) as exc:
             if isinstance(exc, ProviderError):
                 raise

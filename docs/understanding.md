@@ -127,6 +127,69 @@ Keyword search (`q=`) already indexed captions, summaries, notes and tags. Trans
 
 Every tier reports what it used through `server/enrich/usage.py`: model calls, input and output tokens, audio seconds, bytes fetched, and cache hits, per event, with `deep_read` set when the user asked for it. A local ledger (table `enrich_usage`) counts them and `GET /api/enrichment/usage` returns the totals. A hosted deployment attaches its own sink with `service.meter.add_sink(sink)`; a failing sink never breaks a save or a job. Nothing here limits, blocks or bills anything.
 
+## Recipe cards
+
+A save that is a recipe can have a structured recipe card: title, servings, times, ingredients (quantity, unit, name, note, optional group) and ordered steps (text, optional timer, the ingredients each step uses), with where each part came from. It is meant for a cook mode, where a screen shows one step, its timer and its ingredients. Routes: `GET|PUT /api/items/{id}/recipe`, `DELETE /api/items/{id}/recipe/edits`, `POST /api/items/{id}/recipe/extract`, `GET /api/recipes`. Contract in [API_CONTRACT.md](../API_CONTRACT.md).
+
+**Three ways to a recipe, in order of trust.** `POST .../recipe/extract` with `method: "auto"` takes the first that finds one:
+
+1. **`jsonld`: the page's own schema.org `Recipe` data**, read by plain parsing when a page has been attached (`recipeIngredient`, `recipeInstructions` including sections, `recipeYield`, ISO 8601 times). No model. This is preferred whenever it exists.
+2. **`rules`: fixed text rules** over a caption, transcript or note that sets out an "Ingredients" list and a "Method". No model. Only lines that are literally in the text. If the rules find ingredients but no method and a provider is configured, the provider is also asked and its answer is used only if it verifies more content.
+3. **`ai`: a provider that selects spans.** The model is asked to *copy* ingredient and step spans out of the text, not to write a recipe. Everything it returns is then checked by code (below).
+
+With no provider and no recipe text the answer is `found: false` with a reason (`ai_not_configured`, `no_text`, `no_recipe_found`). Asking for `method: "ai"` with no provider is a `503` with `code: "ai_not_configured"`. Nothing is ever made up to fill a gap.
+
+**How a model's answer is checked.** Each ingredient and step carries a `quote` that must be found, word for word (ignoring case, accents and punctuation), in a field of the text the model was given; one that is not is dropped and counted (`dropped`). Quantity, unit, name and note are parsed from that quote by code, not taken from the model. A step's timer is computed from the step's own words (`10-12 minutes` gives 600 seconds, the shorter end, so a timer never overcooks) and its ingredient references are computed by matching ingredient names, whatever the model said. A serving count or a time is kept only if the model's quote for it is in the text. The title is the model's only if the text supports it, else the save's own title. A recipe is `is_recipe: true` only if the model said so *and* at least two ingredients were verified; otherwise `is_recipe: false` with a `reason`. `confidence` is `high` for schema.org data and the owner's own text, `medium` for rules or a model with ingredients and steps, `low` otherwise.
+
+**Labels.** Every card has `provenance`: `method`, and for a model `evidence_level` (`caption-based`, `transcript-based`, `text-only`), `evidence_sources`, `evidence_note`, `provider` and `model`, computed from the input and never from the model, like every other suggestion here. Each ingredient and step says which field it came from; `evidence` says where the title, servings, times, ingredients and steps came from.
+
+**Edits win.** `PUT` stores the owner's version beside the last extraction; it is never merged into it. A later extraction (even `force: true`) only replaces the extraction, and the response shows both, so the owner can look at what changed. `DELETE .../edits` goes back to the extraction. The server sets provenance and every computed field on a save, so what a `GET` returned can be sent back after editing. The same rule holds for places.
+
+**Scaling is defined on the server and may be done on the client.** `GET .../recipe?servings=N` (or `?factor=F`) returns the recipe's ingredients scaled, as `scaled`; the stored recipe is never changed. A client that wants an instant slider can apply the same rules locally. The rules:
+
+- One linear factor, `f = target / base`, in exact rational arithmetic (no floating-point drift). A recipe with no stated servings can be scaled by `factor` only (`409 servings_unknown` otherwise). `f` must be between 1/100 and 100.
+- A quantity is multiplied by `f`; a range scales both ends.
+- The unit may move to a neighbour **in the same dimension and system** when the result reads cleanly: 1000 g to 1 kg and back, 1000 ml to 1 l and back, 3 tsp to 1 tbsp, 4 tbsp to 1/4 cup, 16 oz to 1 lb, and the reverse when the amount falls below one of the larger unit. It **never** converts between metric and US units and never between weight and volume (that needs a density this data does not have).
+- The result is rounded to an amount a cook can measure: cups, spoons and pounds to the nearest 1/8, 1/4, 1/3 or 1/2 that fits; grams and millilitres to 1 below 100, 5 above; kilograms and litres to 0.05; counts to a half below ten. `quantity` is the rounded amount, `exact` the exact amount in the same unit, `approximate` says the rounding moved it by more than 3 percent, and a count that is not whole (`4.5 eggs`) carries the warning `fractional_count`.
+- An ingredient with no amount ("salt, to taste") is left as written and marked `scaled: false`.
+- Times, temperatures and numbers written inside a step's text are **not** scaled, and neither is cooking time; a step's `ingredient_refs` say which scaled ingredients to show beside it. Seasoning, leavening and pan size do not always scale in step with the food, and the response says so.
+
+## Places
+
+A save can have the places it mentions: name, kind (`restaurant`, `cafe`, `bar`, `bakery`, `hotel`, `attraction`, `landmark`, `museum`, `park`, `beach`, `shop`, `market`, `venue`, `neighborhood`, `city`, `region`, `country`, `other`), city, region, country, address, a note, evidence (the field and the words) and optional coordinates. Routes: `GET|PUT /api/items/{id}/places`, `DELETE .../places/edits`, `POST .../places/extract`, `POST .../places/geocode`, and `GET /api/places` for the whole library (for a map).
+
+**Coordinates are never invented.** They have three origins, and each is labelled in `coordinates.source`:
+
+- `source`: the save itself states them. A page's structured data (`geo` on a `Place`, `LocalBusiness`, `Restaurant` and similar), a map link (Google Maps, Apple Maps and OpenStreetMap links that carry them, or a `geo:` URI), or a latitude and longitude written out on the same line as the place (three or more decimals, hemisphere letters honoured). A coordinate on a line of its own is not tied to any place; it is only counted (`unattached_coordinates`). Short links such as `maps.app.goo.gl` carry no coordinates and are not followed.
+- `geocoder`: the operator's geocoder returned them, because the operator turned it on and the request asked for it (below).
+- `user`: the owner typed them.
+
+A model never supplies a coordinate. A place without coordinates is stored as it is.
+
+**Extraction** takes schema.org places, then pin lines and map links by fixed rules (`📍 Café Central, Herrengasse 14, Vienna`, `Location: ...`), then, if a provider is configured, a model. A model's place must have its name in the text exactly as written, and a city, country or address it offers is kept only if the text states it (`unstated_fields_cleared` counts the rest); the creator's own account is never a place. The rules do not guess a city or country from a comma: they keep a house-numbered remainder as the address and anything else as a note. Edits win exactly as for recipes, and a place keeps its `id` across edits so a client can refer to it.
+
+**Geocoding is opt-in twice.** It is off unless the operator sets `LA_GEOCODER_URL` (a Nominatim-compatible service) **and** `LA_GEOCODER_CONTACT` (an email address or URL the geocoder's operator can reach you at), and even then it runs only when a request asks (`geocode: true` on extract, or `POST .../places/geocode`). With it off, `geocode: true` returns `geocoding.reason: "geocoder_not_configured"` and the places are stored without coordinates; the dedicated route is a `503` with that code. The server follows [Nominatim's usage policy](https://operations.osmfoundation.org/policies/nominatim/): an identifying `User-Agent` carrying the contact; at most one request a second **across the whole process and every account** (the interval defaults to 1.1 s and cannot be set below 1 s); one request at a time; results cached per library (found for `LA_GEOCODER_CACHE_DAYS`, not found for a week), with errors never cached; no autocomplete and no bulk run (at most five places per request); and only the place's own name, address, city and country are sent, never the save, its link or its text. The public openstreetmap.org service is for light personal use; a hosted deployment with many accounts should run its own instance. Results come from OpenStreetMap data and carry an attribution string that a map should show.
+
+**The map list.** `GET /api/places?bbox=minLon,minLat,maxLon,maxLat` returns places with coordinates inside the box (a box whose `minLon` is greater than its `maxLon` crosses the antimeridian), `kind=`, `q=` (name, city, country, address), `with_coordinates=true|false`, `limit`, `offset`, and `format=geojson` for a `FeatureCollection` of points. Archived saves are left out unless `include_archived=true`.
+
+## Ask your archive
+
+`POST /api/ask` answers a question from the owner's own saves and says where each part came from. It needs no embeddings and no vector store.
+
+**Retrieval.** The question becomes content terms (stop words, question words and Arabic and English filler dropped; plurals and the Arabic definite article folded). The existing full-text index is asked for saves matching *any* term, ordered by BM25 with the title weighted 10, tags 5 and body 1 (so a natural question is not an impossible AND, which is what `GET /api/items?q=` does with a whole sentence). The best 60 are then re-ranked: `score = 0.45 coverage + 0.25 phrase + 0.30 position`, where *coverage* is the share of the question's terms the save matches, each weighted by the field that matched (title 1.0, tags 0.85, caption, transcript and summary 0.6, notes 0.5, creator 0.3), *phrase* is the share of adjacent question words that sit next to each other in the save, and *position* is the reciprocal of the BM25 rank. This is why a save that says "lemon" six times but never "pasta" ranks below one that has both. A long question must be matched by more than one stray word. Only short passages around the matched words are kept (at most 3 per save, 500 characters each, 12,000 in all, at most 12 saves); `context` reports what was sent and whether anything was left out.
+
+**Answers.** With a provider, the model is given the question and those passages and must answer only from them, with citations. The answer is shown only if every check passes (below); otherwise the response is the ranked saves with `answered: false` and a `reason`. With **no provider** the response is `mode: "ranked_only"`, `reason: "ai_not_configured"` and the ranked saves, flagged as such. With **nothing retrieved** nothing is asked and the answer is "Nothing saved about that." (`mode: "no_results"`). A provider outage degrades to ranked saves (`reason: "ai_failed"`), never an error. Streaming is not offered. Each answer carries `evidence` (level, sources and a note about what it rests on) computed from the passages used.
+
+**Saved text is untrusted.** A caption, page or transcript is written by someone else and may try to give the model orders. The defences, in order:
+
+1. Nothing in a save is placed where instructions go. The model receives the owner's question and the passages as one JSON object, with throwaway references (`S1`, `S2`) in place of ids and links, so a save cannot name, request or leak another save, and text that imitates the end of the prompt stays inside its own string.
+2. A save whose text looks like instructions to a model (ignore or disregard previous instructions, "you are now", system or developer prompt, chat-template markers, requests to reveal or send the library, and Arabic equivalents) is kept out of the model's context altogether and flagged `withheld_from_answer: "contains_instructions"` so the owner can see it. This is a first layer, not a guarantee.
+3. The model has no tools and is told the text is data. Only saves that match the question are ever sent; the rest of the library is not in the prompt.
+4. Whatever the model returns is validated before anything is shown. Every citation must name a reference that was supplied and quote it word for word from that save's own passages; the answer must share at least 40 percent of its content words with the passages it was given; and it may contain **no link, address, markup or identifier at all**. A save's own link is returned beside the answer (`citations[].url`), so a link never has to come from the model, and one a hostile save puts in the model's mouth is refused. An answer that fails any check is not shown.
+5. With a hosted provider, passages come only from the post's own text (never the owner's notes) unless the operator allows more, exactly as for suggestions. A question that matches only the owner's private notes returns `reason: "no_shareable_text"` and nothing is sent.
+
+These defences were tested against stub models that obey any instruction they can see, including one given a save worded to slip past the detector. They have not been tested against real models, which can fail in ways a stub cannot; treat the answer as a convenience and the citations as the evidence.
+
 ## Settings
 
 All are environment variables (or `.env`). Everything is off or conservative unless set. Keys are read only from the environment, are never part of any response, and never appear in a URL. An invalid combination stops the server at start with a message naming the setting. `python -m server.cli doctor` checks them before you start, makes no network request, prints no values, and reports which optional features are on.
@@ -153,6 +216,11 @@ All are environment variables (or `.env`). Everything is off or conservative unl
 | `LA_PUBLIC_CACHE` | false | Turn on the shared cache. |
 | `LA_PUBLIC_CACHE_PATH` | `<data dir>/cache/public-posts.sqlite3` | Absolute path, for shared storage. |
 | `LA_PUBLIC_CACHE_TTL_DAYS` | 30 | 1 to 365. |
+| `LA_GEOCODER_URL` | none | A Nominatim-compatible geocoder (HTTPS, or loopback HTTP) for place coordinates. Off unless set; used only when a request asks. |
+| `LA_GEOCODER_CONTACT` | none | Required with the URL: an email address or URL the geocoder's operator can reach. Sent only in the User-Agent. |
+| `LA_GEOCODER_MIN_INTERVAL_SECONDS` | 1.1 | Wait between requests to one geocoder, shared by every account in the process. 1 to 60. |
+| `LA_GEOCODER_CACHE_DAYS` | 30 | How long a found place is remembered, 1 to 365. |
+| `LA_IMPORT_MAX_ARCHIVE_MB` | 512 (64 hosted) | Largest data export the guided import accepts, 1 to 4096. See [importing](importing.md#guided-backlog-import). |
 
 ## Limits
 
@@ -166,6 +234,10 @@ All are environment variables (or `.env`). Everything is off or conservative unl
 | Transcript length | 20,000 characters |
 | Text per save sent to a model | about 14,000 characters (6,000 when batching) |
 | Redirects, ports | 4 by default, 80 and 443 only |
+| Recipe card | 100 ingredients, 100 steps, 96 KiB stored |
+| Places per save | 30 (5 geocoded per request) |
+| Text sent for a question | 12,000 characters, 12 saves, 500 characters a passage |
+| Question | 3 to 500 characters |
 
 ## What was and was not verified
 
@@ -177,6 +249,12 @@ Verified by hand: the page shapes above (ten page requests on 14 Nov 2026); the 
 
 **Not verified:** the Groq request shape follows its published reference (read on 14 Nov 2026) but was not exercised against the live service, because no key was used. The default Gemini model id is not confirmed to be available to every account. Server-side audio fetching from Instagram's media host was not attempted live. How well any model titles, tags or files real saves has not been measured.
 
+### Recipes, places and ask
+
+**Verified by automated tests with no network and no real model:** the ingredient, quantity, duration and serving parsers (English and Arabic digits and units); schema.org extraction from a synthetic page; the text rules; extraction through a stub provider whose invented ingredients, steps, serving counts and places are dropped; edits that win; the scaling rules, including unit changes that must not happen; every route in both server modes, the 402 for a locked hosted account, and that one account cannot read, change, list or geocode into another's data; the migration of a library written before these tables existed; that a backup with and without the new tables restores; the geocoder against a mock transport and a fake clock (identification, the shared one-a-second limit, caching of hits and misses, errors not cached, only the place's own words sent); retrieval and ranking, including that the literal search finds nothing for the same sentence; and the injection defences against stub models that obey whatever they can see.
+
+**Not verified:** any of it against a real model. The prompts and output schemas for Ollama and Gemini were exercised only against mock HTTP. Real models may quote loosely (such answers are refused rather than shown) or answer in ways the stubs do not. The geocoder was never contacted, so the Nominatim request shape follows its published reference only. The ranking weights are reasoned, not tuned on a real library.
+
 ## For a hosted or multi-user deployment
 
 The layer keeps its seams small so another part of the system can own users and billing:
@@ -186,3 +264,5 @@ The layer keeps its seams small so another part of the system can own users and 
 - Usage events are the metering input; attach a sink instead of changing the pipeline.
 - `UnderstandingWorker` extends `ClassificationWorker`, so queueing, cancelling and retrying come from the base class. It reads only its store and service.
 - The schema is additive (`server/enrich/schema.py`) and idempotent; restore accepts a backup with or without it.
+- Recipe cards, places and ask add their own additive tables (`server/enrich/features.py`: `item_recipe`, `item_places`, `geocode_cache`, `guided_imports`), created or upgraded in place when a library is opened and tracked by `features_schema_version` in `meta`. A library written by a newer version is refused rather than opened. Restore accepts a backup with or without them.
+- In hosted mode these three features need the account's unlock (`402` with `code: "unlock_required"`); their model calls are recorded by the same usage hook, in the calling account's own ledger.

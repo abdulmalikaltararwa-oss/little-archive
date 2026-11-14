@@ -1,0 +1,48 @@
+{
+  "saved_saved_media": [
+    {
+      "title": "example_baker",
+      "string_map_data": {
+        "Saved on": {
+          "href": "https://www.instagram.com/p/SYNTHold001/",
+          "timestamp": 1600000300
+        }
+      }
+    },
+    {
+      "title": "example_cook",
+      "string_map_data": {
+        "Saved on": {
+          "href": "https://www.instagram.com/reel/SYNTHold002/",
+          "timestamp": 1600000200
+        }
+      }
+    },
+    {
+      "title": "example_cook",
+      "string_map_data": {
+        "Enregistr\u00e9 le": {
+          "href": "https://www.instagram.com/p/SYNTHold003/",
+          "timestamp": 1600000100
+        }
+      }
+    },
+    {
+      "title": "example_baker",
+      "string_map_data": {
+        "Saved on": {
+          "href": "https://www.instagram.com/p/SYNTHold001/",
+          "timestamp": 1600000050
+        }
+      }
+    },
+    {
+      "title": "example_gone",
+      "string_map_data": {
+        "Saved on": {
+          "timestamp": 1600000000
+        }
+      }
+    }
+  ]
+}

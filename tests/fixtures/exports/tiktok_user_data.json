@@ -1,0 +1,107 @@
+{
+  "Profile": {
+    "Profile Information": {
+      "ProfileMap": {
+        "userName": "example_user",
+        "bioDescription": "PRIVATE-PROFILE-MARKER"
+      }
+    }
+  },
+  "Direct Message": {
+    "Direct Messages": {
+      "ChatHistory": {
+        "Chat with someone": [
+          {
+            "Date": "2024-03-01 10:00:00",
+            "From": "someone",
+            "Content": "PRIVATE-DM-MARKER"
+          }
+        ]
+      }
+    }
+  },
+  "Activity": {
+    "Favorite Effects": {
+      "FavoriteEffectsList": []
+    },
+    "Favorite Hashtags": {
+      "FavoriteHashtagList": [
+        {
+          "Date": "2024-01-01 10:00:00",
+          "Link": "https://www.tiktok.com/tag/synthetic"
+        }
+      ]
+    },
+    "Favorite Sounds": {
+      "FavoriteSoundList": [
+        {
+          "Date": "2024-01-02 10:00:00",
+          "Link": "https://www.tiktokv.com/share/music/7400000000000009999/"
+        }
+      ]
+    },
+    "Favorite Videos": {
+      "FavoriteVideoList": [
+        {
+          "Date": "2024-03-05 18:30:12",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000001/"
+        },
+        {
+          "Date": "2024-03-06 09:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000002/"
+        },
+        {
+          "Date": "2024-03-06 09:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000002/"
+        },
+        {
+          "HashtagLink": "https://www.tiktokv.com/share/tag/7400000000000007777/"
+        },
+        {
+          "Date": "2024-03-07 12:00:00",
+          "Link": "https://example.com/not-a-tiktok-link"
+        },
+        {
+          "Date": "2024-03-08 08:15:00",
+          "Link": "https://www.tiktok.com/@example_creator/video/7400000000000000003"
+        }
+      ]
+    },
+    "Like List": {
+      "ItemFavoriteList": [
+        {
+          "Date": "2024-03-05 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000099/"
+        },
+        {
+          "Date": "2024-03-05 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000099/"
+        },
+        {
+          "Date": "2024-03-05 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000099/"
+        }
+      ]
+    },
+    "Video Browsing History": {
+      "VideoList": [
+        {
+          "Date": "2024-03-04 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000098/"
+        },
+        {
+          "Date": "2024-03-04 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000098/"
+        },
+        {
+          "Date": "2024-03-04 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000098/"
+        },
+        {
+          "Date": "2024-03-04 10:00:00",
+          "Link": "https://www.tiktokv.com/share/video/7400000000000000098/"
+        }
+      ]
+    }
+  }
+}
