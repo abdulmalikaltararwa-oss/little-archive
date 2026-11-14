@@ -17,8 +17,8 @@ Saved captions, pages and transcripts are written by other people. They are untr
 * a save whose text looks like instructions to a model is kept out of the model's context entirely (and flagged);
 * the model has no tools, is told the text is data, and its answer is accepted only if it validates: every citation must name
   a reference that was supplied and quote it exactly from that save's own passages, the answer must share its substance with
-  those passages, and it may contain no link, markup or identifier that the cited passages do not themselves contain.
-  An answer that fails any of that is not shown; the owner gets the ranked saves instead.
+  those passages, and it may contain no link, address, markup or identifier at all (each cited save's own link is returned
+  beside the answer instead). An answer that fails any of that is not shown; the owner gets the ranked saves instead.
 
 Without a provider the ranked saves are returned and flagged as such. With nothing retrieved, nothing is asked and the answer
 is "Nothing saved about that."
@@ -44,12 +44,15 @@ NOTHING_SAVED = "Nothing saved about that."
 _STOP = frozenset("""a about after all also am an and any are as at be been being but by can could did do does for from had has have how i if in into is it its
 just me my of on or our so some than that the their them then there these they this to up us was we were what when where which who whom why will with would you your
 saved save saves saving post posts video videos reel reels find show tell give know remember recall looking look wanted want need""".split())
-_STOP_AR = frozenset("ما ماذا هل من في على عن التي الذي كيف اين أين متى لماذا هذا هذه ذلك كان كانت هو هي مع الى إلى أو او ثم كل بعض".split())
+_STOP_AR = frozenset("""ما ماذا هل من في على عن التي الذي اللي كيف اين أين وين متى لماذا ليش شو ايش إيش شنو وش هذا هذه ذلك كان كانت هو هي مع الى إلى أو او ثم كل بعض
+حفظت حفظتها حفظته حفظتهم محفوظ محفوظة احفظ""".split())
 _FIELD_WEIGHT = {"title": 1.0, "tags": 0.85, "caption": 0.6, "transcript": 0.6, "summary": 0.6, "alt_text": 0.45, "notes": 0.5, "creator": 0.3}
 _LABELS = {"title": "title", "creator": "creator", "caption": "caption", "thumbnail_alt": "alt_text", "notes": "notes", "transcript": "transcript", "summary": "summary"}
 
 
 def _stem(word: str) -> str:
+    if len(word) > 4 and word.startswith("ال"):   # the Arabic definite article: "اللبنة" is "لبنة"
+        return word[2:]
     if len(word) > 4 and word.endswith("ies"):
         return word[:-3] + "y"
     if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
@@ -203,8 +206,13 @@ def passages_for(item: dict, terms: list[str], *, mode: str) -> list[dict]:
             scored.append((hits, -order, -place, label, window[:MAX_PASSAGE_CHARS]))
     scored.sort(reverse=True)
     chosen = [s for s in scored if s[0] > 0][:MAX_PASSAGES_PER_SAVE]
-    if not chosen and scored:   # matched by tags or the index only: the opening of the text is still the honest context
-        chosen = scored[:1]
+    if not chosen:
+        # No shareable text carries the question's words. A save that matched through its tags is still introduced by its title;
+        # one that matched only in text this mode must not send (the owner's notes) offers the model nothing.
+        tag_tokens = [t for tag in item.get("tags") or [] for t in match_tokens(tag)]
+        title = source.get("title") if isinstance(source.get("title"), str) else ""
+        if title and any(any(t.startswith(term) if len(term) >= 3 else t == term for t in tag_tokens) for term in terms):
+            chosen = [(1, 0, 0, "title", title[:MAX_PASSAGE_CHARS])]
     seen, out = set(), []
     for _, _, _, label, text in chosen:
         key = " ".join(match_tokens(text))
@@ -265,13 +273,10 @@ def validate_answer(raw, shown: dict[str, dict], question: str) -> tuple[dict | 
                 break
     if not citations:
         return None, "unverified"
-    cited_text = " ".join(c["passage"] for c in citations)
-    cited_norm = " ".join(match_tokens(cited_text))
-    if _MARKUP.search(answer) or _UUID.search(answer):
+    # No link of any kind, no markup and no identifier in the answer text. A save's own address is returned beside the answer
+    # (citations[].url), so a link never has to come from the model, and one a hostile save puts in the model's mouth is refused.
+    if _MARKUP.search(answer) or _UUID.search(answer) or _URLISH.search(answer):
         return None, "unsafe"
-    for url in _URLISH.findall(answer):
-        if " ".join(match_tokens(url.rstrip(".,;:)"))) not in cited_norm:
-            return None, "unsafe"
     everything = {t for s in shown.values() for p in s["passages"] for t in match_tokens(p["text"])} | set(match_tokens(question))
     words = [w for w in match_tokens(answer) if _CONTENT.fullmatch(w) and not w.isdigit()]
     if words and sum(1 for w in words if w in everything or _stem(w) in everything or any(e.startswith(w) or w.startswith(e) and len(e) >= 4 for e in everything)) / len(words) < 0.4:
@@ -326,7 +331,8 @@ class AskService:
         context = {"saves": len(order), "passages": sum(len(s["passages"]) for s in shown.values()), "chars": chars, "truncated": truncated}
         result = {**base, "mode": "ranked_only", "answered": False, "answer": None, "reason": "", "citations": [], "sources": sources, "context": context, "notice": None}
         if not self._ai():
-            result.update(reason="ai_not_configured", notice="No AI provider is configured on this server, so these are the best-matching saves only. Nothing was summarised.")
+            result.update(reason="ai_not_configured", context={"saves": 0, "passages": 0, "chars": 0, "truncated": False},
+                          notice="No AI provider is configured on this server, so these are the best-matching saves only. Nothing was summarised.")
             return result
         if not order:
             reason = "contains_instructions" if withheld_any else "no_shareable_text"
