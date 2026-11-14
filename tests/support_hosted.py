@@ -65,9 +65,15 @@ def claims(user_id, **changes):
     return {name: value for name, value in document.items() if value is not None}
 
 
+# The request limits are on in production; the tests that are not about them switch them off, so that a test which makes a
+# few hundred requests, or many forged tokens on purpose, is not refused for it. A test about a limit sets that limit.
+UNLIMITED = {"hosted_rate_address_per_minute": 0, "hosted_rate_account_per_minute": 0, "hosted_rate_auth_failures": 0,
+             "hosted_heavy_per_account": 64, "hosted_heavy_overall": 1024}
+
+
 def hosted_config(root, **settings):
     return Config(data_dir=root / "data", public_url="http://testserver", testing=True, mode="hosted",
-                  supabase_url=SUPABASE_URL, **settings)
+                  supabase_url=SUPABASE_URL, **{**UNLIMITED, **settings})
 
 
 def hosted_app(root, *keys, **settings):

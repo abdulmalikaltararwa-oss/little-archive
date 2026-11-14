@@ -5,6 +5,7 @@ routes to many accounts: each request's library comes only from its verified
 identity (see `owner`), never from anything else the client sends.
 """
 from contextlib import asynccontextmanager
+import asyncio
 import csv
 from dataclasses import dataclass
 from datetime import datetime
@@ -40,12 +41,15 @@ from .enrich.images import reencode_image, write_asset
 from .enrich.routes import install_routes as install_enrichment_routes
 from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
+from .limits import BODY_METHODS, CLIENT, IDENTITY, RELEASES, HostedGuard, HostedLimits, Refusal, refusal_response, retry_after
+from .metering import AccountMeters
 from .models import AccountDeletion, AIJobs, BulkAction, CollectionInput, CollectionPatch, DeviceLogin, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput
 from .security import RateLimiter, token_hash, verify_password
 from .storage import LibraryClosed, LibraryFull, Store, clean_tags, json_text, normalize_url, now
 
 
 log = logging.getLogger("little_archive")
+BODY_IDLE_SECONDS, BODY_SECONDS = 30, 300  # a body must keep arriving, and be complete within five minutes
 COOKIE = "little_archive_session"
 BEARER = {"WWW-Authenticate": "Bearer"}
 BODY = "little_archive.body"  # this request's buffered body, in its own ASGI scope
@@ -81,6 +85,8 @@ class BodyLimitMiddleware:
             maximum = 256 * 1024
         elif path.startswith("/api/auth/"):
             maximum = 8 * 1024
+        elif path.startswith("/api/purchases/"):
+            maximum = 128 * 1024  # a store's signed proof or notification is a few kilobytes
         elif path.endswith("/thumbnail"):
             maximum = 8 * 1024 * 1024
         elif path.endswith("/page") or path.endswith("/transcript"):
@@ -95,15 +101,23 @@ class BodyLimitMiddleware:
             else:
                 maximum = min(maximum, self.hosted["json"])
         headers = dict(scope.get("headers", []))
+        if b"authorization" not in headers and b"cookie" not in headers and not path.startswith("/api/purchases/"):
+            # Nothing that could be a credential came with this request, so there is no reason to hold more than a sign-in
+            # form's worth of it in memory.
+            maximum = min(maximum, 8 * 1024)
         try:
             declared = int(headers.get(b"content-length", b"0"))
         except ValueError:
             return await JSONResponse({"detail": "Invalid request length."}, 400)(scope, receive, send)
         if declared > maximum or declared < 0:
             return await JSONResponse({"detail": "This upload exceeds the request size limit."}, 413)(scope, receive, send)
-        chunks, count = [], 0
+        chunks, count, deadline = [], 0, time.monotonic() + BODY_SECONDS
         while True:
-            message = await receive()
+            try:
+                # A client that stops sending, or trickles a body in, does not hold this request open indefinitely.
+                message = await asyncio.wait_for(receive(), timeout=max(0.001, min(BODY_IDLE_SECONDS, deadline - time.monotonic())))
+            except asyncio.TimeoutError:
+                return await JSONResponse({"detail": "The upload stalled or took too long."}, 408)(scope, receive, send)
             if message["type"] == "http.disconnect":
                 return
             chunk = message.get("body", b"")
@@ -132,33 +146,34 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     """`identity` and `entitlements` replace the hosted defaults (tests, future providers)."""
     config = config or Config.from_env()
     config.validate()
+    config.require_account_deletion()
     hosted = config.hosted
     if hosted:
-        from .entitlements import SQLiteEntitlements
-        from .identity import IdentityError, IdentityUnavailable, SupabaseVerifier
+        from .entitlements import SQLiteEntitlements, SuggestionLimits
+        from .identity import IdentityError, IdentityExpired, IdentityUnavailable, SupabaseVerifier
         from .tenancy import AccountDeleted, AccountWorker, LibraryManager, release_orphans, understanding_environment
         owner_store, devices, enrichment, libraries = None, None, None, LibraryManager(config)
-        entitlements = entitlements or SQLiteEntitlements(libraries.accounts_path, config.hosted_deep_reads_monthly, config.hosted_free_deep_reads_monthly)
+        meters = hosted_limits = None  # replaced just below
+        entitlements = entitlements or SQLiteEntitlements(
+            libraries.accounts_path, config.hosted_deep_reads_monthly, config.hosted_free_deep_reads_monthly,
+            suggestion_limits=SuggestionLimits(config.hosted_suggestions_daily_free, config.hosted_suggestions_monthly_free,
+                                               config.hosted_suggestions_daily_unlocked, config.hosted_suggestions_monthly_unlocked))
         libraries.on_delete.append(entitlements.forget)
         libraries.resume_deletions()
         identity = identity or SupabaseVerifier.from_config(config)
         quota = config.hosted_storage_quota_mb * 1024 * 1024
         limits = {"json": config.hosted_max_json_kb * 1024, "upload": config.hosted_max_upload_mb * 1024 * 1024, "thumbnail": config.hosted_max_thumbnail_mb * 1024 * 1024}
 
-        def charge_deep_read(user_id):
-            """A closer read is the metered operation: one from this month's allowance, or a refusal."""
-            if not entitlements.deep_reads(user_id)["limit"] and not entitlements.is_unlocked(user_id):
-                raise HTTPException(402, "Deep reads come with the full unlock.")
-            if not entitlements.consume_deep_reads(user_id, 1):
-                used = entitlements.deep_reads(user_id)
-                raise HTTPException(429, f"This month's deep-read allowance is used ({used['used']} of {used['limit']}). It resets on the first of the month, UTC.")
+        # What an account may spend (closer reads, ordinary suggestions) is charged when work is queued and given back when it fails.
+        meters, hosted_limits = AccountMeters(entitlements), HostedLimits(config)
 
         # One understanding service per account library, all served by one worker thread.
         worker, environment = AccountWorker(libraries), understanding_environment(config)
-        libraries.prepare = lambda store: worker.adopt(store, build_enrichment(store, config, environ=environment), charge_deep_read)
+        libraries.prepare = lambda store: worker.adopt(store, build_enrichment(store, config, environ=environment), meters)
     else:
         # There is exactly one library and no account bookkeeping in this mode.
         owner_store, libraries, identity, quota, limits = Store(config), None, None, None, None
+        meters = hosted_limits = None
         devices, entitlements = DeviceTokens(config.data_dir, config.device_token_idle_days, config.device_token_max_days), OwnerEntitlements()
         enrichment = owner_store.enrichment = build_enrichment(owner_store, config)
         worker = enrichment.worker
@@ -173,7 +188,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     app = FastAPI(title="Little Archive", version=__version__, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.store, app.state.config, app.state.worker, app.state.enrichment = owner_store, config, worker, enrichment
     app.state.libraries, app.state.entitlements, app.state.identity, app.state.devices = libraries, entitlements, identity, devices
+    app.state.meters, app.state.limits = meters, hosted_limits
     app.add_middleware(BodyLimitMiddleware, hosted=limits)
+    if hosted:
+        # Around the body reader: address budget first, then sign-in, both before a request body is read.
+        app.add_middleware(HostedGuard, limits=hosted_limits, authenticate=lambda values, address: authenticate(values, address))
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
 
     @app.middleware("http")
@@ -205,6 +224,10 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         if config.secure_cookies:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         return response
+
+    @app.exception_handler(Refusal)
+    async def refused(request, exc):
+        return refusal_response(exc)
 
     @app.exception_handler(ValueError)
     async def bad_value(request, exc):
@@ -251,31 +274,50 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             row = c.execute("SELECT * FROM sessions WHERE hash=? AND expires>?", (token_hash(token), time.time())).fetchone()
             return dict(row) if row else None
 
-    def bearer_token(request):
-        """The presented bearer credential, or None when the request carries none.
+    def bearer_from(values):
+        """The presented bearer credential among these Authorization header values, or None when there is none.
 
         Once a request presents one, it is judged by that credential alone: an
         invalid token is never rescued by a cookie that happens to accompany it.
         Every Authorization header is examined; more than one bearer value is
         invalid. Other schemes (a proxy's Basic auth, say) are not this application's.
         """
-        found = [match.group(1) or "" for value in request.headers.getlist("authorization")
+        found = [match.group(1) or "" for value in values
                  if (match := re.fullmatch(r"\s*bearer(?:\s+(.*))?", value, re.IGNORECASE | re.DOTALL))]
         if not found:
             return None
         return found[0].strip() if len(found) == 1 else ""
 
-    def identify(request):
-        """Hosted mode: the verified account behind a request, from its access token only."""
-        token = bearer_token(request)
+    def bearer_token(request):
+        return bearer_from(request.headers.getlist("authorization"))
+
+    def authenticate(values, address):
+        """Hosted mode: the verified identity behind these Authorization header values, or an HTTP refusal.
+
+        Called once per request, by the request guard before the body is read for a request that has one, otherwise by `identify`.
+        A forged or malformed token counts against the address's budget of failed sign-ins; an expired one does not, because a
+        signed-in phone presents one every hour and refreshes it.
+        """
+        token = bearer_from(values)
         if token is None:
             raise HTTPException(401, "Sign in to your library.", headers=BEARER)
         try:
-            account = identity.verify(token)
+            return identity.verify(token)
         except IdentityUnavailable:
             raise HTTPException(503, "Sign-in keys are temporarily unavailable. Try again shortly.", headers={"Retry-After": "30"})
-        except IdentityError:
+        except IdentityExpired:
             raise HTTPException(401, "This sign-in is not valid here. Sign in again.", headers=BEARER)
+        except IdentityError:
+            wait = hosted_limits.auth_failed(address)
+            if wait:
+                raise Refusal(429, "Too many failed sign-in attempts from this address. Wait a few minutes and try again.", "auth_rate_limited", headers=retry_after(wait), retry_after=int(wait + 0.999))
+            raise HTTPException(401, "This sign-in is not valid here. Sign in again.", headers=BEARER)
+
+    def identify(request):
+        """Hosted mode: the verified account behind a request, from its access token only."""
+        account = request.scope.get(IDENTITY)  # already verified by the request guard, for a request that carries a body
+        if account is None:
+            account = authenticate(request.headers.getlist("authorization"), request.scope.get(CLIENT) or (request.client.host if request.client else "unknown"))
         if libraries.revoked(account.user_id, account.issued_at):
             raise HTTPException(401, "This account was deleted. Sign in again to start a new library.", headers=BEARER)
         return account
@@ -284,6 +326,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         """Full access to exactly one library: the owner's, or the verified account's."""
         if hosted:
             account = identify(request)
+            hosted_limits.admit(request.method, request.url.path, account.user_id, request.scope.setdefault(RELEASES, []))
             try:
                 store = libraries.open(account.user_id, issued_at=account.issued_at)
             except AccountDeleted:
@@ -435,7 +478,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         return {
             "mode": config.mode, "user_id": auth.user_id,
             "storage": {"used_bytes": store.used_bytes(), "quota_bytes": quota},
-            "entitlements": {"unlocked": entitlements.is_unlocked(auth.user_id), "deep_reads": entitlements.deep_reads(auth.user_id)},
+            "entitlements": {"unlocked": entitlements.is_unlocked(auth.user_id), "unlocked_via": entitlements.unlock_source(auth.user_id),
+                             "deep_reads": entitlements.deep_reads(auth.user_id), "suggestions": entitlements.suggestions(auth.user_id)},
         }
 
     @app.post("/api/account/delete", dependencies=hosted_route)
@@ -834,6 +878,12 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         with store.lock:
             ids = list(dict.fromkeys(data.ids)) if data.ids is not None else store.matching_item_ids(**data.filters.model_dump())
             queued = store.enrichment.worker.enqueue(ids)
+            limited = getattr(store.enrichment.worker, "limited", None)  # hosted: an allowance cut this request short
+        if limited:
+            reservation, skipped = limited
+            if not queued:
+                raise meters.refusal_for(reservation, skipped)  # 402 (not part of the free tier) or 429, with `code` and `limit`
+            return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued - skipped, "skipped": skipped, "limit": meters.limited(reservation, skipped)}
         return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued}
 
     @app.get("/api/ai/jobs")
@@ -848,6 +898,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     @app.post("/api/ai/jobs/cancel")
     def cancel_ai_jobs(auth=Depends(owner)):
         store = auth.store
+        if hosted:
+            return {"cancelled": store.enrichment.worker.cancel_pending()}  # also gives back what was still waiting
         with store.transaction() as c:
             count = c.execute("UPDATE ai_jobs SET status='cancelled',error='',updated_at=? WHERE status IN ('queued','running')", (now(),)).rowcount
         return {"cancelled": count}
@@ -863,7 +915,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
                 raise HTTPException(404, "This classification job was not found.")
             if job["status"] not in {"failed", "cancelled"}:
                 raise HTTPException(409, "Only failed or cancelled jobs can be retried.")
-            return {"queued": store.enrichment.worker.enqueue([job["item_id"]])}
+            queued = store.enrichment.worker.enqueue([job["item_id"]])
+            limited = getattr(store.enrichment.worker, "limited", None)
+            if limited and not queued:
+                raise meters.refusal_for(*limited)
+            return {"queued": queued}
 
     @app.post("/api/items/{iid}/ai/accept")
     def accept_ai(iid: str, auth=Depends(owner)):

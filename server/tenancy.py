@@ -21,7 +21,7 @@ import time
 from weakref import WeakValueDictionary
 
 from .identity import valid_user_id
-from .storage import LibraryClosed, Store
+from .storage import LibraryClosed, Store, now
 
 
 ACCOUNT_SCHEMA = """
@@ -317,29 +317,103 @@ class AccountWorker:
     def __init__(self, libraries):
         self.libraries, self.stopping, self.wake, self.thread, self.backoff = libraries, Event(), Event(), None, 1
 
-    def adopt(self, store, service, charge_deep_read=None):
-        """Attach an account library's understanding service and route its queueing through here."""
+    def adopt(self, store, service, meters=None):
+        """Attach an account library's understanding service and route its queueing through here.
+
+        `meters` (server.metering.AccountMeters) is what charges an account for work and gives the charge back:
+
+        * a closer read is charged when it is queued (a refusal queues nothing) and refunded if the job fails
+          before it produced a transcript;
+        * ordinary suggestions are charged when queued, only for the jobs that really are new (an item that already
+          has its suggestion costs nothing), and as many are queued as the allowance has room for;
+        * a suggestion is refunded if its job fails, or is cancelled while it is still waiting (see `cancel_queued`).
+
+        Refunds happen once, on the change of a job's state from running to failed, which only the worker thread makes.
+        """
         store.enrichment = service
         isolate_shared_cache(service)
         worker = service.worker
         worker.wake = self.wake
-        enqueue, enqueue_deep = worker.enqueue, worker.enqueue_deep
+        enqueue, enqueue_deep, fail = worker.enqueue, worker.enqueue_deep, worker._fail
+        worker.limited = None  # set by `queue` when an allowance cut a request short: (reservation, skipped)
 
         def queue(ids):
             with store.lock:
-                count = enqueue(ids)
+                worker.limited = None
+                if meters is None:
+                    count = enqueue(ids)
+                else:
+                    wanted = len(set(ids))
+                    reservation = meters.reserve_suggestions(store.tenant, wanted)
+                    room = [reservation.granted]
+
+                    def allow():
+                        if room[0] <= 0:
+                            return False
+                        room[0] -= 1
+                        return True
+                    try:
+                        count = enqueue(ids, admit=allow)
+                    except Exception:
+                        meters.refund_suggestions(store.tenant, reservation.granted, unspent=True)
+                        raise
+                    meters.refund_suggestions(store.tenant, room[0], unspent=True)  # reserved for items that needed no job
+                    if worker.denied:
+                        worker.limited = (reservation, worker.denied)
                 if count:
                     self.libraries.mark_pending(store)
                 return count
 
         def queue_deep(item_id):
             with store.lock:
-                if charge_deep_read is not None:
-                    charge_deep_read(store.tenant)  # raises when the account has no allowance left
-                enqueue_deep(item_id)
+                if meters is not None:
+                    meters.charge_deep_read(store.tenant)  # raises when the account has no allowance left
+                try:
+                    enqueue_deep(item_id)
+                except Exception:
+                    if meters is not None:
+                        meters.refund_deep_read(store.tenant)
+                    raise
                 self.libraries.mark_pending(store)
 
-        worker.enqueue, worker.enqueue_deep = queue, queue_deep
+        def status_of(job_id):
+            with store.transaction() as c:
+                row = c.execute("SELECT status FROM ai_jobs WHERE id=?", (job_id,)).fetchone()
+            return row[0] if row else None
+
+        def has_transcript(item_id):
+            item = store.get_item(item_id)
+            return bool(item and any(isinstance(e, dict) and e.get("kind") == "transcript" and str(e.get("text", "")).strip() for e in item.get("evidence", [])))
+
+        def failing(job, message):
+            before = status_of(job.id)
+            fail(job, message)
+            if meters is None or before != "running" or status_of(job.id) != "failed":
+                return
+            if job.deep:
+                # The closer read is spent once it has produced the words, even if the suggestion after it failed.
+                if not has_transcript(job.item_id):
+                    meters.refund_deep_read(store.tenant)
+            else:
+                meters.refund_suggestions(store.tenant, 1)
+
+        def cancel_pending():
+            """Cancel every queued and running job. What was still waiting is given back; what had started is not (its model
+            or transcription request may already have been made). A cancelled closer read can be asked for again."""
+            with store.lock:
+                with store.transaction() as c:
+                    c.execute("BEGIN IMMEDIATE")
+                    waiting = [row[0] for row in c.execute("SELECT input_hash FROM ai_jobs WHERE status='queued'")]
+                    count = c.execute("UPDATE ai_jobs SET status='cancelled',error='',updated_at=? WHERE status IN ('queued','running')", (now(),)).rowcount
+                    c.execute("UPDATE item_enrichment SET deep_read_state='',updated_at=? WHERE deep_read_state IN ('queued','running') AND item_id IN "
+                              "(SELECT item_id FROM ai_jobs WHERE status='cancelled' AND input_hash LIKE 'deep:%')", (now(),))
+            deep = sum(1 for digest in waiting if digest.startswith("deep:"))
+            if meters is not None:
+                meters.refund_deep_read(store.tenant, deep)
+                meters.refund_suggestions(store.tenant, len(waiting) - deep)
+            return count
+
+        worker.enqueue, worker.enqueue_deep, worker._fail, worker.cancel_pending = queue, queue_deep, failing, cancel_pending
 
     def start(self):
         self.thread = Thread(target=self.run, daemon=True, name="little-archive-accounts")

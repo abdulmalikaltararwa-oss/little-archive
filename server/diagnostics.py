@@ -50,9 +50,17 @@ def _response_json(client, url, limit, deadline):
         raise ProbeFailure("invalid_response", "The model service returned an unsupported health response.") from exc
 
 
-def _hosted_checks(database):
+def _hosted_checks(database, config):
     """Hosted mode has no owner library or password; accounts are never opened here."""
     rows = []
+    try:
+        config.require_account_deletion()
+        if config.supabase_service_key:
+            rows.append(check("supabase_admin_key", "passed", "supabase_admin_key_configured", "A Supabase secret key is configured, so deleting an account also deletes its sign-in. It was not used or contacted."))
+        else:
+            rows.append(check("supabase_admin_key", "warning", "login_survives_deletion", "No Supabase secret key is configured and the operator allowed that: deleting an account will leave its sign-in in place.", "Set LA_SUPABASE_SERVICE_KEY before a store release (App Store guideline 5.1.1(v))."))
+    except ValueError:
+        rows.append(check("supabase_admin_key", "failed", "supabase_admin_key_missing", "No Supabase secret key is configured, so deleting an account could not delete its sign-in.", "Set LA_SUPABASE_SERVICE_KEY, or for a development stack only LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION=true. The value is never printed."))
     if database.exists() or database.is_symlink():
         rows.append(check("database", "failed", "single_owner_library_present", "The data location holds a single-owner library, which hosted mode refuses to start beside.", "Choose a separate data directory for hosted mode."))
     else:
@@ -185,7 +193,7 @@ def diagnose(*, env_file=Path(".env"), environment=None, check_ai=False, check_p
                 free = shutil.disk_usage(nearest).free
                 checks.append(check("disk_space", "warning" if free < 256 * 1024 * 1024 else "passed", "disk_space_low" if free < 256 * 1024 * 1024 else "disk_space_available", "Less than 256 MiB is free at the data location." if free < 256 * 1024 * 1024 else "Free disk space is available at the data location.", "Model downloads and backups need additional space; this is not a capacity guarantee.", free_bytes=free))
             if config.hosted:
-                checks.extend(_hosted_checks(database))
+                checks.extend(_hosted_checks(database, config))
             elif database.is_symlink():
                 checks.append(check("database", "failed", "database_symlink", "The database path is a symbolic link; diagnostics did not follow it.", "Review the data location before starting the application."))
             elif database.exists():

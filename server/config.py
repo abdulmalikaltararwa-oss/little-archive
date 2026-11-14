@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import os
 import unicodedata
@@ -49,6 +49,22 @@ class Config:
     hosted_open_libraries: int = 64
     hosted_deep_reads_monthly: int = 300
     hosted_free_deep_reads_monthly: int = 0
+    # Ordinary AI suggestions per account (titles, folders, summaries): what a free and an unlocked account may queue.
+    hosted_suggestions_daily_free: int = 25
+    hosted_suggestions_monthly_free: int = 300
+    hosted_suggestions_daily_unlocked: int = 200
+    hosted_suggestions_monthly_unlocked: int = 3000
+    # Request limits, in this process's memory (see server/limits.py). 0 turns a rate limit off.
+    hosted_rate_address_per_minute: int = 600
+    hosted_rate_account_per_minute: int = 300
+    hosted_rate_auth_failures: int = 30          # failed sign-ins an address may make per ten minutes
+    hosted_trusted_proxy_hops: int = 0           # reverse proxies in front of this server that append to X-Forwarded-For
+    hosted_heavy_per_account: int = 2            # exports, backups, imports and thumbnail uploads running at once, per account
+    hosted_heavy_overall: int = 8                # ... and for the whole service
+    # Account deletion also deletes the person's Supabase sign-in, which needs the project's secret key (never logged, never
+    # shown, never returned by any route). Starting hosted mode without it is refused unless the operator says so.
+    supabase_service_key: str = field(default="", repr=False)
+    hosted_allow_login_survives_deletion: bool = False
 
     @classmethod
     def from_env(cls, values=None):
@@ -73,6 +89,18 @@ class Config:
             hosted_open_libraries=_whole_number(values, "LA_HOSTED_OPEN_LIBRARIES", 64),
             hosted_deep_reads_monthly=_whole_number(values, "LA_HOSTED_DEEP_READS_MONTHLY", 300),
             hosted_free_deep_reads_monthly=_whole_number(values, "LA_HOSTED_FREE_DEEP_READS_MONTHLY", 0),
+            hosted_suggestions_daily_free=_whole_number(values, "LA_HOSTED_SUGGESTIONS_DAILY_FREE", 25),
+            hosted_suggestions_monthly_free=_whole_number(values, "LA_HOSTED_SUGGESTIONS_MONTHLY_FREE", 300),
+            hosted_suggestions_daily_unlocked=_whole_number(values, "LA_HOSTED_SUGGESTIONS_DAILY_UNLOCKED", 200),
+            hosted_suggestions_monthly_unlocked=_whole_number(values, "LA_HOSTED_SUGGESTIONS_MONTHLY_UNLOCKED", 3000),
+            hosted_rate_address_per_minute=_whole_number(values, "LA_HOSTED_RATE_ADDRESS_PER_MINUTE", 600),
+            hosted_rate_account_per_minute=_whole_number(values, "LA_HOSTED_RATE_ACCOUNT_PER_MINUTE", 300),
+            hosted_rate_auth_failures=_whole_number(values, "LA_HOSTED_RATE_AUTH_FAILURES", 30),
+            hosted_trusted_proxy_hops=_whole_number(values, "LA_HOSTED_TRUSTED_PROXY_HOPS", 0),
+            hosted_heavy_per_account=_whole_number(values, "LA_HOSTED_HEAVY_PER_ACCOUNT", 2),
+            hosted_heavy_overall=_whole_number(values, "LA_HOSTED_HEAVY_OVERALL", 8),
+            supabase_service_key=values.get("LA_SUPABASE_SERVICE_KEY", "").strip(),
+            hosted_allow_login_survives_deletion=str(values.get("LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION", "")).strip().lower() in {"1", "true", "yes", "on"},
         )
 
     def validate(self):
@@ -143,9 +171,37 @@ class Config:
             ("LA_HOSTED_OPEN_LIBRARIES", self.hosted_open_libraries, 1, 4096),
             ("LA_HOSTED_DEEP_READS_MONTHLY", self.hosted_deep_reads_monthly, 0, 1000000),
             ("LA_HOSTED_FREE_DEEP_READS_MONTHLY", self.hosted_free_deep_reads_monthly, 0, 1000000),
+            ("LA_HOSTED_SUGGESTIONS_DAILY_FREE", self.hosted_suggestions_daily_free, 0, 1000000),
+            ("LA_HOSTED_SUGGESTIONS_MONTHLY_FREE", self.hosted_suggestions_monthly_free, 0, 1000000),
+            ("LA_HOSTED_SUGGESTIONS_DAILY_UNLOCKED", self.hosted_suggestions_daily_unlocked, 0, 1000000),
+            ("LA_HOSTED_SUGGESTIONS_MONTHLY_UNLOCKED", self.hosted_suggestions_monthly_unlocked, 0, 1000000),
+            ("LA_HOSTED_RATE_ADDRESS_PER_MINUTE", self.hosted_rate_address_per_minute, 0, 1000000),
+            ("LA_HOSTED_RATE_ACCOUNT_PER_MINUTE", self.hosted_rate_account_per_minute, 0, 1000000),
+            ("LA_HOSTED_RATE_AUTH_FAILURES", self.hosted_rate_auth_failures, 0, 100000),
+            ("LA_HOSTED_TRUSTED_PROXY_HOPS", self.hosted_trusted_proxy_hops, 0, 5),
+            ("LA_HOSTED_HEAVY_PER_ACCOUNT", self.hosted_heavy_per_account, 1, 64),
+            ("LA_HOSTED_HEAVY_OVERALL", self.hosted_heavy_overall, 1, 1024),
         ):
             if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
                 raise ValueError(f"{label} must be between {low} and {high}.")
+        if self.supabase_service_key:
+            key = self.supabase_service_key
+            if _unsafe_text(key) or len(key) > 4096 or len(key) < 20 or any(c.isspace() for c in key):
+                raise ValueError("LA_SUPABASE_SERVICE_KEY must be the project's secret key (sb_secret_...) or its legacy service_role key, on one line.")
+            if key.startswith("sb_publishable_"):
+                raise ValueError("LA_SUPABASE_SERVICE_KEY holds a publishable key. Use the project's secret key; a publishable key can delete nobody.")
+
+    def require_account_deletion(self):
+        """Hosted mode must be able to delete a person's sign-in with their library (App Store guideline 5.1.1(v)).
+
+        Called when the server starts and by `doctor`. Raises unless the Supabase secret key is set, or the operator has said in
+        so many words that a deleted account's login should survive (a development stack with no real project). Test
+        configurations are exempt, so the many tests that are not about deletion need no key.
+        """
+        if self.hosted and not (self.supabase_service_key or self.hosted_allow_login_survives_deletion or self.testing):
+            raise ValueError("Set LA_SUPABASE_SERVICE_KEY to your Supabase project's secret key so that deleting an account also deletes its sign-in "
+                             "(App Store guideline 5.1.1(v)). To run without it, for development only, set LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION=true; "
+                             "deleting an account then leaves the person able to sign in to a new, empty library.")
 
     @property
     def hosted(self):
