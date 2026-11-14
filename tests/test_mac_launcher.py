@@ -338,7 +338,9 @@ class RunningInstanceTests(TemporaryLibraryCase):
         self.assertEqual(self.paths.root, self.home / "Library" / "Application Support" / "Little Archive")
         self.assertTrue(self.login(instance.url, instance.owner_password()).json()["authenticated"])
         self.assertEqual(self.login(instance.url, "wrong-password-entirely").status_code, 401)
-        self.assertEqual(httpx.get(instance.url + "/", timeout=5).status_code, 200, "The web interface is served.")
+        page = httpx.get(instance.url + "/", timeout=5)
+        self.assertEqual(page.status_code, 200, page.text)
+        self.assertIn('<div id="app">', page.text, "The React interface is served.")
         port, runner = instance.port, instance.runner
         instance.stop()
         self.assertFalse(runner.thread.is_alive())
@@ -512,6 +514,57 @@ class BuildScriptTests(unittest.TestCase):
         self.assertEqual(self.build.macos_minimum_in(older), (10, 15))
         self.assertIsNone(self.build.macos_minimum_in(phone))
         self.assertIsNone(self.build.macos_minimum_in("no load commands"))
+
+    def test_node_versions_are_read_and_a_node_that_is_too_old_is_refused(self):
+        self.assertEqual(self.build.node_major("v24.22.2\n"), 24)
+        self.assertEqual(self.build.node_major("v20.19.0"), 20)
+        for text in ("", "24.1.0", "node v24", None):
+            self.assertIsNone(self.build.node_major(text))
+        from unittest.mock import patch
+
+        def answer(version):
+            return lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=version + "\n", stderr="")
+
+        with patch.object(self.build.subprocess, "run", answer("v20.19.0")), self.assertRaises(SystemExit) as stopped:
+            self.build.find_node(places=[])
+        self.assertIn("Node 22", str(stopped.exception))
+        with patch.object(self.build.subprocess, "run", answer("v24.22.2")):
+            self.assertIn("PATH", self.build.find_node(places=[]))
+
+    def test_the_interface_is_staged_without_the_build_manifest_and_the_demo_page(self):
+        with tempfile.TemporaryDirectory() as folder:
+            built, staged = Path(folder, "dist"), Path(folder, "webui")
+            (built / "assets").mkdir(parents=True)
+            (built / ".vite").mkdir()
+            for name in ("index.html", "demo.html", "theme-init.js", "assets/main-AbCd1234.js", ".vite/manifest.json"):
+                (built / name).write_text("x")
+            self.build.stage_interface(built, staged)
+            self.assertEqual(sorted(str(path.relative_to(staged)) for path in staged.rglob("*") if path.is_file()), ["assets/main-AbCd1234.js", "index.html", "theme-init.js"])
+            (built / "index.html").unlink()
+            with self.assertRaises(SystemExit):
+                self.build.stage_interface(built, staged)
+            (built / "index.html").symlink_to(built / "theme-init.js")
+            with self.assertRaises(SystemExit):
+                self.build.stage_interface(built, staged)
+
+    def test_the_bundle_recipe_ships_the_interface_where_the_server_looks_for_it(self):
+        from server import webui
+        spec = (REPOSITORY / "packaging" / "mac" / "little_archive.spec").read_text()
+        self.assertIn(f'(os.environ["LITTLE_ARCHIVE_WEBUI"], "{webui.PACKAGED.name}")', spec)
+        self.assertNotIn('"web")', spec)
+        self.assertIn('"LITTLE_ARCHIVE_WEBUI"', (REPOSITORY / "scripts" / "build_mac_app.py").read_text())
+        self.assertTrue(self.build.ICON_SOURCE.is_file())
+        self.assertEqual(self.build.ICON_SOURCE, REPOSITORY / "ui" / "public" / "icon.svg")
+
+    def test_skipping_the_interface_build_needs_a_build_to_use(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder, patch.object(self.build, "UI", Path(folder)):
+            with self.assertRaises(SystemExit) as stopped:
+                self.build.build_interface(skip=True)
+            self.assertIn("npm ci && npm run build", str(stopped.exception))
+            (Path(folder) / "dist").mkdir()
+            (Path(folder) / "dist" / "index.html").write_text("x")
+            self.assertEqual(self.build.build_interface(skip=True), Path(folder) / "dist")
 
     def test_build_output_is_ignored_by_git_and_docker(self):
         for name in (".gitignore", ".dockerignore"):
