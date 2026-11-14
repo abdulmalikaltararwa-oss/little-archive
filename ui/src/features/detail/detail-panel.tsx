@@ -205,7 +205,8 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
           type="button"
           aria-pressed={item.favorite}
           aria-busy={favoriteBusy || undefined}
-          disabled={favoriteBusy}
+          // Not `disabled`: that would drop the keyboard's focus while the change is saved. useBusy refuses a second run.
+          aria-disabled={favoriteBusy || undefined}
           aria-label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
           title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
           onClick={() => void toggleFavorite()}
