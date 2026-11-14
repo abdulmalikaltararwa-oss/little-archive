@@ -632,6 +632,63 @@ class AnalysisThroughTheApiTests(Base):
         self.assertFalse(self.client.get("/api/settings").json()["ai_enabled"])
 
 
+class UpgradeTests(Base):
+    def test_a_suggestion_from_before_this_change_is_shown_but_must_be_regenerated(self):
+        self.enable(fetch=False, transcriber=False)
+        item = self.item(caption="Sourdough starter, day 5")
+        old = {"suggested_title": "Old title", "summary": "Old summary.", "topics": ["bread"], "content_type": "video", "needs_review": True,
+               "evidence_level": "caption-based", "model": "old-model", "created_at": "2026-01-01T00:00:00+00:00", "input_hash": "0" * 64, "evidence_snapshot": []}
+        with self.store.transaction() as c:
+            c.execute("UPDATE items SET ai=? WHERE id=?", (json.dumps(old), item["id"]))
+        shown = self.get(item["id"])
+        self.assertEqual((shown["ai"]["suggested_title"], shown["ai"].get("suggested_folder")), ("Old title", None))
+        self.assertEqual(self.post(f"/api/items/{item['id']}/ai/accept").status_code, 409)
+        self.assertEqual(self.post(f"/api/items/{item['id']}/ai/dismiss").json()["ai"], None)
+        self.assertEqual(self.post("/api/ai/jobs", {"ids": [item["id"]]}).json()["queued"], 1)
+
+
+class BuiltFromTheEnvironmentTests(unittest.TestCase):
+    def config(self, root, **extra):
+        return Config(data_dir=Path(root), admin_password="a-long-test-password-123", public_url="http://localhost:8787", **extra)
+
+    def test_a_real_configuration_reads_the_environment(self):
+        import os
+        env = {"LA_FETCH_ENABLED": "true", "LA_FETCH_CONTACT": "https://archive.example.org/contact", "LA_AI_PROVIDER": "gemini", "LA_GEMINI_API_KEY": KEY,
+               "LA_GEMINI_MODEL": "gemini-test-model", "LA_AI_BATCH_SIZE": "3", "LA_GROQ_API_KEY": "gsk-SYNTHETIC", "LA_PUBLIC_CACHE": "true"}
+        with TemporaryDirectory() as root, patch.dict(os.environ, env):
+            service = create_app(self.config(root)).state.enrichment
+            self.assertTrue(service.fetch_enabled)
+            self.assertTrue(service.fetcher.user_agent.endswith("; +https://archive.example.org/contact)"))
+            self.assertEqual((service.provider.name, service.provider.model, service.provider.max_batch), ("gemini", "gemini-test-model", 3))
+            self.assertEqual(service.transcriber.name, "groq")
+            self.assertTrue((Path(root) / "cache" / "public-posts.sqlite3").is_file())
+            self.assertEqual(service.analyzer().mode, "public")
+            self.assertNotIn(KEY, repr(service.settings) + repr(service.provider))
+
+    def test_a_testing_configuration_ignores_the_process_environment(self):
+        import os
+        with TemporaryDirectory() as root, patch.dict(os.environ, {"LA_FETCH_ENABLED": "true", "LA_GROQ_API_KEY": "gsk-SYNTHETIC", "LA_GEMINI_API_KEY": KEY}):
+            service = create_app(self.config(root, testing=True)).state.enrichment
+            self.assertFalse(service.fetch_enabled)
+            self.assertIsNone(service.transcriber)
+            self.assertIsNone(service.provider)
+
+    def test_everything_is_off_by_default(self):
+        import os
+        with TemporaryDirectory() as root, patch.dict(os.environ, {}, clear=True):
+            service = create_app(self.config(root)).state.enrichment
+            self.assertEqual((service.fetch_enabled, service.provider, service.transcriber, service.cache), (False, None, None, None))
+            self.assertFalse(service.worker.enabled())
+            self.assertFalse((Path(root) / "cache").exists())
+
+    def test_misconfiguration_stops_the_server_with_a_clear_message(self):
+        import os
+        for env, pattern in (({"LA_GEMINI_API_KEY": KEY}, "LA_AI_PROVIDER"), ({"LA_AI_PROVIDER": "gemini"}, "LA_GEMINI_API_KEY"), ({"LA_FETCH_ENABLED": "sometimes"}, "true or false")):
+            with self.subTest(env=list(env)), TemporaryDirectory() as root, patch.dict(os.environ, env, clear=True):
+                with self.assertRaisesRegex(ValueError, pattern):
+                    create_app(self.config(root))
+
+
 class SecretsAndSettingsTests(Base):
     def test_a_hosted_key_never_appears_in_any_response_or_job_error(self):
         handler_calls = []

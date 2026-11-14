@@ -4,6 +4,19 @@
 
 The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` in [run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). Six installation/recovery reports are retained with their provenance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence, corrected initial failures, and boundaries.
 
+### Understanding saves (in development)
+
+An optional layer that turns a saved link into a title, summary, topics, a suggested folder and a searchable transcript, cheapest tier first. See [Understanding saves](docs/understanding.md). It is verified by fixture, fake-HTTP and API tests; the hosted Gemini and Groq request shapes were not exercised against the live services.
+
+- Read the public page of a post from the details a visitor's browser receives (Open Graph, Twitter cards, JSON-LD, `<title>`, YouTube/TikTok oEmbed). The phone or browser can send the extraction or the raw HTML; the server parsing it never fetches anything.
+- Optional server-side page reading, off by default, that refuses non-public addresses on every redirect hop, pins the connection to the validated address, limits size, time and content types, sends no cookies and identifies itself honestly.
+- Keep the caption text and a re-encoded local cover; never store video.
+- Provider interface for understanding with Ollama and a hosted Gemini provider (key from the environment, explicit selection, public text only by default). Batched model calls, a category from a fixed taxonomy and a suggested folder; labels (`text-only`, `caption-based`, `transcript-based`) are computed from the input.
+- Transcripts as a new evidence kind: from the device, from the server when a caption is too thin (operator setting), or by an explicit "Read this more closely" deep read through Groq Whisper. Searchable through `q=`, with a `match_in` field saying where each result matched.
+- Optional shared cache of results derived from public posts, keyed by canonical URL and the analysed public text, with per-kind field allowlists.
+- A usage hook and local counters for model calls, tokens, audio seconds, bytes and cache hits, for metering.
+- New routes: `POST /api/items/{id}/page`, `POST|DELETE /api/items/{id}/transcript`, `POST /api/items/{id}/deep-read`, `GET /api/enrichment/status`, `GET /api/enrichment/usage`. New additive tables `item_enrichment` and `enrich_usage`. Suggestions created before this change must be generated again before they can be accepted, because the suggestion fingerprint now includes the provider and prompt.
+
 ### First v1 foundations
 
 - Retain loaded gallery pages, scroll position, and useful keyboard focus after item edits and favorites; keep random samples stable when the edit does not change search/filter membership.
