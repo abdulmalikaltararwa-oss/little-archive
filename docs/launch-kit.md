@@ -27,7 +27,7 @@ I would love feedback on the browsing experience, import reliability, and self-h
 
 Saved links are easy to collect and easy to lose track of. Little Archive gives them a place you can browse again: a warm gallery, your original collections, useful tags, notes, favorites, and a simple “to revisit” workflow.
 
-It is open source under MIT and designed for one private owner per self-hosted instance. The core uses Python, SQLite, and a buildless web interface. You can import supported exports, add links, upload local thumbnails, export your records, and download a backup. Optional text categorization runs through an Ollama service you configure.
+It is open source under MIT and designed for one private owner per self-hosted instance. The core uses Python, SQLite, and a React web interface. You can import supported exports, add links, upload local thumbnails, export your records, and download a backup. Optional text categorization runs through an Ollama service you configure.
 
 The companion Chrome extension imports a saved-content view you explicitly select and reports its coverage. The release notes identify the views and browser versions accepted for this release. It does not promise every historical save or automatic all-collection synchronization.
 

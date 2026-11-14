@@ -3,8 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 // A small smoke suite for the React interface. It runs the production build's demo page, so it needs no
 // server and no account, and it refuses any request that leaves the page's own origin. The full browser
-// suite against a real server is tests/e2e in the repository root; it still drives the buildless interface
-// and is ported to this one when the server starts serving ui/dist.
+// suite against a real server is tests/e2e in the repository root (npm run test:e2e there): it drives this
+// interface as the server serves it from ui/dist.
 const PORT = Number(process.env.LA_UI_SMOKE_PORT) || 5184;
 
 export default defineConfig({

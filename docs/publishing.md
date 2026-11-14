@@ -12,6 +12,7 @@ Work from the project directory. Install the development dependencies as describ
 .venv/bin/python -m unittest discover -s tests -v
 node --test extension/tests/*.test.mjs
 node --test web/*.test.mjs
+(cd ui && npm ci && npm run build && npm test)
 python3 scripts/build_demo.py
 python3 scripts/release_check.py
 git status --short

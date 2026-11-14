@@ -12,7 +12,7 @@ Little Archive is an open-source, self-hosted library for saved posts, videos, a
 
 Run one private instance on your Mac, Linux machine, or server. There is no project-operated account service, analytics endpoint, or required AI subscription.
 
-**Status:** Development toward 1.0; no stable release published · **License:** MIT · **Architecture:** Python + SQLite + buildless web UI
+**Status:** Development toward 1.0; no stable release published · **License:** MIT · **Architecture:** Python + SQLite + a React web interface built with Vite
 
 **[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Mac setup and live acceptance](docs/mac-acceptance.md) · [Install your own instance](#quick-start-with-docker) · [Setup for local assistants](docs/operator-setup.md) · [Verification](docs/verification.md)
 
@@ -44,9 +44,9 @@ The first v1 foundation batch passed all 12 acceptance jobs on [`505b93b0`](http
 
 Development is continuing toward the first stable 1.0 release, with acceptance tracked in the [release gates](docs/release-gates.md). The extension is **experimental** and scans a source view you explicitly select. It does not promise to discover every collection, overcome a login challenge, recover deleted posts, or keep importing after Chrome closes. Platform layouts can change.
 
-Link import is distinct from media understanding. A caption-based suggestion is based on the available caption; the application does not claim to have watched a video. Full video downloads, speech transcription, OCR, mobile share extensions, and semantic search are not included in the current build.
+Link import is distinct from media understanding. A caption-based suggestion is based on the available caption; the application does not claim to have watched a video. Full video downloads, OCR, and semantic search are not included in the current build; speech transcription is optional and operator-configured (see [understanding saves](docs/understanding.md)). A phone app (iOS and Android, with a share target) lives in [`mobile/`](docs/mobile-app.md); it has been run on simulators and emulators, not on a physical phone or in a store.
 
-The instance has **one owner account**. It can organize multiple source-account labels, but it is not a multi-user hosted service. Keep the instance private unless you deliberately deploy it behind HTTPS and suitable access controls.
+A self-hosted instance has **one owner account**. It can organize multiple source-account labels, and it is not a multi-user service; an opt-in hosted mode (see [hosted mode](docs/hosted-mode.md)) serves many accounts from the same code. Keep the instance private unless you deliberately deploy it behind HTTPS and suitable access controls.
 
 ## Quick start with Docker
 
@@ -65,7 +65,7 @@ The setup helper prepares private local configuration and an owner password. Ope
 
 Use **Add link** for your first item, import a supported file, or explicitly load the synthetic demo library to explore the interface. Demo content is not loaded automatically.
 
-See [self-hosting](docs/self-hosting.md) for native Python setup, HTTPS deployment, updates, and the optional model service.
+Docker needs nothing else: the image builds the web interface itself. Running natively instead? Build the interface once with Node 22 or newer (`cd ui && npm ci && npm run build`). See [self-hosting](docs/self-hosting.md) for native Python setup, the interface build, optional map tiles for Places, HTTPS deployment, updates, and the optional model service.
 
 ### Predictable setup and diagnostics
 
@@ -83,14 +83,15 @@ Existing configuration is preserved. Doctor does not open or initialize the libr
 
 The standalone demo lets you try the gallery, search, collections, notes, and favorites without setting up a server or account. Its original sample content and any edits live in the current page and reset when you reload. Real imports, account connections, AI, image uploads, and backups require your own instance.
 
-From a local copy of this repository:
+From a local copy of this repository (Node 22 or newer builds the interface first):
 
 ```sh
+(cd ui && npm ci && npm run build)
 python3 scripts/build_demo.py
 python3 -m http.server 8090 --bind 127.0.0.1 --directory dist-demo
 ```
 
-Open **http://localhost:8090/**. The builder copies a small, explicit set of frontend files into `dist-demo`; it does not include the Python server or any private library. The demo's assets use relative paths, so it can also run at a GitHub Pages project subpath such as `/little-archive/`.
+Open **http://localhost:8090/**. The builder copies the demo page and exactly the files it can load (worked out from the build, since their names are hashed) into `dist-demo`; it does not include the Python server or any private library. The demo's assets use relative paths, so it can also run at a GitHub Pages project subpath such as `/little-archive/`.
 
 See [publishing the source and demo](docs/publishing.md) for repository creation and the included manual Pages workflow. Publish only `dist-demo` as the demo artifact. GitHub Pages hosts this static preview; a working private instance needs the self-hosted server described above.
 
@@ -129,23 +130,26 @@ Read [privacy](docs/privacy.md), [security](SECURITY.md), and [backup and restor
 
 ## Development
 
-The frontend and extension are plain ES modules. Use the isolated contributor workspace so development does not reuse personal configuration or saved content:
+The web interface is a React app in [`ui/`](ui/DESIGN.md) (Vite, TypeScript, Tailwind; Node 22 or newer), built to static files that the server serves. The extension is plain ES modules. Use the isolated contributor workspace so development does not reuse personal configuration or saved content:
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+(cd ui && npm ci && npm run build)
 .venv/bin/python scripts/dev.py --prepare --seed
 .venv/bin/python scripts/dev.py
 ```
 
-Open **http://127.0.0.1:8788**. Retrieve its private password locally from `work/contributor-dev/owner-password.txt`. This launcher binds only to loopback, ignores production `.env`/`LA_*` settings, and preserves its synthetic library on restart. From an activated environment, `npm run dev -- --seed` is equivalent. See [contributing](CONTRIBUTING.md) for inspection, bounded cleanup, and locked JavaScript test setup.
+Open **http://127.0.0.1:8788**. To work on the interface itself, run `npm run dev` in `ui/` (a Vite server on 127.0.0.1:5183 that forwards `/api` to the contributor server: `LA_UI_API=http://127.0.0.1:8788 npm run dev`). Retrieve its private password locally from `work/contributor-dev/owner-password.txt`. This launcher binds only to loopback, ignores production `.env`/`LA_*` settings, and preserves its synthetic library on restart. From an activated environment, `npm run dev -- --seed` is equivalent. See [contributing](CONTRIBUTING.md) for inspection, bounded cleanup, and locked JavaScript test setup.
 
 In a separate terminal, run the checks:
 
 ```sh
-.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v   # needs the interface built, as above
 node --test extension/tests/*.test.mjs
 node --test web/*.test.mjs
+(cd ui && npm test)                                  # unit tests; npm run build also type-checks and lints
+npm ci && npx playwright install chromium && npm run test:e2e   # the browser suite, against a real isolated server
 ```
 
 See [architecture](docs/architecture.md), [the API contract](API_CONTRACT.md), and [contributing](CONTRIBUTING.md). Do not commit your `.env`, local database, exports, or source-account data.

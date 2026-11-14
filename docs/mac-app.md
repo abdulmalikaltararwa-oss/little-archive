@@ -6,13 +6,13 @@ It implements the packaging proof and backend lifecycle described in section E o
 
 ## Build it
 
-You need a Mac with the Xcode command line tools (`xcode-select --install`), Python 3.12 (for example `brew install python@3.12`), and network access the first time so pip can install the pinned build tools. From a checkout:
+You need a Mac with the Xcode command line tools (`xcode-select --install`), Python 3.12 (for example `brew install python@3.12`), Node 22 or newer (for example `brew install node@24`; the script also looks in Homebrew's `node@24` and `node@22` folders when the Node on `PATH` is older), and network access the first time so pip can install the pinned build tools. From a checkout:
 
 ```sh
 python3 scripts/build_mac_app.py --python /path/to/python3.12
 ```
 
-Add `--no-archives` to skip the `.zip` and `.dmg`, or `--clean` to start from a fresh build environment. The script uses only the standard library, creates its own environment in `.mac-build/` from [`packaging/mac/requirements-build.txt`](../packaging/mac/requirements-build.txt), and writes to `dist-mac/`. Both folders are ignored by Git and Docker. The server's own `requirements.txt` does not list the build tools, and the app bundles the versions in `requirements-lock.txt`.
+The script first builds the web interface (`npm ci && npm run build` in `ui/`), stages the built files without the build manifest and the demo page, and bundles them as `webui` inside the app, where the server looks for them. Add `--no-archives` to skip the `.zip` and `.dmg`, `--clean` to start from a fresh build environment, or `--skip-ui-build` to bundle an interface you already built in `ui/dist`. The script uses only the standard library, creates its own environment in `.mac-build/` from [`packaging/mac/requirements-build.txt`](../packaging/mac/requirements-build.txt), and writes to `dist-mac/`. Both folders are ignored by Git and Docker. The server's own `requirements.txt` does not list the build tools, and the app bundles the versions in `requirements-lock.txt`.
 
 | Output in `dist-mac/` | What it is |
 | --- | --- |
@@ -20,7 +20,7 @@ Add `--no-archives` to skip the `.zip` and `.dmg`, or `--clean` to start from a 
 | `Little-Archive-<version>-macos-<arch>.zip` and `.dmg` | The same app packaged for sharing |
 | `SHA256SUMS`, `build-info.json` | Checksums, versions, source revision and whether the tree had local changes |
 
-The app is built for the CPU of the Mac that builds it: `arm64` on Apple Silicon, `x86_64` on an Intel Mac. There is no universal build. The icon is rendered from [`web/icon.svg`](../web/icon.svg) during the build.
+The app is built for the CPU of the Mac that builds it: `arm64` on Apple Silicon, `x86_64` on an Intel Mac. There is no universal build. The icon is rendered from [`ui/public/icon.svg`](../ui/public/icon.svg) during the build.
 
 The approach is PyInstaller (one-folder mode) around a small launcher in [`packaging/mac/little_archive_mac/`](../packaging/mac/little_archive_mac). PyInstaller was chosen because it handles this dependency set (FastAPI, pydantic, Pillow) with maintained hooks, produces an ordinary `.app`, and could be checked end to end on the build machine. py2app and briefcase were not tried. The launcher keeps its decisions (library folder, port, one-server-per-library, first-run password) in a module with no macOS imports, which is unit tested; a thin AppKit layer draws the menu and the welcome window.
 
@@ -110,6 +110,8 @@ Run against the built app and observed:
 - A library whose `config.env` held a too-short password showed an explanation window, started no server, and after the file was fixed it started and showed the welcome window.
 - The bundled `--cli doctor` found Python 3.12 and the dependencies; the bundled `--cli reset-password` changed the password through a pseudo-terminal (new password worked, old one was refused).
 - The `.zip` and `.dmg` were extracted/mounted; their app copies pass `codesign --verify --deep --strict`, the checksums match, and the extracted copy runs. Every bundled binary refers only to system libraries or to files inside the bundle. The built app is 43 MiB on disk; the `.zip` is 23 MiB and the `.dmg` 25 MiB.
+
+**Rebuilt with the React interface.** The bundle was rebuilt after the web interface became the React app in `ui/`: the script found a Node 24 under Homebrew while the Node on `PATH` was 20, ran `npm ci && npm run build`, staged the result, and PyInstaller bundled it as `Contents/Resources/webui` (reached through `Contents/Frameworks/webui`, where the server's own `__file__`-relative lookup lands). The ad-hoc signature verified. Running the bundle's embedded server (`Little Archive --cli serve`, with a temporary library) answered `/api/health`, served the page at `/` and `/share` with a fresh style nonce, and served `/manifest.webmanifest`; the demo page, the build manifest folder and the old `app.js` answered 404. This did not open the application window or sign in through a browser; the earlier observations above were made with the previous interface, and the welcome window and menu are unchanged by this.
 
 Covered by the automated tests (`tests/test_mac_launcher.py`, run without building the app): library location, owner-only permissions, port choice including wildcard and occupied ports, the one-server-per-library lock (including release when the holder dies), state-file tampering, loopback-only health probing, first-run password creation without output or log exposure, ignoring inherited `LA_*` variables, startup failure messages, restart persistence, the write-ahead-log fold on quit, and restoring a backup into the app's folder.
 

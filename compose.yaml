@@ -1,6 +1,11 @@
 services:
   archive:
-    build: .
+    build:
+      context: .
+      args:
+        # Optional map tiles for the Places screen, fixed into the build. Set them in .env, then run docker compose up -d --build.
+        VITE_LA_TILE_URL: ${VITE_LA_TILE_URL:-}
+        VITE_LA_TILE_ATTRIBUTION: ${VITE_LA_TILE_ATTRIBUTION:-}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8787:8787"

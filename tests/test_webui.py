@@ -196,6 +196,10 @@ class ImageRecipeTests(unittest.TestCase):
         for line in ("COPY web ./web", "npm --prefix ui ci", "npm --prefix ui run build"):
             self.assertIn(line, self.build)
         self.assertEqual(re.findall(r"(?m)^COPY (?!--)(\S+)", self.build), ["web", "ui/package.json", "ui"])
+        # The optional tile server for the Places screen is a build argument, empty by default.
+        for name in ("VITE_LA_TILE_URL", "VITE_LA_TILE_ATTRIBUTION"):
+            self.assertIn(f"ARG {name}=\n", self.build)
+            self.assertIn(f"{name}: ${{{name}:-}}", (self.root / "compose.yaml").read_text(encoding="utf-8"))
 
     def test_only_the_built_files_reach_the_final_image_which_stays_non_root(self):
         self.assertTrue(self.final.startswith("python:3.12-slim"))

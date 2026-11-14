@@ -7,6 +7,9 @@ COPY web ./web
 COPY ui/package.json ui/package-lock.json ./ui/
 RUN npm --prefix ui ci --ignore-scripts --no-audit --no-fund
 COPY ui ./ui
+# Optional and fixed into the build: a map tile server for the Places screen (docs/self-hosting.md). Empty means none.
+ARG VITE_LA_TILE_URL=
+ARG VITE_LA_TILE_ATTRIBUTION=
 # The build checks types and lint first. The build manifest is for the demo site, not for the server.
 RUN npm --prefix ui run build && rm -rf ui/dist/.vite
 

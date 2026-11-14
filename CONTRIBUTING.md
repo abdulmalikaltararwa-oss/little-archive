@@ -10,15 +10,18 @@ For an adapter change, include a minimal synthetic or sanitized fixture showing 
 
 ## Start an isolated development library
 
-Use Python 3.12 on macOS or Linux; this is the currently verified Python version. Other Python versions need separate verification before being added to the support matrix. Node.js 22 is used for the JavaScript tests and npm shortcuts. From a fresh checkout:
+Use Python 3.12 on macOS or Linux; this is the currently verified Python version. Other Python versions need separate verification before being added to the support matrix. Node.js 22 or newer (CI and the Docker image use 24) builds the React interface in `ui/` and runs the JavaScript tests and npm shortcuts. The server serves the built interface, so build it once before starting it or running the Python tests. From a fresh checkout:
 
 ```sh
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 npm ci
+(cd ui && npm ci && npm run build)
 npm run dev -- --seed
 ```
+
+Without a build the server still starts and the API works, but its pages say to run `npm ci && npm run build` in `ui/`. Rebuild after changing anything under `ui/` (or run `npm run dev` in `ui/`, a Vite server on `http://127.0.0.1:5183` that forwards `/api` to a running contributor server: `LA_UI_API=http://127.0.0.1:8788 npm run dev`).
 
 Open `http://127.0.0.1:8788`. Open `work/contributor-dev/owner-password.txt` in your local text editor and use that password to sign in. The launcher creates this private file without printing the credential to logs or JSON. Keep its contents out of screenshots, issues, and assistant conversations.
 
@@ -66,10 +69,13 @@ An existing unmarked directory or a workspace copied from another checkout is no
 With the virtual environment activated:
 
 ```sh
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -v    # needs ui/dist: cd ui && npm run build
 npm run test:extension
 npm run test:web
 npm run test:e2e:infra
+(cd ui && npm run build && npm test)        # types, lint, production build, unit tests
+(cd ui && npm run test:e2e)                 # the interface's own smoke test on the demo page
+npm run test:e2e                            # the authenticated browser suite, against a real isolated server
 ```
 
 The [browser testing guide](tests/e2e/README.md) explains browser installation and authenticated end-to-end tests. Those test runners create their own isolated temporary instances; they do not require the contributor server to be running.
@@ -82,7 +88,7 @@ The [Release validation workflow](.github/workflows/release-validation.yml) exer
 
 Explain the problem, the resulting behavior, and how you verified it. Call out a database migration, new network destination, new extension permission, or change to export compatibility. Avoid unrelated refactors in the same pull request.
 
-Keep dependencies small and necessary. The browser UI and extension intentionally work without a build system. Do not add analytics, remotely loaded scripts, external fonts, or silent hosted-model fallback.
+Keep dependencies small and necessary: a new package in `ui/` needs a row in [`ui/THIRD_PARTY.md`](ui/THIRD_PARTY.md) with its licence, and nothing may be fetched from another origin at run time. The extension intentionally works without a build system. Do not add analytics, remotely loaded scripts, external fonts, or silent hosted-model fallback.
 
 ## Sensitive reports
 
