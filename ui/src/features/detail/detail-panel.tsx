@@ -2,7 +2,7 @@
 // The rules carried over from the buildless interface: nothing is lost silently (leaving with unsaved edits
 // asks first), an AI suggestion is shown with what it rests on and changes nothing until accepted, and only
 // the fields that changed are sent.
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { buildItemPatch, errorMessage, formatDate, hostLabel, parseTags, PLATFORM_NAMES, safeURL, STATUS_NAMES } from '@web/utils.js';
 import { cn } from 'cn';
 import { ArrowRight, Check, Copy, ExternalLink, Folder, Heart, ImagePlus, ScanSearch, Sparkles, Trash2, X } from 'lucide-react';
@@ -76,7 +76,7 @@ function Transcript({ text }: { text: string }) {
   );
 }
 
-function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item; setItem(next: Item, focus?: string): void; dirty: boolean; setDirty(value: boolean): void; formId: string; panel: React.RefObject<HTMLDivElement | null> }) {
+function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { item: Item; version: number; setItem(next: Item, focus?: string): void; dirty: boolean; setDirty(value: boolean): void; formId: string; panel: React.RefObject<HTMLDivElement | null> }) {
   const archive = useArchive();
   const demo = archive.backend.kind === 'demo';
   const settings = useArchiveState(state => state.settings);
@@ -84,6 +84,15 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
   const locals = useMemo(() => allCollections.filter(collection => collection.kind === 'local'), [allCollections]);
   const [draft, setDraft] = useState<Draft>(() => draftOf(item));
   const [error, setError] = useState('');
+  // The form starts again from the record when the panel says it has a new one (the full record arriving, a save's
+  // answer). The panel stays mounted meanwhile: its recipe and places sections are not drawn again from nothing, which
+  // would shrink and regrow the page under the reader's scroll position, and the control that holds focus is not replaced.
+  const [startedFrom, setStartedFrom] = useState(version);
+  if (startedFrom !== version) {
+    setStartedFrom(version);
+    setDraft(draftOf(item));
+    setError('');
+  }
   const [saving, setSaving] = useState(false);
   const [favoriteBusy, runFavorite] = useBusy();
   const [aiBusy, runAi] = useBusy();
@@ -406,6 +415,7 @@ export function DetailPanel() {
   const known = useArchiveState(state => (viewId ? state.items.find(entry => entry.id === viewId) : undefined));
   const [loaded, setLoaded] = useState<{ id: string; item: Item | null; error: string; version: number }>({ id: '', item: null, error: '', version: 0 });
   const dirtyRef = useRef(false);
+  const wantFocus = useRef('');
   const panel = useRef<HTMLDivElement>(null);
   const formId = useId();
   const setDirty = useCallback((value: boolean) => { dirtyRef.current = value; setDirtyState(value); }, []);
@@ -420,12 +430,12 @@ export function DetailPanel() {
     archive.api.item(id).then(
       item => {
         if (stale) return;
-        // Where the keyboard is, if it is already inside the form: the form starts again from the full record, and the
-        // control that held focus is replaced, so focus is put back on its successor rather than left on the page.
+        // Where the keyboard is, if it is already inside the form. The form starts again from the full record, and a
+        // control that held focus may not survive that, so focus is put back once the new content is in the page.
         const held = panel.current?.contains(document.activeElement) ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-detail-focus]')?.dataset.detailFocus : undefined;
         // Edits typed in the instant before the full record arrived are kept: the form is only restarted when it is clean.
+        if (held && !dirtyRef.current) wantFocus.current = held;
         setLoaded(current => { const base = current.id === id ? current.version : 0; return { id, item, error: '', version: dirtyRef.current ? base : base + 1 }; });
-        if (held && !dirtyRef.current) requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>(`[data-detail-focus="${held}"]`)?.focus({ preventScroll: true }));
       },
       error => { if (!stale) setLoaded(current => ({ id, item: current.id === id ? current.item : null, error: errorMessage(error), version: current.id === id ? current.version : 0 })); },
     );
@@ -439,10 +449,18 @@ export function DetailPanel() {
   const version = current?.version ?? 0;
 
   const setItem = (next: Item, focus?: string) => {
+    // The control that was used may be replaced by the new content; keep the keyboard where it was.
+    if (focus) wantFocus.current = focus;
     setLoaded(previous => ({ id: next.id, item: next, error: '', version: (previous.id === next.id ? previous.version : 0) + (focus ? 1 : 0) }));
-    // The control that was used may have been replaced by the new content; keep the keyboard where it was.
-    if (focus) requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>(`[data-detail-focus="${focus}"]`)?.focus({ preventScroll: true }));
   };
+  // Focus is put back after React has drawn the new content, not on the next frame: React draws a moment after the
+  // answer arrives, and a frame that comes first would find (and focus) the control that is about to be replaced.
+  useLayoutEffect(() => {
+    const focus = wantFocus.current;
+    if (!focus) return;
+    wantFocus.current = '';
+    panel.current?.querySelector<HTMLElement>(`[data-detail-focus="${focus}"]`)?.focus({ preventScroll: true });
+  }, [loaded]);
 
   return (
     <Modal
@@ -470,7 +488,7 @@ export function DetailPanel() {
             </div>
             <div className="px-5 pt-5 pb-8 sm:px-7">
               {error ? <div className="mb-4"><FormError message={error} /></div> : null}
-              <Content key={`${item.id}:${version}`} item={item} setItem={setItem} dirty={dirty} setDirty={setDirty} formId={formId} panel={panel} />
+              <Content key={item.id} item={item} version={version} setItem={setItem} dirty={dirty} setDirty={setDirty} formId={formId} panel={panel} />
             </div>
           </>
         ) : error ? (
