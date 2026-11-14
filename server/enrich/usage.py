@@ -55,6 +55,8 @@ class Metering:
     def record(self, **fields) -> UsageEvent:
         if fields.get("kind") not in KINDS or fields.get("tier") not in TIERS:
             raise ValueError("Unknown usage event.")
+        if fields["kind"] == "cache_hit":
+            fields["cache_hit"] = True
         event = UsageEvent(**{**fields, "at": fields.get("at") or now()})
         for sink in list(self.sinks):
             try:

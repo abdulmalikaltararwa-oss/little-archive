@@ -105,8 +105,27 @@ class Analyzer:
             for p in pending:
                 outcomes[p.key] = Outcome(p.key, error="No AI provider is configured.")
             return outcomes
-        for chunk in self._chunks(pending):
+        # Identical public input in one run is analysed once; the others share the answer.
+        leaders: dict[str, Prepared] = {}
+        followers: dict[str, list[Prepared]] = {}
+        to_call: list[Prepared] = []
+        for p in pending:
+            if p.cache_url and p.input_hash in leaders:
+                followers.setdefault(p.input_hash, []).append(p)
+                continue
+            if p.cache_url:
+                leaders[p.input_hash] = p
+            to_call.append(p)
+        for chunk in self._chunks(to_call):
             outcomes.update(self._call(chunk, job_ids))
+        for input_hash, copies in followers.items():
+            leader = outcomes[leaders[input_hash].key]
+            for p in copies:
+                if leader.result is not None:
+                    outcomes[p.key] = Outcome(p.key, result=self._finalize(p, leader.result), cache_hit=True)
+                    self._meter(kind="cache_hit", tier="understand", provider=leader.result.get("provider", ""), model=leader.result.get("model", ""), item_id=p.item_id, job_id=job_ids.get(p.key), cache_hit=True)
+                else:
+                    outcomes[p.key] = Outcome(p.key, error=leader.error)
         return outcomes
 
     def _chunks(self, pending):

@@ -49,8 +49,11 @@ class ClassificationWorker:
         self.wake.set()
         return count
 
+    def enabled(self):
+        return bool(self.config.ollama_url and self.config.ollama_model)
+
     def start(self):
-        if self.config.ollama_url and self.config.ollama_model:
+        if self.enabled():
             self.thread = threading.Thread(target=self.run, daemon=True, name="little-archive-classifier")
             self.thread.start()
 

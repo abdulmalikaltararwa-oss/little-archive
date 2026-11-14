@@ -224,7 +224,7 @@ def _record(raw: object, *, portable: bool = False, source: bool = False) -> dic
     if portable and isinstance(raw.get("evidence"), list):
         evidence = []
         for e in raw["evidence"][:100]:
-            if isinstance(e, dict) and e.get("kind") in ("caption", "thumbnail_alt", "user_text") and isinstance(e.get("text"), str):
+            if isinstance(e, dict) and e.get("kind") in ("caption", "thumbnail_alt", "user_text", "transcript") and isinstance(e.get("text"), str):
                 evidence.append({"kind": e["kind"], "text": _text(e["text"])})
         if evidence:
             result["evidence"] = evidence

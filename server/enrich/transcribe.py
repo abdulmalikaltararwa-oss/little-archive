@@ -14,6 +14,7 @@ import unicodedata
 
 import httpx
 
+from .extract import clean_text
 from .understanding import PLACEHOLDER_TITLE, ProviderError
 
 THIN_LETTERS = 40
@@ -55,10 +56,8 @@ def transcript_needed(item: dict, page: dict | None = None) -> tuple[bool, str]:
 
 
 def clean_transcript(text) -> str:
-    if not isinstance(text, str):
-        return ""
-    text = "".join(ch for ch in unicodedata.normalize("NFC", text) if ch in "\n\t" or unicodedata.category(ch) not in {"Cc", "Cs"})
-    return "\n".join(" ".join(line.split()) for line in text.split("\n")).strip()[:MAX_TRANSCRIPT_CHARS]
+    """Untrusted text from a client or a provider: no control characters or bidi overrides, bounded."""
+    return clean_text(text, MAX_TRANSCRIPT_CHARS, multiline=True)
 
 
 @dataclass
