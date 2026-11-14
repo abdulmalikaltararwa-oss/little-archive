@@ -85,10 +85,11 @@ const SaveCard = memo(function SaveCard({ item, tile, index, total, compact, sel
         <p dir="auto" className="mt-0.5 truncate text-xs text-ink-soft">{item.creator || hostLabel(item.url)}</p>
         {compact ? null : (
           <div className="mt-auto flex h-6 items-center gap-1.5 overflow-hidden pb-0.5">
-            {(item.tags || []).slice(0, 2).map(tag => (
-              <span key={tag} dir="auto" className="max-w-[46%] shrink-0 truncate rounded-full bg-card-2 px-2 py-0.5 text-2xs text-ink-soft">{tag}</span>
-            ))}
+            {/* The review chip comes first: it is the one that must never be the chip that gets cut off. */}
             {item.needs_review ? <span className="shrink-0 rounded-full bg-petal-pale px-2 py-0.5 text-2xs font-medium text-petal-ink">To review</span> : null}
+            {(item.tags || []).slice(0, 2).map(tag => (
+              <span key={tag} dir="auto" className="min-w-0 max-w-[46%] truncate rounded-full bg-card-2 px-2 py-0.5 text-2xs text-ink-soft">{tag}</span>
+            ))}
           </div>
         )}
       </div>

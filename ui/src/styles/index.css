@@ -16,7 +16,13 @@
 /* The theme is a data attribute on <html>, set before first paint by public/theme-init.js. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 /* Hover styles only where a pointer can hover; touch gets the pressed state instead. */
-@custom-variant hov (@media (hover: hover) and (pointer: fine) { &:hover });
+@custom-variant hov {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
+}
 @custom-variant coarse (@media (pointer: coarse));
 
 @theme {

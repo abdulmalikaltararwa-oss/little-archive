@@ -41,6 +41,7 @@ export function LoginScreen() {
   const [error, setError] = useState(notice);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const [wide] = useState(() => matchMedia('(min-width: 1024px)').matches);
 
   useEffect(() => { document.title = 'Little Archive — Welcome home'; }, []);
 
@@ -61,16 +62,17 @@ export function LoginScreen() {
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
-      <section aria-label="About Little Archive" className="hero-paper relative isolate flex min-h-[300px] flex-col justify-between overflow-hidden px-6 pt-[calc(var(--safe-top)+1.5rem)] pb-6 sm:px-12 lg:min-h-dvh lg:px-[9%] lg:py-12">
-        <div className="absolute inset-0 -z-10 opacity-90 [mask-image:linear-gradient(to_top,black_30%,transparent_85%)] lg:[mask-image:linear-gradient(to_top,black_45%,transparent_95%)]">
+      <section aria-label="About Little Archive" className="hero-paper relative isolate flex min-h-[280px] flex-col justify-between overflow-hidden px-6 pt-[calc(var(--safe-top)+1.5rem)] pb-6 sm:px-12 lg:min-h-dvh lg:px-[9%] lg:py-12">
+        {/* The field keeps to its own corner so the words are never set over it: beside them on a phone, above them on a wide screen. */}
+        <div className="absolute end-0 top-0 -z-10 h-full max-h-[340px] w-[46%] [mask-image:linear-gradient(to_left,black_65%,transparent)] lg:top-[5%] lg:h-[50%] lg:max-h-none lg:w-[84%] lg:[mask-image:linear-gradient(to_bottom,black_72%,transparent)]">
           <Suspense fallback={null}>
-            <AsciiFieldCanvas anchor={0.5} fontSize={13} />
+            <AsciiFieldCanvas anchor={wide ? 0.6 : 0.5} />
           </Suspense>
         </div>
         <Brand />
-        <div className="mt-8 max-lg:max-w-[26rem]">
+        <div className="mt-8 max-lg:max-w-[58%] lg:mt-auto lg:pt-[52vh]">
           <Whisper className="max-lg:hidden">a home for your curious mind</Whisper>
-          <h1 className="display mt-3 text-5xl text-ink sm:text-6xl lg:text-[5.2rem] lg:leading-[0.98]">Good things,<br />kept close.</h1>
+          <h1 className="display mt-3 text-[2.5rem] leading-[1.02] text-ink sm:text-6xl lg:text-[5.2rem] lg:leading-[0.98]">Good things,<br />kept close.</h1>
           <p className="mt-4 max-w-sm text-sm text-ink-soft sm:text-base">Your saved posts, ideas, and little discoveries. Together in a space that belongs to you.</p>
         </div>
         <p className="mt-10 flex items-center gap-2 text-xs text-ink-soft max-lg:hidden"><ShieldCheck className="size-4" aria-hidden="true" />Open source. Self-hosted. Yours to keep.</p>

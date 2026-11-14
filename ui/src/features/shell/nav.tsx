@@ -129,7 +129,7 @@ export function NavContent({ onNavigate }: { onNavigate?(to: 'view' | 'dialog'):
       </Group>
 
       {/* What the saves can do beyond being kept. Each screen says so itself where a server does not offer it. */}
-      <Group label="from your saves">
+      <Group label="explore">
         <NavButton navKey="recipes" active={loc.screen === 'recipes'} icon={<CookingPot aria-hidden="true" />} label="Recipes" onClick={() => screen('recipes')} />
         <NavButton navKey="places" active={loc.screen === 'places'} icon={<MapPinned aria-hidden="true" />} label="Places" onClick={() => screen('places')} />
         <NavButton navKey="ask" active={loc.screen === 'ask'} icon={<MessageCircleQuestion aria-hidden="true" />} label="Ask your archive" onClick={() => screen('ask')} />

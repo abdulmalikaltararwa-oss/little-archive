@@ -56,7 +56,8 @@ export function buildScene(cols: number, rows: number, cellW: number, cellH: num
   const glyph = new Array<string>(count).fill('');
   const width = cols * cellW;
   const height = rows * cellH;
-  const scale = (0.82 * height) / (BOOKMARK.bottom - BOOKMARK.top);
+  // The mark fills most of the box's height, but never more than its width: in a narrow strip it shrinks to fit.
+  const scale = Math.min((0.82 * height) / (BOOKMARK.bottom - BOOKMARK.top), (0.92 * width) / 27);
   const centreX = width * anchor;
   const centreV = (BOOKMARK.top + BOOKMARK.bottom) / 2;
   const toU = (col: number) => 32 + ((col + 0.5) * cellW - centreX) / scale;

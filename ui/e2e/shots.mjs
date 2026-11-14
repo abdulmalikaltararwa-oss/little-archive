@@ -63,7 +63,7 @@ for (const size of Object.keys(SIZES)) {
     if (want(`dialogs-${tag}`)) {
       const dialogs = [
         ['save', async () => { if (size === 'desktop') await page.getByRole('button', { name: 'Save a link', exact: true }).click(); else await page.getByRole('navigation', { name: 'Quick actions' }).getByRole('button', { name: 'Save a link' }).click(); }],
-        ['palette', async () => { await page.keyboard.press('Control+k'); await page.keyboard.type('pasta'); }],
+        ['palette', async () => { await page.keyboard.press('Control+k'); await page.getByRole('combobox').first().waitFor(); await page.keyboard.type('pasta'); }],
         ['organize', async () => page.getByRole('button', { name: 'Organize library' }).click()],
         ['import', async () => page.getByRole('button', { name: 'Import', exact: true }).click()],
         ['settings', async () => { if (size === 'desktop') await page.getByRole('button', { name: 'Settings & connections' }).click(); else await page.getByRole('navigation', { name: 'Quick actions' }).getByRole('button', { name: 'Settings & connections' }).click(); }],
@@ -115,6 +115,31 @@ if (process.env.LA_UI_PASSWORD_FILE && want('login')) {
         await page.getByRole('heading', { name: 'All saves' }).waitFor();
         await settle(page, 1500);
         await shot(page, 'real-first-run-desktop-light');
+        // The server's own synthetic saves have no pictures, so this is the wall of paper covers.
+        const demoButton = page.getByRole('button', { name: 'Try demo saves' });
+        if (await demoButton.count()) { await demoButton.click(); await page.locator('[data-item-id]').first().waitFor(); }
+        await settle(page, 2200);
+        await shot(page, 'real-library-desktop-light');
+        await page.locator('[data-card-control="open"]').nth(2).click();
+        await page.getByTestId('detail').waitFor();
+        await settle(page, 900);
+        await shot(page, 'real-detail-desktop-light');
+        await page.getByRole('button', { name: 'Close dialog' }).click();
+        await settle(page, 500);
+        await page.getByRole('button', { name: 'Settings & connections' }).click();
+        await settle(page, 900);
+        await shot(page, 'real-settings-desktop-light');
+        await page.keyboard.press('Escape');
+        for (const [name, hash] of [['unlock', '#/unlock'], ['recipes', '#/recipes'], ['places', '#/places'], ['ask', '#/ask'], ['guided', '#/import/guided']]) {
+          await page.goto(new URL(`/${hash}`, base).href);
+          await settle(page, 1400);
+          await shot(page, `real-${name}-desktop-light`);
+        }
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(new URL('/', base).href);
+        await page.locator('[data-item-id]').first().waitFor();
+        await settle(page, 2000);
+        await shot(page, 'real-library-phone-light');
       }
       await context.close();
     }
