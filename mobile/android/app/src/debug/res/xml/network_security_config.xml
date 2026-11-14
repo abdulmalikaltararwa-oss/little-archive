@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Debug builds only: plain http to a server running on the development computer (10.0.2.2 is the computer, as the Android
-     emulator sees it; localhost and 127.0.0.1 are the phone itself, reached with `adb reverse`). Nothing else. -->
+     emulator sees it; localhost and 127.0.0.1 are the phone itself, reached with `adb reverse`). Nothing else.
+     The app accepts 10.0.2.2 only in a web bundle built with LA_DEBUG_BUILD=1 (mobile/src/server-url.js). The release
+     config next to the main manifest allows no cleartext at all. tests/android-network.test.mjs keeps this list and that
+     check in step. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
