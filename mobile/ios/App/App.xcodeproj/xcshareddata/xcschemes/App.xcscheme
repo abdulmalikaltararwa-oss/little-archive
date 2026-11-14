@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The shared scheme for the app. Only the Run action (a debug build started from Xcode) uses the StoreKit test file, so the
-     unlock can be tried in the simulator without a store account. Test, Profile, Analyze and Archive (the release build)
-     never read it, and the file is not a member of any target, so it is not in the app. -->
+     unlock can be tried in the simulator without a store account. Profile, Analyze and Archive (the release build) do
+     not name it, and the file is not a member of any target, so it is not in the app. -->
 <Scheme
    LastUpgradeVersion = "1600"
    version = "1.7">

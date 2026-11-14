@@ -17,6 +17,12 @@
   --safe-end: env(safe-area-inset-right, var(--safe-area-inset-right, 0px));
 }
 body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
+/* The interface's top bar is h-16 with padding-top: var(--safe-top), so with a notch or a status bar the room left for the brand
+   and the Import button is 64px minus the inset (about 5px on a phone with a dynamic island), and the page content runs over
+   them. The bar must be as tall as its content plus the inset. The proper fix is in ui/src/features/shell/shell.tsx
+   (h-16 becomes h-[calc(4rem+var(--safe-top))]); until then this does it for the app. It matches nothing once that is changed. */
+#app header.h-16 { height: calc(4rem + var(--safe-top)); }
+@media (min-width: 1024px) { #app header.h-16 { height: calc(5rem + var(--safe-top)); } }
 
 /* First-launch screens ---------------------------------------------------------------------------------------------- */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
