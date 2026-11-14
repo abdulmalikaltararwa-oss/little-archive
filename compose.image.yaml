@@ -1,0 +1,34 @@
+# Runs the published image instead of building from a checkout.
+#
+#   1. Save this file as compose.yaml in an empty folder.
+#   2. Beside it, create .env with one line (12 characters or more):
+#        LA_ADMIN_PASSWORD=choose-a-long-unique-password
+#   3. docker compose up -d, then open http://localhost:8787
+#
+# `edge` is a development build that follows the main branch. No stable
+# release has been published yet; see docs/self-hosting.md.
+services:
+  archive:
+    image: ghcr.io/abdulmalikaltararwa-oss/little-archive:edge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      LA_ADMIN_PASSWORD: ${LA_ADMIN_PASSWORD:?Set LA_ADMIN_PASSWORD in .env first}
+      LA_PUBLIC_URL: ${LA_PUBLIC_URL:-http://localhost:8787}
+      LA_DATA_DIR: /data
+      LA_OLLAMA_URL: ${LA_OLLAMA_URL:-}
+      LA_OLLAMA_MODEL: ${LA_OLLAMA_MODEL:-}
+    volumes:
+      - archive-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+volumes:
+  archive-data:

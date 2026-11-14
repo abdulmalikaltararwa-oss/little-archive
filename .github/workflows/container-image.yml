@@ -1,0 +1,102 @@
+name: Publish container image
+
+# Builds the packaged application for amd64 and arm64, runs the container smoke
+# check against each build, and only then publishes it to GitHub's registry.
+# `edge` follows the default branch and is a development build. A version tag
+# (v1.2.3) also publishes `1.2.3` and `latest`.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'server/**'
+      - 'web/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'requirements.txt'
+      - 'requirements-lock.txt'
+      - '.github/workflows/container-image.yml'
+
+permissions: {}
+
+concurrency:
+  group: container-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    name: Build and check (${{ matrix.arch }})
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the packaged application
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ env.IMAGE }}:build-${{ github.sha }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.title=Little Archive
+            org.opencontainers.image.description=A warm, self-hosted library for saved posts and links.
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+          provenance: false
+          load: true
+          push: false
+      - name: Verify authentication, persistence, and offline recovery
+        run: python scripts/container_smoke.py --image "$IMAGE:build-$GITHUB_SHA-${{ matrix.arch }}" --platform linux/${{ matrix.arch }} --startup-timeout 180 --report work/container-image-${{ matrix.arch }}.json
+      - name: Push the checked build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:build-$GITHUB_SHA-${{ matrix.arch }}"
+
+  publish:
+    name: Publish tags
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - name: Join both architectures under the public tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          tags=(-t "$IMAGE:sha-${GITHUB_SHA::12}")
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tags+=(-t "$IMAGE:${GITHUB_REF_NAME#v}" -t "$IMAGE:latest")
+          else
+            tags+=(-t "$IMAGE:edge")
+          fi
+          docker buildx imagetools create "${tags[@]}" \
+            "$IMAGE:build-$GITHUB_SHA-amd64" "$IMAGE:build-$GITHUB_SHA-arm64"
+          docker buildx imagetools inspect "$IMAGE:sha-${GITHUB_SHA::12}"
