@@ -156,7 +156,8 @@ export function Gallery() {
   const fresh = useArchiveState(state => state.justSaved);
   const openItem = useArchiveState(state => state.loc.item);
   // Which saves are listed: a search, a filter or a sort that changes this lists different saves, not the same ones again.
-  const view = useArchiveState(state => JSON.stringify(state.filters));
+  // A shuffled sample is never the same saves again: every fetch of it is a new draw, so it has no view to come back to.
+  const view = useArchiveState(state => (state.filters.sort === 'random' ? '' : JSON.stringify(state.filters)));
   const morphId = useMorph(state => state.coverId);
 
   const host = useRef<HTMLDivElement>(null);
@@ -186,7 +187,7 @@ export function Gallery() {
     setRange(previous => (previous[0] === next[0] && previous[1] === next[1] ? previous : next));
     if (loading) return;
     const [first, last] = windowRange(wall.tiles, -top, -top + innerHeight);
-    anchor.current = last >= first && items[first] ? { id: items[first].id, top: top + wall.tiles[first]!.y, view } : null;
+    anchor.current = view && last >= first && items[first] ? { id: items[first].id, top: top + wall.tiles[first]!.y, view } : null;
   }, [wall, items, loading, view]);
 
   // When loaded saves change (an edit, a refetch of the loaded window), keep the first visible card where it was. That
@@ -195,7 +196,7 @@ export function Gallery() {
   const seen = useRef(revision);
   useLayoutEffect(() => {
     const node = host.current;
-    if (node && seen.current !== revision && anchor.current?.view === view) {
+    if (node && seen.current !== revision && view && anchor.current?.view === view) {
       const index = items.findIndex(item => item.id === anchor.current!.id);
       const tile = index >= 0 ? wall.tiles[index] : undefined;
       if (tile) {
