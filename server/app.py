@@ -43,6 +43,7 @@ from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
 from .limits import BODY_METHODS, CLIENT, IDENTITY, RELEASES, HostedGuard, HostedLimits, Refusal, refusal_response, retry_after
 from .metering import AccountMeters
+from .purchases.routes import install_routes as install_purchase_routes
 from .models import AccountDeletion, AIJobs, BulkAction, CollectionInput, CollectionPatch, DeviceLogin, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput
 from .security import RateLimiter, token_hash, verify_password
 from .storage import LibraryClosed, LibraryFull, Store, clean_tags, json_text, normalize_url, now
@@ -142,8 +143,8 @@ class BodyLimitMiddleware:
         await self.app(scope, replay, send)
 
 
-def create_app(config: Config | None = None, *, identity=None, entitlements=None, auth_admin=None):
-    """`identity`, `entitlements` and `auth_admin` replace the hosted defaults (tests, future providers)."""
+def create_app(config: Config | None = None, *, identity=None, entitlements=None, auth_admin=None, purchase_clients=None):
+    """`identity`, `entitlements`, `auth_admin` and `purchase_clients` (`apple`, `google`, `push`) replace the hosted defaults (tests, future providers)."""
     config = config or Config.from_env()
     config.validate()
     config.require_account_deletion()
@@ -977,6 +978,14 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         return {"created": created}
 
     install_enrichment_routes(app, owner=owner, after_page=release_orphans if hosted else None)
+
+    # The one-time purchase (server/purchases): routes exist in both modes and answer 404 where there is no hosted account.
+    purchases = None
+    if hosted:
+        from .purchases.build import build_purchases
+        purchases = build_purchases(config, entitlements, libraries, purchase_clients)
+    app.state.purchases = purchases
+    install_purchase_routes(app, owner=owner, service=purchases, hosted_route=hosted_route, entitlements=entitlements)
 
     if not hosted:
         # The bundled web UI signs in with the owner password, so a hosted service is API-only.

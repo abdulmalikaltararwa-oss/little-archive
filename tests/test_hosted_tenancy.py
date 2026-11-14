@@ -37,6 +37,8 @@ from support_hosted import SigningKey, bearer, claims, fake_model, hosted_app, h
 
 MODEL = {"ollama_url": "http://127.0.0.1:1", "ollama_model": "synthetic-model"}
 PUBLIC = {("GET", "/api/health"), ("GET", "/api/discovery"), ("GET", "/api/auth/me")}
+# Called by the app stores, not by an account: each is judged by its own proof (tests/test_hosted_purchases.py).
+STORE_CALLS = {("POST", "/api/purchases/apple/notifications"), ("POST", "/api/purchases/google/notifications")}
 
 
 def image(color="#91a58f", size=(24, 18), kind="PNG"):
@@ -296,7 +298,7 @@ class TenantIsolationTests(HostedCase):
     def test_every_route_needs_a_verified_account_or_does_not_exist(self):
         checked = 0
         for method, path in api_routes(self.app):
-            if (method, path) in PUBLIC:
+            if (method, path) in PUBLIC | STORE_CALLS:
                 continue
             concrete = path.replace("{iid}", self.hers["item"]).replace("{cid}", self.hers["shelf"]).replace("{jid}", self.hers["job"]) \
                 .replace("{digest}", self.hers["thumbnail"].rsplit("/", 1)[1]).replace("{tid}", "x").replace("{rid}", self.hers["run"])
@@ -979,7 +981,13 @@ class HostedQueueTests(HostedCase):
             with self.subTest(attempt=method + " " + path):
                 self.assertIn(self.status(auth, method, path, body), {404, 405, 422})
         self.assertFalse(self.ok(auth, "GET", "/api/account").json()["entitlements"]["unlocked"])
-        self.assertEqual([path for method, path in api_routes(self.app) if "unlock" in path or "entitle" in path or "purchase" in path], [])
+        self.assertEqual([path for method, path in api_routes(self.app) if "unlock" in path or "entitle" in path], [])
+        # The purchase routes are the only way in, and they take a store's signed proof, never a claim. A claim, a flag or a made-up proof changes nothing.
+        self.assertEqual(sorted(path for method, path in api_routes(self.app) if "purchase" in path),
+                         ["/api/purchases", "/api/purchases/apple", "/api/purchases/apple/notifications", "/api/purchases/google", "/api/purchases/google/notifications"])
+        for path, body in (("/api/purchases/apple", {"unlocked": True}), ("/api/purchases/google", {"unlocked": True}), ("/api/purchases/apple", {"signed_transaction": "a" * 40}),
+                           ("/api/purchases/apple", {"signed_transaction": "aaaa.bbbb.cccc" + "d" * 30}), ("/api/purchases/google", {"product_id": "unlock_full", "purchase_token": "x" * 40})):
+            self.assertIn(self.status(auth, "POST", path, body), {400, 422, 503}, path)
 
     def test_the_worker_serves_accounts_in_turn_and_writes_each_result_to_its_own_library(self):
         (alice, a), (bob, b) = self.account(), self.account()

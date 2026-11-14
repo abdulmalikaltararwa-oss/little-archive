@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 import os
+import re
 import unicodedata
 from urllib.parse import urlsplit
 
@@ -65,6 +66,17 @@ class Config:
     # shown, never returned by any route). Starting hosted mode without it is refused unless the operator says so.
     supabase_service_key: str = field(default="", repr=False)
     hosted_allow_login_survives_deletion: bool = False
+    # The one-time unlock, as the stores know it. All of these are placeholders until the app is listed: change them to the real ids.
+    apple_bundle_id: str = "app.littlearchive.mobile"
+    apple_product_id: str = "unlock_full"
+    apple_environments: str = "Production"   # "Production", or "Production,Sandbox" while the app is in review or TestFlight
+    apple_app_id: int = 0                    # the numeric App Store id; if set, notifications must carry it
+    google_package_name: str = "app.littlearchive.mobile"
+    google_product_id: str = "unlock_full"
+    google_service_account_file: str = field(default="", repr=False)   # a path; the key file itself is never in the repository
+    google_allow_test_purchases: bool = False
+    google_rtdn_audience: str = ""
+    google_rtdn_service_account: str = ""
 
     @classmethod
     def from_env(cls, values=None):
@@ -101,6 +113,16 @@ class Config:
             hosted_heavy_overall=_whole_number(values, "LA_HOSTED_HEAVY_OVERALL", 8),
             supabase_service_key=values.get("LA_SUPABASE_SERVICE_KEY", "").strip(),
             hosted_allow_login_survives_deletion=str(values.get("LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION", "")).strip().lower() in {"1", "true", "yes", "on"},
+            apple_bundle_id=values.get("LA_APPLE_BUNDLE_ID", "").strip() or "app.littlearchive.mobile",
+            apple_product_id=values.get("LA_APPLE_PRODUCT_ID", "").strip() or "unlock_full",
+            apple_environments=values.get("LA_APPLE_ENVIRONMENTS", "").strip() or "Production",
+            apple_app_id=_whole_number(values, "LA_APPLE_APP_ID", 0),
+            google_package_name=values.get("LA_GOOGLE_PACKAGE_NAME", "").strip() or "app.littlearchive.mobile",
+            google_product_id=values.get("LA_GOOGLE_PRODUCT_ID", "").strip() or "unlock_full",
+            google_service_account_file=values.get("LA_GOOGLE_SERVICE_ACCOUNT_FILE", "").strip(),
+            google_allow_test_purchases=str(values.get("LA_GOOGLE_ALLOW_TEST_PURCHASES", "")).strip().lower() in {"1", "true", "yes", "on"},
+            google_rtdn_audience=values.get("LA_GOOGLE_RTDN_AUDIENCE", "").strip(),
+            google_rtdn_service_account=values.get("LA_GOOGLE_RTDN_SERVICE_ACCOUNT", "").strip(),
         )
 
     def validate(self):
@@ -184,12 +206,35 @@ class Config:
         ):
             if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
                 raise ValueError(f"{label} must be between {low} and {high}.")
+        self._validate_purchases()
         if self.supabase_service_key:
             key = self.supabase_service_key
             if _unsafe_text(key) or len(key) > 4096 or len(key) < 20 or any(c.isspace() for c in key):
                 raise ValueError("LA_SUPABASE_SERVICE_KEY must be the project's secret key (sb_secret_...) or its legacy service_role key, on one line.")
             if key.startswith("sb_publishable_"):
                 raise ValueError("LA_SUPABASE_SERVICE_KEY holds a publishable key. Use the project's secret key; a publishable key can delete nobody.")
+
+    def _validate_purchases(self):
+        for label, value, pattern in (("LA_APPLE_BUNDLE_ID", self.apple_bundle_id, r"[A-Za-z0-9.-]{1,155}"), ("LA_GOOGLE_PACKAGE_NAME", self.google_package_name, r"[A-Za-z0-9._]{1,155}"),
+                                      ("LA_APPLE_PRODUCT_ID", self.apple_product_id, r"[A-Za-z0-9._-]{1,100}"), ("LA_GOOGLE_PRODUCT_ID", self.google_product_id, r"[A-Za-z0-9._-]{1,100}")):
+            if not re.fullmatch(pattern, value):
+                raise ValueError(f"{label} must be a store identifier (letters, digits and . _ - only).")
+        environments = [part.strip() for part in self.apple_environments.split(",")]
+        if not environments or any(part not in {"Production", "Sandbox"} for part in environments):
+            raise ValueError("LA_APPLE_ENVIRONMENTS must be Production, Sandbox, or both separated by a comma.")
+        if not isinstance(self.apple_app_id, int) or isinstance(self.apple_app_id, bool) or not 0 <= self.apple_app_id < 10 ** 15:
+            raise ValueError("LA_APPLE_APP_ID must be the app's numeric App Store id, or 0.")
+        if bool(self.google_rtdn_audience) != bool(self.google_rtdn_service_account):
+            raise ValueError("Set both LA_GOOGLE_RTDN_AUDIENCE and LA_GOOGLE_RTDN_SERVICE_ACCOUNT, or neither.")
+        if self.google_rtdn_audience and not self.google_service_account_file:
+            raise ValueError("Google real-time notifications need LA_GOOGLE_SERVICE_ACCOUNT_FILE, because each one is checked by asking Google again.")
+        for label, value in (("LA_GOOGLE_RTDN_AUDIENCE", self.google_rtdn_audience), ("LA_GOOGLE_RTDN_SERVICE_ACCOUNT", self.google_rtdn_service_account), ("LA_GOOGLE_SERVICE_ACCOUNT_FILE", self.google_service_account_file)):
+            if _unsafe_text(value) or len(value) > 2048:
+                raise ValueError(f"{label} must be bounded text without control characters.")
+        if self.google_service_account_file and not Path(self.google_service_account_file).is_absolute():
+            raise ValueError("LA_GOOGLE_SERVICE_ACCOUNT_FILE must be an absolute path.")
+        if self.google_service_account_file and Path(self.google_service_account_file).resolve().is_relative_to((Path(__file__).resolve().parent.parent).resolve()):
+            raise ValueError("LA_GOOGLE_SERVICE_ACCOUNT_FILE must be outside the source tree: a key file does not belong in the repository.")
 
     def require_account_deletion(self):
         """Hosted mode must be able to delete a person's sign-in with their library (App Store guideline 5.1.1(v)).
