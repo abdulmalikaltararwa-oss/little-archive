@@ -66,7 +66,7 @@ The suite verifies:
 
 Every page runs behind a network boundary that refuses and reports external HTTP requests; app requests still go to the real server. Uncaught browser errors fail the test. Tests execute serially, use unique synthetic identifiers, and assert only their own records. No retry hides a first-run failure.
 
-The browser tests use loopback HTTP, so production HTTPS termination and the `Secure` cookie configuration are covered separately by the server/deployment tests. Browser engine coverage is not a claim that every Safari or Firefox release has been tested. The extension has a separate suite and configuration.
+The browser tests use loopback HTTP, so production HTTPS termination and the `Secure` cookie configuration are covered separately by the server/deployment tests. Tests about where the keyboard's focus goes press Enter rather than click, because Safari gives a clicked button no focus (focus goes to the page's main area), and on a Mac the skip-link check uses Option+Tab, which is how Safari reaches links by default. Browser engine coverage is not a claim that every Safari or Firefox release has been tested. The extension has a separate suite and configuration.
 
 ## CI results
 

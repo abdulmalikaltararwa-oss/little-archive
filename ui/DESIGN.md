@@ -89,8 +89,9 @@ has `dir="auto"`.
   moment from the table above.
 - Hover lifts and tilts a card by half a degree; press shrinks it by 1.5%. Hover styles use the `hov:`
   variant so they never stick on touch.
-- **Reduced motion.** With `prefers-reduced-motion: reduce` all CSS animation and transition is cut to
-  nothing, view transitions are off, the flower field draws its settled frame once and ignores the pointer,
+- **Reduced motion.** With `prefers-reduced-motion: reduce` CSS transitions are off (not shortened: a
+  transition that runs at all keeps the old value for a frame, and the code that measures the wall would act
+  on the old layout) and CSS animations are cut to a single frame, view transitions are off, the flower field draws its settled frame once and ignores the pointer,
   tickers show their final value, the beam is a still border, spinners hold one frame. State changes still
   happen; only the movement goes. Motion components are wrapped in `MotionConfig reducedMotion="user"`.
 - Effects never change layout. Every effect is absolutely positioned inside a box whose size is set by
