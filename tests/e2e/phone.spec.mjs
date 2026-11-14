@@ -38,9 +38,14 @@ async function signIn(page) {
 const pathAndSearch = page => new URL(page.url()).pathname + new URL(page.url()).search;
 
 // A control counts as finger-sized when a 44px cross centred on it still lands on it (or the label around a checkbox).
-// Hit-testing includes the invisible areas that CSS adds around small controls.
+// Hit-testing includes the invisible areas that CSS adds around small controls. It is done on the finished layout: a
+// dialog that has just opened is still on its way in for a frame or two (a sheet rises from the bottom edge, so its
+// footer buttons start below the screen), and a slower machine measures it there.
 async function undersizedTargets(page, rootSelector) {
-  return page.evaluate(rootSelector => {
+  return page.evaluate(async rootSelector => {
+    const finite = document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime));
+    await Promise.all(finite.map(animation => animation.finished.catch(() => {})));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const root = document.querySelector(rootSelector);
     const problems = [];
     const seen = new Set();
