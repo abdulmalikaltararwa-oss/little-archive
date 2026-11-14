@@ -82,6 +82,8 @@ For an isolated setup-and-recovery rehearsal, use the [native verification harne
 | `LA_DATA_DIR` | Persistent directory for the database and local assets. |
 | `LA_OLLAMA_URL` | Optional operator-controlled Ollama origin. Set together with the model name. |
 | `LA_OLLAMA_MODEL` | Name of a model available in that Ollama instance. |
+| `LA_DEVICE_TOKEN_IDLE_DAYS` | Days without use after which a phone's device token stops working (default `180`; `0` turns it off). Tokens from before this limit existed keep working until they have been idle that long counted from the upgrade. |
+| `LA_DEVICE_TOKEN_MAX_DAYS` | Optional hard lifetime for every device token, counted from when it was made (default `0`, none). A single device can be given one when it is paired (`expires_in_days`). |
 
 The optional understanding layer (reading public pages, transcripts, a hosted model provider, the shared cache) has its own settings, all off by default. They are listed in [Understanding saves](understanding.md#settings).
 

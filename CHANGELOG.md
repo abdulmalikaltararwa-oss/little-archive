@@ -39,6 +39,20 @@ Covered by automated tests only; not yet run against a live Supabase project, a 
 - In hosted mode the understanding layer runs once per account library, with one worker thread serving every account's queue in turn. A closer read is the metered deep read; automatic transcription is off.
 - Add PyJWT and cryptography as pinned dependencies for token verification.
 
+### Hosted mode hardening and the one-time purchase (in development)
+
+Covered by automated tests with stand-ins only (no real Supabase project, Apple or Google): see [hosted mode](docs/hosted-mode.md) for what was and was not run.
+
+- Meter ordinary AI suggestions per account with daily and monthly allowances for free and unlocked accounts (`LA_HOSTED_SUGGESTIONS_*`), refund suggestions and closer reads whose work fails or is cancelled before it ran, and answer with `402`/`429` bodies that carry a `code` and a `limit` an app can show. `GET /api/account` gains `entitlements.suggestions` and `unlocked_via`.
+- Account deletion also deletes the Supabase sign-in with the project's secret key (`LA_SUPABASE_SERVICE_KEY`, environment only): the intent is written first, the response says whether the sign-in is gone (`200`) or still pending (`202`, retried until Supabase confirms). Hosted mode refuses to start without the key unless `LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION=true`.
+- Per-address and per-account request budgets, a failed-sign-in budget, concurrency caps for exports, backups, imports, uploads and page reads, sign-in before the request body is read, stalled-upload timeouts, and an 8 KiB body limit for requests with no credential (both modes). New settings `LA_HOSTED_RATE_*`, `LA_HOSTED_TRUSTED_PROXY_HOPS`, `LA_HOSTED_HEAVY_*`.
+- One-time purchase: `POST /api/purchases/apple` (StoreKit 2 JWS, checked against the bundled Apple Root CA - G3), `POST /api/purchases/google` (Play Developer API through a service account), restore, one purchase per account, App Store Server Notifications V2 and Google real-time notifications for refunds, `GET /api/purchases`. Hosted only. Configuration `LA_APPLE_*`, `LA_GOOGLE_*`; the ids are placeholders.
+- Self-hosted device tokens now expire after 180 days without use (`LA_DEVICE_TOKEN_IDLE_DAYS`; `0` turns it off), with an optional hard lifetime and `expires_at` in the API. Existing tokens keep working. The `401` text for a device token now says it may have expired.
+- The shared cache no longer shows an account that another account saved a post: page details are not shared in hosted mode, shared hits are counted like the work they stand in for, and an item never reports its transcript as coming from the cache. A full server disk answers `503` instead of the account's `507`.
+- The page fetcher bounds inflated size (a gzip body is inflated under the byte limit instead of by the HTTP library), shares its time allowance across lookups and connections, refuses names that become addresses once normalised and scoped addresses, and lists the ranges Python versions disagree about.
+- Recipe cards, places and ask-your-archive: every model call and uncached geocoder request is a *feature call* charged to the account against a daily and monthly allowance (`LA_HOSTED_FEATURE_CALLS_*`; 100 a day and 1,500 a month unlocked, none for free accounts, so the features stay part of the unlock), refunded on failure, with the same `402`/`429` answers; the guided import's staged upload now counts toward a hosted account's storage quota (refused at `create` with `507 storage_full` if it cannot fit); route-class request prices and concurrency caps cover the new routes.
+- Mobile: `10.0.2.2` (the Android emulator's host) is accepted only by a development bundle (`LA_DEBUG_BUILD=1`); a test keeps the app's address check and both Android network configs in step.
+
 ### iOS and Android app (in development)
 
 A Capacitor app in `mobile/` that runs the existing interface against a self-hosted server or the hosted service. See [the mobile app guide](docs/mobile-app.md). Run on the iOS simulator and an Android emulator against local servers; not run on a physical phone, a real Supabase project or a store build.

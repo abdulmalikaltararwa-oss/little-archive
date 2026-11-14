@@ -155,7 +155,8 @@ def install_feature_routes(app, *, owner):
         ai = service.provider is not None and hasattr(service.provider, "complete_json")
         geocoder = getattr(service, "geocoder", None)
         limits = getattr(app.state, "guided_import_limits", None)
-        locked = hosted and not unlocked
+        meters = getattr(app.state, "meters", None)
+        locked = hosted and not unlocked and not (meters is not None and meters.features_open_to_free())
         return {
             "mode": app.state.config.mode, "unlocked": unlocked,
             "recipes": {"available": True, "locked": locked, "ai": ai, "methods": ["jsonld", "rules"] + (["ai"] if ai else [])},

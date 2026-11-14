@@ -8,7 +8,7 @@ a deployment that sells "deep reads" attaches its own sink (or wraps this one) a
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import logging
 from typing import Protocol
 
@@ -66,13 +66,32 @@ class Metering:
         return event
 
 
-class LedgerSink:
-    """Local counters in the library database (table ``enrich_usage``)."""
+_UNDERLYING = {"read": "page_fetch", "understand": "model_call", "transcribe": "transcription"}
 
-    def __init__(self, store):
-        self.store = store
+
+class LedgerSink:
+    """Local counters in the library database (table ``enrich_usage``).
+
+    ``equalize`` is for a deployment where accounts share a cache of public-post results. A shared hit is
+    then recorded as the operation it stands in for (a model call, a page read, a transcription), the
+    quantities a hit cannot match (tokens, bytes, audio seconds) are not recorded at all, and the separate
+    download step of a transcription is not either. What an account can read back is then the same
+    whether or not another account already did the work, so the counters cannot be used to find out. They
+    count operations requested, not costs incurred. One difference remains: a model call that analysed
+    several items at once is one operation, while the same items answered from the cache are one each.
+    """
+
+    def __init__(self, store, equalize=False):
+        self.store, self.equalize = store, equalize
 
     def record(self, event: UsageEvent) -> None:
+        if self.equalize:
+            if event.kind == "page_fetch" and event.tier == "transcribe":
+                return
+            if event.cache_hit:
+                event = replace(event, kind=_UNDERLYING[event.tier], cache_hit=False, model_calls=1 if event.tier == "understand" else 0,
+                                deep_read=event.tier == "transcribe")
+            event = replace(event, input_tokens=None, output_tokens=None, audio_seconds=0.0, bytes_fetched=0)
         with self.store.transaction() as c:
             c.execute(
                 "INSERT INTO enrich_usage(at,kind,tier,provider,model,item_id,job_id,items,model_calls,input_tokens,output_tokens,audio_seconds,bytes_fetched,deep_read,cache_hit) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

@@ -137,7 +137,9 @@ def gated(owner, feature: str):
     def dependency(request: Request, auth=Depends(owner)):
         app = request.app
         if app.state.config.hosted and not app.state.entitlements.is_unlocked(auth.user_id):
-            raise FeatureLocked(feature)
+            meters = getattr(app.state, "meters", None)
+            if meters is None or not meters.features_open_to_free():   # an operator may give accounts that have not unlocked a small allowance
+                raise FeatureLocked(feature)
         return auth
     return dependency
 
@@ -273,19 +275,35 @@ def evidence_text(service, item: dict, *, page_text: str = "", budget: int = 140
 
 # ---------------------------------------------------------------- one structured model call
 
-def structured_call(service, *, system: str, user: str, schema: dict, max_tokens: int, item_id: str | None = None, items: int = 1) -> dict:
-    """Ask the configured provider for one JSON object, meter it, and return the decoded object (unvalidated)."""
+def structured_call(service, *, system: str, user: str, schema: dict, max_tokens: int, item_id: str | None = None, items: int = 1, feature: str = "ai") -> dict:
+    """Ask the configured provider for one JSON object, meter it, and return the decoded object (unvalidated).
+
+    On a hosted service every call is first charged to the account (`service.call_guard`, set by the tenancy layer), which refuses it
+    with a 402 or 429 when the account has no allowance left, and gives the charge back if the provider fails or answers unusably.
+    `feature` names what the call is for (recipes, places, ask) in that refusal. A self-hosted service has no guard and no charge.
+    """
     provider = service.provider
     if provider is None or not hasattr(provider, "complete_json"):
         raise FeatureError(503, "No AI provider is configured on this server, so this cannot use one.", "ai_not_configured")
+    guard = getattr(service, "call_guard", None)
+    if guard is not None:
+        guard.before(feature)
     try:
         answer, usage = provider.complete_json(system, user, schema, max_tokens=max_tokens)
     except ProviderError as exc:
+        if guard is not None:
+            guard.failed()
         raise FeatureError(502, str(exc), "ai_failed", retryable=bool(getattr(exc, "retryable", False))) from exc
+    except Exception:
+        if guard is not None:
+            guard.failed()
+        raise
     if service.meter is not None:
         service.meter.record(kind="model_call", tier="understand", provider=provider.name, model=provider.model, item_id=item_id, items=items,
                              model_calls=usage.model_calls, input_tokens=usage.input_tokens, output_tokens=usage.output_tokens)
     if not isinstance(answer, dict):
+        if guard is not None:
+            guard.failed()
         raise FeatureError(502, "The model returned an unusable answer; nothing was kept.", "ai_invalid")
     return answer
 
