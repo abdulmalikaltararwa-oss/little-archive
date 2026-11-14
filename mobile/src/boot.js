@@ -1,9 +1,9 @@
-// The app's entry point, loaded in place of web/app.js by the bundle's index.html.
+// The app's entry point: the bundle's index.html starts this, not the interface.
 //
 // It does what must happen before the library interface can run: find out which server this phone belongs to, sign in,
-// and build the transport. Then it exposes the result as globalThis.__littleArchiveNative and loads the shared interface
-// (/app.js, unchanged) exactly as the browser would. Everything here that is not Capacitor glue is in the small modules
-// beside this file, which have their own tests.
+// and build the transport. Then it exposes the result as globalThis.__littleArchiveNative (bridge.js) and loads the React
+// interface (ui/), whose entry chooses the native backend from that object. Everything here that is not Capacitor glue is
+// in the small modules beside this file, which have their own tests.
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Directory, Filesystem } from '@capacitor/filesystem';
@@ -18,11 +18,14 @@ import { createFileSaver } from './files.js';
 import { createNativeHttp } from './native-http.js';
 import { hostName } from './server-url.js';
 import { checkServer, deviceName, hostedAddress, hostedClient, serverRecord, signInSelfHosted } from './setup.js';
+import { createBridge } from './bridge.js';
+import { createPurchases } from './purchases.js';
 import { createShareInbox } from './share.js';
 import { createStore, secureBackend } from './store.js';
 import { BACK, createUi } from './ui.js';
 
 const ShareInbox = registerPlugin('ShareInbox');
+const StorePurchases = registerPlugin('StorePurchases');
 const ui = createUi(document.getElementById('app'));
 
 const NOTICE = 'la-notice';
@@ -185,9 +188,12 @@ async function main() {
   }
 
   const { transport, credentials } = session;
-  const native = Object.freeze({
-    platform, mode: session.record.server.kind, serverUrl: session.record.server.url, initialShare,
-    fetch: transport.fetch, localAsset: transport.localAsset, attachImage: transport.attachImage,
+  const mode = session.record.server.kind;
+  // The store's sheet exists only for a hosted account. A self-hosted server sells nothing and gates nothing, so on one the
+  // app never talks to the store at all.
+  const purchases = mode === 'hosted' ? createPurchases({ provider: platform === 'ios' ? 'apple' : 'google', plugin: StorePurchases, request: transport.fetch, app: App }) : null;
+  const native = createBridge({
+    platform, mode, serverUrl: session.record.server.url, initialShare, transport,
     onShare: inbox.subscribe, saveFile: files.save,
     // The interface asks for this when the server refuses the credential for good.
     async signedOut(message) {
@@ -196,14 +202,17 @@ async function main() {
       await store.signOut();
       reloadWith(message || 'Your sign-in ended. Sign in again to continue.');
     },
-    account: Object.freeze({
-      email: credentials.email,
-      signOut: ({ deleted = false } = {}) => endSession({ forget: false, message: deleted ? 'Your account’s library was deleted.' : '' }),
-      switchServer: () => endSession({ forget: true, message: '' }),
-    }),
+    email: credentials.email,
+    // After "Delete my account" the interface has already said exactly what happened to the library and the sign-in; this is only the phone's own sign-out.
+    signOut: ({ deleted = false } = {}) => endSession({ forget: false, message: deleted ? 'Your library was deleted.' : '' }),
+    switchServer: () => endSession({ forget: true, message: '' }),
+    purchases: purchases?.bridge,
   });
   Object.defineProperty(globalThis, '__littleArchiveNative', { value: native, writable: false, configurable: false });
-  await import('/app.js');
+  // The interface is built by its own project, so its entry has a hashed name that the build writes in here.
+  await import(__LA_UI_ENTRY__);
+  // Once the interface is listening: deliver what the store still holds from the last start, and hear what it says from now on.
+  purchases?.start();
 }
 
 main().catch(error => {
