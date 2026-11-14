@@ -14,6 +14,8 @@ import { Cover } from './cover';
 import { BODY_HEIGHT, CARD_PADDING, layoutWall, windowRange, type Tile } from './masonry';
 
 const OVERSCAN = 900;
+/** How far below the screen the end of the wall may be before the next page is asked for. */
+const AUTOLOAD_MARGIN = 1200;
 
 interface CardProps {
   item: Item;
@@ -282,13 +284,18 @@ function AutoLoad({ archive }: { archive: ReturnType<typeof useArchive> }) {
   useEffect(() => {
     const target = node.current;
     if (!target) return;
+    let current = true;
     const observer = new IntersectionObserver(entries => {
-      if (!entries[0]?.isIntersecting) return;
+      // A report can arrive after the page has moved on: Firefox delivers what was measured for an earlier layout (the wall
+      // as a row of placeholders, say) once the list is ready. Only a report from the live observer counts, and where the
+      // end of the wall is right now settles it, not where it was when the report was made.
+      if (!current || !entries.at(-1)?.isIntersecting) return;
+      if (target.getBoundingClientRect().top > innerHeight + AUTOLOAD_MARGIN) return;
       const state = archive.store.getState();
       if (state.list === 'ready' && !state.busy && state.items.length < state.total && state.filters.sort !== 'random') void archive.loadItems(true);
-    }, { rootMargin: '1200px 0px' });
+    }, { rootMargin: `${AUTOLOAD_MARGIN}px 0px` });
     observer.observe(target);
-    return () => observer.disconnect();
+    return () => { current = false; observer.disconnect(); };
   }, [archive, list, loaded, busy]);
   return <div ref={node} aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-px" />;
 }
