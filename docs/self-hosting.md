@@ -109,6 +109,8 @@ Terminate HTTPS at a reverse proxy you administer and forward to the application
 
 Set `LA_PUBLIC_URL=https://archive.example.com`, use your own DNS and certificate configuration, and test login, a state-changing action, a file import, and the extension connection through the public address. A working health endpoint alone does not verify the full deployment.
 
+Native apps sign in with a device token sent as `Authorization: Bearer`. The application therefore treats any bearer value in that header as a presented credential and answers `401` if it is not a valid device token, even when a browser session cookie is present. If your proxy adds its own `Authorization: Bearer` header (some single-sign-on proxies can), configure it not to forward that header to the application. Basic authentication at the proxy is unaffected.
+
 For a personal installation, a private network or VPN is a reasonable additional access boundary. The application itself still requires owner authentication.
 
 ## Optional Ollama

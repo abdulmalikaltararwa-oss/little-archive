@@ -26,7 +26,7 @@ For a downloaded file, the restore command is:
 .venv/bin/python -m server.cli restore little-archive-backup-YYYYMMDD.zip --destination ./restored-data
 ```
 
-The destination must be new and nonexistent. Replace the example filename with the actual downloaded backup. Use the CLI's `--help` for the options in your installed release. A restored library gets a fresh instance identity and needs fresh owner authentication configuration and newly created extension tokens; do not expect old credentials to be revived by a content backup. Set `LA_DATA_DIR` to the restored directory and a new `LA_ADMIN_PASSWORD` before starting it.
+The destination must be new and nonexistent. Replace the example filename with the actual downloaded backup. Use the CLI's `--help` for the options in your installed release. A restored library gets a fresh instance identity and needs fresh owner authentication configuration, newly created extension tokens, and newly paired device tokens; do not expect old credentials to be revived by a content backup. Set `LA_DATA_DIR` to the restored directory and a new `LA_ADMIN_PASSWORD` before starting it.
 
 After restore, confirm record and collection counts, inspect notes and progress on a few items, open local thumbnails, and test a small export. Do not immediately overwrite your only previous backup with a new unverified one.
 

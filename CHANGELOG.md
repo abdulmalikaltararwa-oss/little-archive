@@ -4,6 +4,15 @@
 
 The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` in [run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). Six installation/recovery reports are retained with their provenance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence, corrected initial failures, and boundaries.
 
+### Native clients and hosted mode
+
+Covered by automated tests only; not yet run against a live Supabase project, a mobile client, or a container build. See [hosted mode](docs/hosted-mode.md) for the exact boundaries.
+
+- Exchange the owner password for named, revocable, hashed full-access device tokens, so a native app can use every owner route without the cookie and CSRF flow. Extension import tokens keep their import-only scope.
+- Add a public discovery route naming the server's mode and sign-in methods, and an account summary route.
+- Add an opt-in hosted multi-user mode on the same server and routes: Supabase access tokens verified per request, one SQLite library and thumbnail folder per account, per-account storage quota and request-size limits, in-app account deletion, a tenant-aware AI queue, and an unlock/deep-read allowance interface with no payment provider attached.
+- Add PyJWT and cryptography as pinned dependencies for token verification.
+
 ### First v1 foundations
 
 - Retain loaded gallery pages, scroll position, and useful keyboard focus after item edits and favorites; keep random samples stable when the edit does not change search/filter membership.
