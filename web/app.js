@@ -1,7 +1,11 @@
-import { PLATFORM_NAMES, STATUS_NAMES, SHARE_PATH, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage, readShareTarget, isTikTokShortLink } from './utils.js';
+import { PLATFORM_NAMES, STATUS_NAMES, SHARE_PATH, safeURL, parseTags, buildItemPatch, itemChangeAffectsView, formatDate, hostLabel, countLabel, createQuery, libraryScope, stableHue, errorMessage, readShareTarget, parseSharedContent, isTikTokShortLink } from './utils.js';
 
 const app = document.getElementById('app');
 const IS_DEMO = document.documentElement.dataset.demo === 'true';
+// Inside the iOS and Android app, the app's shell (mobile/src) sets this before this file loads: the server address, the
+// bearer-token transport (web/transport.js), the share-sheet inbox and the account actions. In a browser it is absent, and
+// every line below that mentions it takes its original path: same-origin fetch, the owner's cookie, the page's own address.
+const native = IS_DEMO ? null : globalThis.__littleArchiveNative || null;
 const ICON_URL = new URL('./icon.svg', import.meta.url).href;
 const state = {
   authenticated: false, csrf: '', items: [], total: 0, stats: {}, collections: [], tags: [], settings: {},
@@ -11,6 +15,7 @@ const state = {
 // A link shared from the phone's share sheet waits here, through sign-in, until the owner reviews it.
 // The demo has no share target and never reads one.
 let pendingShare = IS_DEMO ? null : readShareTarget(location);
+if (native?.initialShare) pendingShare = parseSharedContent(native.initialShare); // shared before the app opened
 let dom = {};
 let uid = 0;
 let lastFocusedControl = null;
@@ -111,7 +116,7 @@ async function api(path, { method = 'GET', body, headers = {}, signal, raw = fal
   }
   if (!['GET', 'HEAD'].includes(method) && state.csrf) options.headers['X-CSRF-Token'] = state.csrf;
   let response;
-  try { response = await fetch(`/api${path}`, options); }
+  try { response = await (native ? native.fetch(`/api${path}`, options) : fetch(`/api${path}`, options)); }
   catch (error) { if (error.name === 'AbortError') throw error; throw new Error('Could not reach your archive. Check that the server is running and try again.'); }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -163,6 +168,7 @@ function paperArt() {
 }
 
 function renderLogin(message = '') {
+  if (native) { native.signedOut(message); return; } // the app has its own sign-in; this one asks for the owner's password in a browser
   for (const dialog of document.querySelectorAll('dialog')) dialog.close();
   app.replaceChildren();
   const password = h('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: true, placeholder: 'Your archive password' });
@@ -430,7 +436,8 @@ function renderLoadError(error) {
 
 function makeCover(item, detail = false) {
   const wrap = h('div', { class: detail ? 'detail-preview' : 'card-cover' });
-  const thumbnail = safeURL(item.thumbnail_url, { local: true });
+  // In the app a thumbnail is fetched with the bearer token and shown from a blob URL (an <img> cannot send a header).
+  const thumbnail = native ? native.localAsset(item.thumbnail_url) : safeURL(item.thumbnail_url, { local: true });
   const remote = state.settings.remote_previews ? safeURL(item.preview_url) : null;
   const url = thumbnail || remote;
   const fallback = () => {
@@ -439,8 +446,9 @@ function makeCover(item, detail = false) {
     if (!detail) wrap.append(h('span', { class: 'preview-label' }, 'Text preview'));
   };
   if (url) {
-    const image = h('img', { src: url, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
+    const image = h('img', { src: native && thumbnail ? null : url, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
     image.addEventListener('error', fallback, { once: true }); wrap.append(image);
+    if (native && thumbnail) native.attachImage(image, thumbnail);
   } else fallback();
   if (item.content_type === 'video' && !detail) wrap.append(h('span', { class: 'media-badge', title: 'Video link' }, icon('play')));
   return wrap;
@@ -861,16 +869,18 @@ function openImport() {
       result.hidden = false; await refreshLibrary(); toast(`${countLabel(data.created, 'new save')} added.`);
     } catch (e) { error.show(e); } finally { importing = false; submit.disabled = false; input.disabled = false; progress.hidden = true; submit.replaceChildren(icon('upload'), 'Import file'); }
   });
-  m.body.append(form, h('section', { class: 'setting-section' }, h('h3', {}, 'Import from your browser'), h('p', {}, 'The companion extension can collect the saved or collection view you open on Instagram or TikTok. Browser adapters are experimental and report their observed coverage.'), btn('Set up a connection', 'link', () => { m.close(); openSettings('connections'); }, 'soft')));
+  m.body.append(form);
+  if (native?.mode !== 'hosted') m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Import from your browser'), h('p', {}, 'The companion extension can collect the saved or collection view you open on Instagram or TikTok. Browser adapters are experimental and report their observed coverage.'), btn('Set up a connection', 'link', () => { m.close(); openSettings('connections'); }, 'soft')));
 }
 
 async function downloadFile(path, fallbackName, button) {
   await busy(button, async () => {
-    const response = await fetch(`/api${path}`, { credentials: 'same-origin' });
+    const response = await (native ? native.fetch(`/api${path}`) : fetch(`/api${path}`, { credentials: 'same-origin' }));
     if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(typeof data.detail === 'string' ? data.detail : 'The download could not be prepared. Please sign in and try again.'); }
     const blob = await response.blob();
     const disposition = response.headers.get('Content-Disposition') || '';
     const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || fallbackName;
+    if (native) { await native.saveFile(blob, filename); return; } // the share sheet takes it from here
     const url = URL.createObjectURL(blob);
     const link = h('a', { href: url, download: filename }); document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
     toast('Your download is ready.');
@@ -905,7 +915,7 @@ function openSettings(section = '') {
     catch (e) { previews.checked = !desired; toast(errorMessage(e), true); } finally { previews.disabled = false; }
   });
   m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Previews & privacy'), h('div', { class: 'setting-row' }, h('label', { for: previews.id }, 'Load remote image previews'), previews), h('p', { class: 'mt-12' }, IS_DEMO ? 'External media requests are disabled in this demo. Every preview is original decorative text artwork.' : 'Off by default. When enabled, your browser contacts the original media host. Local image uploads stay with your instance.')));
-  const connectionSection = h('section', { class: 'setting-section', id: 'settings-connections' }, h('h3', {}, 'Connect your browser'), h('p', {}, 'Create an import-only token, then enter it and this server address in the companion extension. Tokens can import records but cannot read your library or change your notes.'), h('div', { class: 'notice' }, h('strong', {}, 'Server address'), h('p', {}, location.origin)), h('p', {}, 'Install the extension from the extension folder in the project repository. In Chrome, open Extensions, enable Developer mode, and choose Load unpacked.'));
+  const connectionSection = h('section', { class: 'setting-section', id: 'settings-connections' }, h('h3', {}, 'Connect your browser'), h('p', {}, 'Create an import-only token, then enter it and this server address in the companion extension. Tokens can import records but cannot read your library or change your notes.'), h('div', { class: 'notice' }, h('strong', {}, 'Server address'), h('p', {}, native ? native.serverUrl : location.origin)), h('p', {}, 'Install the extension from the extension folder in the project repository. In Chrome, open Extensions, enable Developer mode, and choose Load unpacked.'));
   const tokenName = h('input', { type: 'text', placeholder: 'e.g. My laptop', maxlength: 80, required: true });
   const tokenForm = h('form', {}, field('Connection name', tokenName));
   const tokenError = formError(tokenForm);
@@ -931,8 +941,11 @@ function openSettings(section = '') {
   });
   connectionSection.append(tokenForm, tokens);
   if (IS_DEMO) connectionSection.replaceChildren(h('h3', {}, 'Connect your browser'), h('p', {}, 'Browser connections require your own self-hosted instance. This public demo creates no credentials and cannot import from a real account.'));
-  m.body.append(connectionSection);
-  refreshTokens().catch(e => tokens.append(h('div', { class: 'form-error' }, errorMessage(e))));
+  // A hosted account has no browser-extension connection: those routes do not exist there.
+  if (native?.mode !== 'hosted') {
+    m.body.append(connectionSection);
+    refreshTokens().catch(e => tokens.append(h('div', { class: 'form-error' }, errorMessage(e))));
+  }
   m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, state.settings.ai_hosted ? 'Optional hosted AI' : 'Optional local AI'), h('p', {}, IS_DEMO ? 'No AI runs in this demo. A self-hosted instance can use an operator-configured local Ollama model to suggest topics from available text.' : state.settings.ai_hosted ? `Configured: ${state.settings.ai_provider} (${state.settings.ai_model}). Post text (caption, creator, any transcript) is sent to that service to make suggestions, which are yours to review.` : state.settings.ai_enabled ? `Configured model: ${state.settings.ai_model || 'local model'}. Suggestions are created from the available text and are yours to review.` : 'No model is configured. To enable suggestions, set your Ollama URL and model (or a hosted provider) in the server environment and restart the instance.'), h('p', {}, 'A text model cannot watch a video. Imported captions, titles, transcripts of the audio, and image alternative text remain distinct evidence.'), btn('View classification jobs', 'activity', () => { m.close(); openActivity('ai'); }, 'small')));
   const exports = h('section', { class: 'setting-section' }, h('h3', {}, 'Your data, ready to go'), h('p', {}, 'JSON preserves your organization and notes. CSV is useful for spreadsheets; HTML works with bookmark managers.'), h('div', { class: 'flex-wrap' }, ...[['json', 'JSON'], ['csv', 'CSV'], ['html', 'Bookmarks HTML']].map(([format, label]) => btn(label, 'download', event => downloadFile(`/export?format=${format}`, `little-archive.${format}`, event.currentTarget), 'small'))), h('div', { class: 'mt-12' }, btn('Download full backup', 'archive', event => downloadFile('/backup', 'little-archive-backup.zip', event.currentTarget))), h('p', { class: 'mt-12' }, 'Backups include a database snapshot and local assets. Restore with the offline server command so pending work and library identity can be handled safely.'));
   if (IS_DEMO) {
@@ -942,9 +955,42 @@ function openSettings(section = '') {
     exports.lastChild.textContent = 'A full database-and-assets backup is available in your own instance. This public demo has no database or server to back up.';
   }
   m.body.append(exports, h('section', { class: 'setting-section' }, h('h3', {}, 'Take a little look around'), h('p', {}, 'Add clearly labeled synthetic demo saves to explore the interface. This does not connect a real social account.'), btn('Add demo collection', 'sparkles', event => addDemo(event.currentTarget), 'small')));
-  m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Little Archive'), h('p', {}, 'Development toward 1.0 · Open source under the MIT license. Check import activity for observed coverage.'), IS_DEMO ? btn('Reset demo', 'arrow', () => location.reload(), 'ghost') : btn('Sign out', 'logout', event => busy(event.currentTarget, async () => { await api('/auth/logout', { method: 'POST' }); m.close(); state.authenticated = false; state.csrf = ''; state.items = []; renderLogin(); }), 'ghost')));
+  if (native) m.body.append(accountSection());
+  m.body.append(h('section', { class: 'setting-section' }, h('h3', {}, 'Little Archive'), h('p', {}, 'Development toward 1.0 · Open source under the MIT license. Check import activity for observed coverage.'), IS_DEMO ? btn('Reset demo', 'arrow', () => location.reload(), 'ghost') : native ? null : btn('Sign out', 'logout', event => busy(event.currentTarget, async () => { await api('/auth/logout', { method: 'POST' }); m.close(); state.authenticated = false; state.csrf = ''; state.items = []; renderLogin(); }), 'ghost')));
   m.addFooter(btn('Done', 'check', m.close, 'primary'));
   if (section === 'connections') setTimeout(() => connectionSection.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50);
+}
+
+// Signing out, switching server and (for an account on the hosted service) deleting it. The app's shell holds the
+// credential and does the local part; the server part of a deletion is the same POST the API documents.
+function accountSection() {
+  const { account } = native;
+  const hosted = native.mode === 'hosted';
+  const leave = (title, message, action) => confirmAction(title, message, action);
+  const section = h('section', { class: 'setting-section', id: 'settings-account' }, h('h3', {}, 'This device'),
+    h('p', {}, hosted ? `Signed in to a Little Archive account${account.email ? ` as ${account.email}` : ''}.` : `Signed in to your own server.`),
+    hosted ? null : h('div', { class: 'notice' }, h('strong', {}, 'Server address'), h('p', { dir: 'ltr' }, native.serverUrl)),
+    h('div', { class: 'flex-wrap' },
+      btn('Sign out', 'logout', () => leave('Sign out of this device?', hosted ? 'Your library stays in your account. Sign in again to open it.' : 'This device’s access to your server is ended. Your library stays on the server.', () => account.signOut()), 'ghost'),
+      btn('Switch server', 'arrow', () => leave('Switch to another server?', 'You will be signed out of this one and asked where your library lives. Nothing is deleted.', () => account.switchServer()), 'ghost')));
+  if (hosted) section.append(h('div', { class: 'mt-12' }, btn('Delete my account…', 'trash', openDeleteAccount, 'ghost danger small')));
+  return section;
+}
+
+function openDeleteAccount() {
+  const m = modal('Delete your account');
+  const typed = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: false, placeholder: 'DELETE' });
+  const form = h('form', {}, h('p', { class: 'dialog-description' }, 'This permanently deletes your library from the service: every save, collection, note and preview, and your storage. It cannot be undone. Copies you exported or backed up are not affected, and neither is the sign-in itself: your email stays registered with the sign-in provider until the service removes it.'), field('Type DELETE to confirm', typed));
+  const error = formError(form);
+  const submit = h('button', { class: 'btn danger', type: 'submit', disabled: true }, icon('trash'), 'Delete my account');
+  typed.addEventListener('input', () => { submit.disabled = typed.value.trim() !== 'DELETE'; });
+  form.append(h('div', { class: 'flex-wrap form-actions' }, btn('Cancel', null, m.close), submit));
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); error.clear(); submit.disabled = true;
+    try { await api('/account/delete', { method: 'POST', body: { confirm: 'DELETE' } }); await native.account.signOut({ deleted: true }); }
+    catch (e) { error.show(e); submit.disabled = typed.value.trim() !== 'DELETE'; }
+  });
+  m.body.append(form); typed.focus();
 }
 
 function addDemo(button) {
@@ -1044,5 +1090,8 @@ async function boot() {
     app.replaceChildren(h('main', { class: 'boot-screen', id: 'main' }, h('img', { src: ICON_URL, width: 48, height: 48, alt: '' }), h('h1', {}, 'Your archive is taking a moment.'), h('p', {}, errorMessage(error)), btn('Try again', 'arrow', boot, 'primary')));
   }
 }
+
+// A link shared from the share sheet while the app is already open goes to the same save dialog: nothing is saved until Save.
+native?.onShare(fields => { pendingShare = parseSharedContent(fields); presentSharedLink(); });
 
 boot();
