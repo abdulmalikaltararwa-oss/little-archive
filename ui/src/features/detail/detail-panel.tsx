@@ -280,15 +280,16 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
           <Input value={draft.tags} dir="auto" placeholder="Separate topics with commas" data-detail-focus="tags" onChange={event => edit('tags', event.target.value)} />
         </Field>
         <Field label="Progress"><Pick<Status> value={draft.status} options={STATUS_OPTIONS} focusKey="status" onChange={value => edit('status', value)} /></Field>
-        <CheckRow checked={draft.review} focusKey="review" onChange={value => edit('review', value)}>Keep in Needs review</CheckRow>
+        {/* Its label reaches into the panel's padding, so the small box has a finger-sized area on every side. */}
+        <CheckRow checked={draft.review} focusKey="review" onChange={value => edit('review', value)} className="-mx-3 px-3">Keep in Needs review</CheckRow>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1.5 text-sm font-semibold text-ink">Local collections</legend>
-          <div className="max-h-44 overflow-y-auto rounded-md border border-line px-3.5">
+          <div className="max-h-44 overflow-y-auto rounded-md border border-line">
             {locals.length ? locals.map(collection => (
               <div key={collection.id} className="border-b border-line last:border-b-0">
-                <CheckRow checked={draft.collections.includes(collection.id)} onChange={on => edit('collections', on ? [...draft.collections, collection.id] : draft.collections.filter(id => id !== collection.id))}>{collection.name}</CheckRow>
+                <CheckRow checked={draft.collections.includes(collection.id)} onChange={on => edit('collections', on ? [...draft.collections, collection.id] : draft.collections.filter(id => id !== collection.id))} className="px-3.5">{collection.name}</CheckRow>
               </div>
-            )) : <p className="py-3 text-xs text-ink-soft">Create a local collection from the sidebar to organize your saves.</p>}
+            )) : <p className="px-3.5 py-3 text-xs text-ink-soft">Create a local collection from the sidebar to organize your saves.</p>}
           </div>
         </fieldset>
         {/* The visible Save button lives in the panel's footer, so it is always in reach. This one lets Enter submit. */}
