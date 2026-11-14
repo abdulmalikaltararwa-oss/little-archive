@@ -156,7 +156,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     else:
         # There is exactly one library and no account bookkeeping in this mode.
         owner_store, libraries, identity, quota, limits = Store(config), None, None, None, None
-        devices, entitlements = DeviceTokens(config.data_dir), OwnerEntitlements()
+        devices, entitlements = DeviceTokens(config.data_dir, config.device_token_idle_days, config.device_token_max_days), OwnerEntitlements()
         enrichment = owner_store.enrichment = build_enrichment(owner_store, config)
         worker = enrichment.worker
     limiter = RateLimiter()
@@ -288,7 +288,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         if token is not None:
             device = devices.authenticate(token)
             if not device:
-                raise HTTPException(401, "This device token is invalid or has been revoked.", headers=BEARER)
+                raise HTTPException(401, "This device token is invalid, has expired or has been revoked. Pair this device again.", headers=BEARER)
             return Principal("device", owner_store, device=device)
         session = session_row(request)
         if not session:
@@ -407,7 +407,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     def create_device(data: DeviceLogin, request: Request):
         """Exchange the owner password for a named, revocable full-access token."""
         password_attempt(request, data.password)
-        return devices.create(data.name.strip() or "Device")
+        return devices.create(data.name.strip() or "Device", data.expires_in_days)
 
     @app.get("/api/auth/devices", dependencies=self_hosted_route)
     def list_devices(auth=Depends(owner)):

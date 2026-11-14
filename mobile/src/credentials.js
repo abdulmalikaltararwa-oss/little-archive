@@ -1,6 +1,8 @@
 // The token the transport sends, and how it is kept fresh.
 //
-// A self-hosted device token does not expire: it is used until the owner revokes it. A hosted account's access token is
+// A self-hosted device token has no refresh: it is used until the owner revokes it, or the server ends it after the device has
+// been idle for the server's idle limit (180 days unless the operator changed it), when the next request answers 401 and the app
+// asks to sign in again. A hosted account's access token is
 // short-lived, so it is exchanged for a new one shortly before it runs out, or once after the server refuses it. Only one
 // exchange runs at a time, and the new tokens are written to secure storage before they are used (Supabase rotates the
 // refresh token, so losing the new one would end the session).

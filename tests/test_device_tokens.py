@@ -85,7 +85,7 @@ class DeviceTokenTests(unittest.TestCase):
 
     def test_exchange_returns_a_named_token_that_is_listed_hashed_and_revocable(self):
         device, auth = self.device("  Kitchen tablet  ")
-        self.assertEqual(set(device), {"id", "name", "token", "created_at"})
+        self.assertEqual(set(device), {"id", "name", "token", "created_at", "expires_at"})
         self.assertEqual(device["name"], "Kitchen tablet")
         self.assertTrue(device["token"].startswith("lad_"))
         self.assertNotIn("set-cookie", self.pair("Second").headers)
@@ -93,7 +93,7 @@ class DeviceTokenTests(unittest.TestCase):
         listed = self.client.get("/api/auth/devices", headers=auth).json()["devices"]
         self.assertEqual({row["name"] for row in listed}, {"Kitchen tablet", "Second"})
         mine = next(row for row in listed if row["id"] == device["id"])
-        self.assertEqual(set(mine), {"id", "name", "created_at", "last_used_at", "current"})
+        self.assertEqual(set(mine), {"id", "name", "created_at", "last_used_at", "expires_at", "current"})
         self.assertTrue(mine["current"])
         self.assertIsNotNone(mine["last_used_at"])
         self.assertFalse(next(row for row in listed if row["id"] != device["id"])["current"])
@@ -145,7 +145,8 @@ class DeviceTokenTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/auth/devices?password=" + PASSWORD + "&name=x").status_code, 422, "credentials are never read from a URL")
 
     def test_last_use_is_recorded_at_most_once_a_minute(self):
-        device, auth = self.device()
+        with patch("server.devices.now", return_value="2031-01-01T10:00:00+00:00"):
+            device, auth = self.device()  # paired under the same pretend clock, so idle expiry has nothing to say
 
         def used():
             return next(row for row in self.client.get("/api/auth/devices", headers=auth).json()["devices"] if row["id"] == device["id"])["last_used_at"]

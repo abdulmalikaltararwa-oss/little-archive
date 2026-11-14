@@ -32,6 +32,9 @@ class Config:
     ollama_model: str = ""
     session_hours: int = 24
     testing: bool = False
+    # Self-hosted device tokens (server/devices.py): idle expiry, and an optional hard lifetime. 0 turns a rule off.
+    device_token_idle_days: int = 180
+    device_token_max_days: int = 0
     # Hosted multi-user mode is opt-in. Every default below leaves the
     # single-owner instance exactly as it is without these settings.
     mode: str = SELF_HOSTED
@@ -56,6 +59,8 @@ class Config:
             public_url=values.get("LA_PUBLIC_URL", "http://localhost:8787").rstrip("/"),
             ollama_url=values.get("LA_OLLAMA_URL", "").rstrip("/"),
             ollama_model=values.get("LA_OLLAMA_MODEL", ""),
+            device_token_idle_days=_whole_number(values, "LA_DEVICE_TOKEN_IDLE_DAYS", 180),
+            device_token_max_days=_whole_number(values, "LA_DEVICE_TOKEN_MAX_DAYS", 0),
             mode=values.get("LA_MODE", "").strip().lower() or SELF_HOSTED,
             supabase_url=values.get("LA_SUPABASE_URL", "").strip().rstrip("/"),
             supabase_jwt_secret=values.get("LA_SUPABASE_JWT_SECRET", ""),
@@ -95,6 +100,9 @@ class Config:
                 raise ValueError("Use a model name under 201 characters without control characters.")
         if not 1 <= self.session_hours <= 168:
             raise ValueError("Session lifetime must be between one hour and seven days.")
+        for label, value in (("LA_DEVICE_TOKEN_IDLE_DAYS", self.device_token_idle_days), ("LA_DEVICE_TOKEN_MAX_DAYS", self.device_token_max_days)):
+            if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 3650:
+                raise ValueError(f"{label} must be a whole number of days from 0 (off) to 3650.")
         self._validate_mode()
 
     def _validate_mode(self):

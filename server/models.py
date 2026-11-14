@@ -13,6 +13,7 @@ class Login(StrictModel):
 class DeviceLogin(StrictModel):
     password: str = Field(min_length=1, max_length=1024)
     name: str = Field(min_length=1, max_length=100)
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)  # an optional hard lifetime for this device
 
 
 class AccountDeletion(StrictModel):
