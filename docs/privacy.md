@@ -33,7 +33,7 @@ Platforms may treat automated requests from a server differently from a person's
 
 ## Transcripts (optional)
 
-A transcript can be made on your device and sent to your server, which stores the text. Or, if the operator configures a Groq key and enables page reading, the server fetches a post's media file into memory when you ask for a deep read (or when a video's caption is too thin to understand and automatic transcription is on, inside an analysis you started), sends the **audio of that post** to Groq to be transcribed, keeps the text and discards the media. That audio is public content from the post, but its transcription is a request to a third-party service, which receives it and is subject to its own terms. Without a key, nothing is sent anywhere for transcription.
+A transcript can be made on your device and sent to your server, which stores the text. Or, if the operator configures a transcription service (Groq, or Google's Gemini API) and enables page reading, the server fetches a post's media file into memory when you ask for a deep read (or when a video's caption is too thin to understand and automatic transcription is on, inside an analysis you started), sends the **audio of that post** to that service to be transcribed (with Gemini, the post's whole media file, picture included), keeps the text and discards the media. That audio is public content from the post, but its transcription is a request to a third-party service, which receives it and is subject to its own terms. Without a configured transcription service, nothing is sent anywhere for transcription; a Gemini key used for suggestions does not enable it by itself.
 
 ## AI
 

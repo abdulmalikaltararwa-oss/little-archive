@@ -1,4 +1,5 @@
 """The thin-caption rule, the Groq transcriber (fake HTTP), settings, metering and the schema."""
+import base64
 import json
 from pathlib import Path
 import sqlite3
@@ -10,7 +11,7 @@ import httpx
 from server.config import Config
 from server.enrich.schema import ENRICH_SCHEMA, ensure_schema
 from server.enrich.settings import EnrichSettings
-from server.enrich.transcribe import GroqWhisperTranscriber, clean_transcript, meaningful_letters, transcript_needed
+from server.enrich.transcribe import GeminiTranscriber, GroqWhisperTranscriber, clean_transcript, meaningful_letters, transcript_needed
 from server.enrich.understanding import ProviderError
 from server.enrich.usage import LedgerSink, Metering
 from server.storage import Store
@@ -108,7 +109,98 @@ class GroqTests(unittest.TestCase):
         self.assertEqual(clean_transcript(None), "")
 
 
+class GeminiTranscriberTests(unittest.TestCase):
+    GKEY = "AIza-SYNTHETIC-KEY-NEVER-REAL"
+
+    def transcriber(self, handler):
+        return GeminiTranscriber(self.GKEY, "gemini-3.5-flash-lite", client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    @staticmethod
+    def answer(payload, finish="STOP"):
+        return {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}, "finishReason": finish}]}
+
+    def test_request_shape_and_result(self):
+        seen = []
+
+        def handler(request):
+            seen.append(request)
+            return httpx.Response(200, json=self.answer({"text": "  Boil the pasta.\n\n Save the water.  ", "language": "en"}))
+        result = self.transcriber(handler).transcribe(b"\x00\x01media", "video/mp4; codecs=avc1", language="en")
+        request = seen[0]
+        self.assertEqual(str(request.url), "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent")
+        self.assertEqual(request.headers["x-goog-api-key"], self.GKEY)
+        self.assertNotIn(self.GKEY, str(request.url))
+        self.assertNotIn(self.GKEY.encode(), request.content)
+        body = json.loads(request.content)
+        part = body["contents"][0]["parts"][0]["inlineData"]
+        self.assertEqual((part["mimeType"], base64.b64decode(part["data"])), ("video/mp4", b"\x00\x01media"))
+        prompt = body["systemInstruction"]["parts"][0]["text"]
+        for phrase in ("exactly as they are said", "Do not summarize, translate", "expected to be in en"):
+            self.assertIn(phrase, prompt)
+        self.assertEqual(body["generationConfig"]["temperature"], 0)
+        self.assertEqual((result.text, result.language, result.seconds), ("Boil the pasta.\n\nSave the water.", "en", None))
+
+    def test_unknown_media_types_are_sent_as_video_and_silence_is_empty(self):
+        seen = []
+
+        def handler(request):
+            seen.append(json.loads(request.content))
+            return httpx.Response(200, json=self.answer({"text": "", "language": ""}))
+        self.assertEqual(self.transcriber(handler).transcribe(b"x", "application/octet-stream").text, "")
+        self.assertEqual(seen[0]["contents"][0]["parts"][0]["inlineData"]["mimeType"], "video/mp4")
+        self.assertNotIn("expected to be in", seen[0]["systemInstruction"]["parts"][0]["text"])
+
+    def test_oversize_and_empty_audio_never_reach_the_service(self):
+        def handler(request):
+            raise AssertionError("no request expected")
+        with self.assertRaisesRegex(ProviderError, "larger than"):
+            self.transcriber(handler).transcribe(b"x" * (GeminiTranscriber.MAX_INLINE_BYTES + 1), "video/mp4")
+        with self.assertRaisesRegex(ProviderError, "no audio"):
+            self.transcriber(handler).transcribe(b"", "video/mp4")
+
+    def test_failures_are_safe_messages_without_the_key_or_the_body(self):
+        cases = [
+            (httpx.Response(429, text="quota " + self.GKEY), "limiting", True),
+            (httpx.Response(503, text="down"), "unavailable", True),
+            (httpx.Response(400, text="bad key " + self.GKEY), "rejected", False),
+            (httpx.Response(200, text="not json"), "unusable", False),
+            (httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}}), "declined", False),
+            (httpx.Response(200, json=self.answer({"text": "cut"}, finish="MAX_TOKENS")), "cut short", False),
+            (httpx.Response(200, json=self.answer({"words": "x"})), "unusable", False),
+        ]
+        for response, phrase, retryable in cases:
+            with self.assertRaises(ProviderError) as caught:
+                self.transcriber(lambda r, response=response: response).transcribe(b"x", "audio/mpeg")
+            self.assertIn(phrase, str(caught.exception))
+            self.assertNotIn(self.GKEY, str(caught.exception))
+            self.assertEqual(caught.exception.retryable, retryable)
+
+        def timeout(request):
+            raise httpx.ReadTimeout("slow", request=request)
+        with self.assertRaisesRegex(ProviderError, "timed out"):
+            self.transcriber(timeout).transcribe(b"x", "audio/mpeg")
+        self.assertNotIn(self.GKEY, repr(GeminiTranscriber(self.GKEY, "gemini-3.5-flash-lite")))
+        with self.assertRaises(ProviderError):
+            GeminiTranscriber("", "gemini-3.5-flash-lite")
+
+
 class SettingsTests(unittest.TestCase):
+    def test_the_transcription_provider_is_chosen_by_name(self):
+        gemini = {"LA_AI_PROVIDER": "gemini", "LA_GEMINI_API_KEY": KEY}
+        # Having a Gemini key for titles does not send audio anywhere until transcription names it.
+        self.assertEqual(self.build(gemini).transcription_provider, "")
+        chosen = self.build({**gemini, "LA_TRANSCRIBE_PROVIDER": "gemini", "LA_GEMINI_TRANSCRIBE_MODEL": "gemini-3.5-flash"})
+        self.assertEqual((chosen.transcription_provider, chosen.gemini_transcribe_model), ("gemini", "gemini-3.5-flash"))
+        self.assertEqual(chosen.public()["transcription_provider"], "gemini")
+        # A Groq key alone keeps meaning Groq, and can be switched off or overridden by name.
+        self.assertEqual(self.build({"LA_GROQ_API_KEY": KEY}).transcription_provider, "groq")
+        self.assertEqual(self.build({"LA_GROQ_API_KEY": KEY, "LA_TRANSCRIBE_PROVIDER": "none"}).transcription_provider, "")
+        self.assertEqual(self.build({**gemini, "LA_GROQ_API_KEY": KEY, "LA_TRANSCRIBE_PROVIDER": "gemini"}).transcription_provider, "gemini")
+        for values, message in (({"LA_TRANSCRIBE_PROVIDER": "gemini"}, "needs LA_GEMINI_API_KEY"), ({"LA_TRANSCRIBE_PROVIDER": "groq"}, "needs LA_GROQ_API_KEY"),
+                                ({"LA_TRANSCRIBE_PROVIDER": "whisper"}, "groq, gemini or none"), ({**gemini, "LA_TRANSCRIBE_PROVIDER": "gemini", "LA_GEMINI_TRANSCRIBE_MODEL": "bad model"}, "model name")):
+            with self.assertRaisesRegex(ValueError, message):
+                self.build(values)
+
     def build(self, values, **config):
         return EnrichSettings.from_env(values, Config(data_dir=Path("/tmp/x"), **config)).validate()
 

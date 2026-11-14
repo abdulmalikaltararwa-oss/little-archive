@@ -61,6 +61,8 @@ class EnrichSettings:
     ai_batch_size: int = 8           # Gemini only; Ollama always analyses one item per request
     share_private_context: bool = False
     # Tier 5: transcription.
+    transcribe_provider: str = ""    # "", "groq" or "gemini"
+    gemini_transcribe_model: str = ""
     groq_api_key: str = field(default="", repr=False)
     groq_model: str = DEFAULT_GROQ_MODEL
     transcribe_auto: bool = True
@@ -86,6 +88,15 @@ class EnrichSettings:
         if gemini_key and provider != "gemini":
             # A hosted key never activates by itself: text only leaves the machine when this is explicit.
             raise ValueError("LA_GEMINI_API_KEY is set but LA_AI_PROVIDER is not gemini. Set LA_AI_PROVIDER=gemini to send text to Google's Gemini API, or remove the key.")
+        groq_key = str(values.get("LA_GROQ_API_KEY", "")).strip()
+        transcriber = str(values.get("LA_TRANSCRIBE_PROVIDER", "")).strip().lower()
+        if transcriber not in {"", "groq", "gemini", "none"}:
+            raise ValueError("LA_TRANSCRIBE_PROVIDER must be groq, gemini or none.")
+        if transcriber == "":
+            # Audio only goes to Gemini when that is asked for by name; a Groq key keeps its old meaning.
+            transcriber = "groq" if groq_key else ""
+        if transcriber == "none":
+            transcriber = ""
         return cls(
             fetch_enabled=_flag(values, "LA_FETCH_ENABLED", False),
             fetch_timeout=_number(values, "LA_FETCH_TIMEOUT_SECONDS", 10.0, 2.0, 60.0, float),
@@ -96,7 +107,9 @@ class EnrichSettings:
             gemini_api_key=gemini_key, gemini_model=str(values.get("LA_GEMINI_MODEL", "")).strip() or DEFAULT_GEMINI_MODEL,
             ai_batch_size=_number(values, "LA_AI_BATCH_SIZE", 8, 1, 20),
             share_private_context=_flag(values, "LA_AI_SHARE_PRIVATE_CONTEXT", False),
-            groq_api_key=str(values.get("LA_GROQ_API_KEY", "")).strip(),
+            transcribe_provider=transcriber,
+            gemini_transcribe_model=str(values.get("LA_GEMINI_TRANSCRIBE_MODEL", "")).strip(),
+            groq_api_key=groq_key,
             groq_model=str(values.get("LA_GROQ_MODEL", "")).strip() or DEFAULT_GROQ_MODEL,
             transcribe_auto=_flag(values, "LA_TRANSCRIBE_AUTO", True),
             transcribe_max_bytes=_number(values, "LA_TRANSCRIBE_MAX_MB", 24, 1, 100) * 1_000_000,
@@ -119,6 +132,13 @@ class EnrichSettings:
             raise ValueError("LA_AI_PROVIDER=ollama needs LA_OLLAMA_URL and LA_OLLAMA_MODEL.")
         if self.groq_api_key and not _MODEL_NAME.fullmatch(self.groq_model):
             raise ValueError("LA_GROQ_MODEL must be a model name such as whisper-large-v3-turbo.")
+        if self.transcribe_provider == "groq" and not self.groq_api_key:
+            raise ValueError("LA_TRANSCRIBE_PROVIDER=groq needs LA_GROQ_API_KEY.")
+        if self.transcribe_provider == "gemini":
+            if not self.gemini_api_key:
+                raise ValueError("LA_TRANSCRIBE_PROVIDER=gemini needs LA_GEMINI_API_KEY and LA_AI_PROVIDER=gemini.")
+            if self.gemini_transcribe_model and not _MODEL_NAME.fullmatch(self.gemini_transcribe_model):
+                raise ValueError("LA_GEMINI_TRANSCRIBE_MODEL must be a model name such as gemini-3.5-flash-lite.")
         if self.cache_path:
             path = Path(self.cache_path)
             if not path.is_absolute():
@@ -130,7 +150,7 @@ class EnrichSettings:
     # -- derived, secret-free views ---------------------------------------
     @property
     def transcription_provider(self) -> str:
-        return "groq" if self.groq_api_key else ""
+        return self.transcribe_provider
 
     @property
     def ai_model(self) -> str:

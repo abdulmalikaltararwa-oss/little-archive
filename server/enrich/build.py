@@ -14,7 +14,7 @@ from .netfetch import SafeFetcher, default_user_agent
 from .schema import ensure_schema
 from .service import EnrichmentService
 from .settings import EnrichSettings
-from .transcribe import GroqWhisperTranscriber
+from .transcribe import GeminiTranscriber, GroqWhisperTranscriber
 from .understanding import GeminiProvider, OllamaProvider
 from .usage import LedgerSink, Metering
 from .worker import UnderstandingWorker
@@ -38,7 +38,11 @@ def build_enrichment(store, config, environ=None) -> EnrichmentService:
         provider = OllamaProvider(settings.ollama_url, settings.ollama_model)
     elif settings.ai_provider == "gemini":
         provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model, max_batch=settings.ai_batch_size)
-    transcriber = GroqWhisperTranscriber(settings.groq_api_key, settings.groq_model) if settings.groq_api_key else None
+    transcriber = None
+    if settings.transcribe_provider == "groq":
+        transcriber = GroqWhisperTranscriber(settings.groq_api_key, settings.groq_model)
+    elif settings.transcribe_provider == "gemini":
+        transcriber = GeminiTranscriber(settings.gemini_api_key, settings.gemini_transcribe_model or settings.gemini_model)
     fetcher = None
     if settings.fetch_enabled:
         fetcher = SafeFetcher(user_agent=default_user_agent(settings.fetch_contact), timeout=settings.fetch_timeout, total_timeout=max(20.0, settings.fetch_timeout * 2),

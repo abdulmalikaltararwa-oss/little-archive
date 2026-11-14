@@ -106,7 +106,7 @@ A transcript is evidence of a new kind, `transcript`. It can come from:
 2. **The server, when a transcript is needed**: a video whose caption and title together carry fewer than 40 letters or digits (links, hashtags, mentions and emoji do not count) and that has no transcript. This only runs inside an analysis you asked for, and only with a transcription key and server fetching on. `LA_TRANSCRIBE_AUTO=false` turns it off. If it fails it falls back to the text that exists, records why, and does not retry by itself.
 3. **A deep read you ask for**: "Read this more closely" in the detail panel, or `POST /api/items/{id}/deep-read`. Available when transcription is configured, server fetching is on and the save has no transcript.
 
-The server finds a media URL on the page (Instagram's page exposed one when probed), downloads it within `LA_TRANSCRIBE_MAX_MB`, sends it to Groq's Whisper endpoint, keeps the text and drops the audio. YouTube pages expose no media file, and TikTok's public page exposed nothing on 14 Nov 2026, so those saves need a transcript from your device. A transcript is capped at 20,000 characters. Transcripts survive source refreshes and portable export and import.
+The server finds a media URL on the page (Instagram's page exposed one when probed), downloads it within `LA_TRANSCRIBE_MAX_MB`, sends it to the configured transcription service (Groq's Whisper endpoint, or Google's Gemini API when `LA_TRANSCRIBE_PROVIDER=gemini`), keeps the text and drops the audio. Whisper is a dedicated speech recogniser; Gemini is a general model asked to write the words as said, and can occasionally tidy or paraphrase them. With Gemini the whole media file, picture included, is sent, and files over 14 MB are refused. YouTube pages expose no media file, and TikTok's public page exposed nothing on 14 Nov 2026, so those saves need a transcript from your device. A transcript is capped at 20,000 characters. Transcripts survive source refreshes and portable export and import.
 
 ## Shared cache
 
@@ -143,6 +143,8 @@ All are environment variables (or `.env`). Everything is off or conservative unl
 | `LA_FETCH_MAX_BYTES` | 2097152 | Page size limit (64 KiB to 8 MiB). |
 | `LA_FETCH_MAX_REDIRECTS` | 4 | 0 to 8. |
 | `LA_FETCH_CONTACT` | none | Contact URL or address appended to the User-Agent. |
+| `LA_TRANSCRIBE_PROVIDER` | `groq` if `LA_GROQ_API_KEY` is set, else none | `groq`, `gemini` or `none`. `gemini` reuses `LA_GEMINI_API_KEY` and sends the media file to Google's Gemini API; it is never chosen automatically. Files over 14 MB are refused with Gemini. |
+| `LA_GEMINI_TRANSCRIBE_MODEL` | the value of `LA_GEMINI_MODEL` | Model used when Gemini transcribes. |
 | `LA_GROQ_API_KEY` | none | Enables server transcription through Groq. |
 | `LA_GROQ_MODEL` | `whisper-large-v3-turbo` | Speech-to-text model. |
 | `LA_TRANSCRIBE_AUTO` | true | Allow the thin-caption rule to transcribe inside an analysis you started. |
@@ -171,7 +173,9 @@ Verified by automated tests with no network: every extractor against fixtures, i
 
 Verified by hand: the page shapes above (ten page requests on 14 Nov 2026); the fetcher's pinned-address TLS path and its refusals with the real resolver against one public site; the detail panel in a browser against a local instance with fake providers.
 
-**Not verified:** the Gemini and Groq request shapes follow their published references (read on 14 Nov 2026) but were not exercised against the live services, because no keys were used. The default Gemini model id is not confirmed to be available to every account. Server-side audio fetching from Instagram's media host was not attempted live. How well any model titles, tags or files real saves has not been measured.
+**Verified live on 14 Nov 2026, with synthetic content only:** Gemini suggestions (`gemini-3.5-flash-lite`, 15 demo saves in 2 calls) and Gemini transcription of generated speech in an audio file and in a video file.
+
+**Not verified:** the Groq request shape follows its published reference (read on 14 Nov 2026) but was not exercised against the live service, because no key was used. The default Gemini model id is not confirmed to be available to every account. Server-side audio fetching from Instagram's media host was not attempted live. How well any model titles, tags or files real saves has not been measured.
 
 ## For a hosted or multi-user deployment
 
