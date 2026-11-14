@@ -109,9 +109,12 @@ class OperatorSetupTests(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [self.config_file])
 
     def test_setup_rejects_public_configuration_and_newline_injection(self):
-        public_config = Path(__file__).resolve().parents[1] / "web" / "operator-private.env"
-        result = setup_configuration(public_config, data_dir=str(self.data))
-        self.assertEqual(result["code"], "configuration_in_public_directory")
+        root = Path(__file__).resolve().parents[1]
+        for directory in ("web", "webui", "ui/dist"):
+            public_config = root / directory / "operator-private.env"
+            with self.subTest(directory=directory):
+                result = setup_configuration(public_config, data_dir=str(self.data))
+                self.assertEqual(result["code"], "configuration_in_public_directory")
         result = setup_configuration(self.config_file, data_dir=str(self.data) + "\nLA_PUBLIC_URL=https://unexpected.invalid", apply=True)
         self.assertEqual(result["status"], "blocked")
         self.assertFalse(self.config_file.exists())

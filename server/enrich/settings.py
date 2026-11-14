@@ -12,6 +12,8 @@ from pathlib import Path
 import re
 import unicodedata
 
+from ..webui import is_public
+
 PROVIDERS = {"", "none", "ollama", "gemini"}
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "whisper-large-v3-turbo"
@@ -143,7 +145,7 @@ class EnrichSettings:
             path = Path(self.cache_path)
             if not path.is_absolute():
                 raise ValueError("LA_PUBLIC_CACHE_PATH must be an absolute path.")
-            if path.resolve().is_relative_to((Path(__file__).resolve().parent.parent.parent / "web").resolve()):
+            if is_public(path):
                 raise ValueError("LA_PUBLIC_CACHE_PATH must be outside the public web directory.")
         return self
 
