@@ -89,3 +89,25 @@ test('a revoked session returns the browser to sign-in without committing an edi
   const items = await (await context.request.get('/api/items', { params: { q: title } })).json();
   expect(items.total).toBe(0);
 });
+
+// The sign-in screen's flower field is drawn at random, so what is checked is the layout that keeps it off the logo: on a
+// wide screen the field starts below the row the logo sits in, at every window size.
+test('the sign-in screen keeps its flowers clear of the logo on wide screens', async ({ page }) => {
+  for (const [width, height] of [[1024, 768], [1280, 720], [1440, 900], [1920, 1080], [2560, 1300]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Your archive awaits.' })).toBeVisible();
+    const field = page.getByRole('region', { name: 'About Little Archive' }).locator('canvas');
+    await expect(field).toHaveCount(1);
+    const wordmark = await page.getByText('little archive', { exact: true }).boundingBox();
+    const mark = await field.boundingBox();
+    expect(mark.y, `${width}x${height}: the field starts at ${mark.y}, the logo ends at ${wordmark.y + wordmark.height}`).toBeGreaterThanOrEqual(wordmark.y + wordmark.height);
+  }
+  // On a phone the field sits beside the headline, to the right of the logo's words.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your archive awaits.' })).toBeVisible();
+  const phoneWordmark = await page.getByText('little archive', { exact: true }).boundingBox();
+  const phoneField = await page.getByRole('region', { name: 'About Little Archive' }).locator('canvas').boundingBox();
+  expect(phoneField.x).toBeGreaterThanOrEqual(phoneWordmark.x + phoneWordmark.width - 1);
+});

@@ -63,8 +63,10 @@ export function LoginScreen() {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       <section aria-label="About Little Archive" className="hero-paper relative isolate flex min-h-[280px] flex-col justify-between overflow-hidden px-6 pt-[calc(var(--safe-top)+1.5rem)] pb-6 sm:px-12 lg:min-h-dvh lg:px-[9%] lg:py-12">
-        {/* The field keeps to its own corner so the words are never set over it: beside them on a phone, above them on a wide screen. */}
-        <div className="absolute end-0 top-0 -z-10 h-full max-h-[340px] w-[46%] [mask-image:linear-gradient(to_left,black_65%,transparent)] lg:top-[5%] lg:h-[50%] lg:max-h-none lg:w-[84%] lg:[mask-image:linear-gradient(to_bottom,black_72%,transparent)]">
+        {/* The field keeps to its own corner so the words are never set over it: beside them on a phone, above them on a wide screen.
+            On a wide screen it starts below the logo's row (the section's 3rem padding plus the 2.4rem mark, and a little air), so no
+            flower can land on the wordmark whatever the window's size. */}
+        <div className="absolute end-0 top-0 -z-10 h-full max-h-[340px] w-[46%] [mask-image:linear-gradient(to_left,black_65%,transparent)] lg:top-24 lg:h-[46%] lg:max-h-none lg:w-[84%] lg:[mask-image:linear-gradient(to_bottom,black_72%,transparent)]">
           <Suspense fallback={null}>
             <AsciiFieldCanvas anchor={wide ? 0.6 : 0.5} />
           </Suspense>
