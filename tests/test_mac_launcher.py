@@ -124,6 +124,9 @@ class PortTests(TemporaryLibraryCase):
     def test_the_bound_socket_is_not_available_to_a_second_listener(self):
         sock, port = core.bind_loopback_listener([])
         self.addCleanup(sock.close)
+        # The server listens on the socket it is handed. Linux lets two sockets that both set
+        # SO_REUSEADDR bind one port until one of them listens, so the check needs a real listener.
+        sock.listen(1)
         other, other_port = core.bind_loopback_listener([port])
         self.addCleanup(other.close)
         self.assertNotEqual(port, other_port)
