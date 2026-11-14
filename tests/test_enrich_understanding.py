@@ -341,6 +341,18 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(map_folder("Food & Recipes", [], ["My Recipes", "Trips"]), "My Recipes")
         self.assertEqual(map_folder("Food & Recipes", [], ["food & recipes"]), "food & recipes")
         self.assertEqual(map_folder("Other", ["x"], ["Trips"]), "")
+
+    def test_folder_choice_ignores_general_words_and_prefers_specific_topics(self):
+        folders = ["Design notes", "Food & recipes", "Gift ideas", "Home & plants", "Things to learn", "Travel someday", "Weekend plans"]
+        # "ideas" and "notes" say nothing about a folder: an idea is not a gift, a note is not design.
+        self.assertEqual(map_folder("Learning & Ideas", ["notebook", "writing", "ideas"], folders), "Things to learn")
+        self.assertEqual(map_folder("Learning & Ideas", ["library", "notes", "organization"], folders), "Things to learn")
+        # The category outweighs a topic word that is only another category's vocabulary.
+        self.assertEqual(map_folder("Home & DIY", ["reading nook", "interior design"], folders), "Home & plants")
+        # A specific topic that names a folder outweighs the category.
+        self.assertEqual(map_folder("Home & DIY", ["gifts", "crafts"], folders), "Gift ideas")
+        self.assertEqual(map_folder("Food & Recipes", ["pasta"], folders), "Food & recipes")
+        self.assertEqual(map_folder("Tech & Tools", ["software"], folders), "Tech & Tools")
         self.assertEqual(map_folder("Travel & Places", ["lisbon", "trip"], ["Gym", "Lisbon trip 2026"]), "Lisbon trip 2026")
         self.assertEqual(map_folder("Humor & Memes", [], ["Gym"]), "Humor & Memes")
 
