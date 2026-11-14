@@ -38,9 +38,11 @@ from .config import Config
 from .devices import DeviceTokens
 from .enrich.build import build_enrichment
 from .enrich.images import reencode_image, write_asset
+from .enrich.feature_routes import install_feature_routes
 from .enrich.routes import install_routes as install_enrichment_routes
 from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
+from .guided_routes import install_guided_import_routes
 from .limits import CLIENT, IDENTITY, RELEASES, HostedGuard, HostedLimits, Refusal, refusal_response, retry_after
 from .metering import AccountMeters
 from .purchases.routes import install_routes as install_purchase_routes
@@ -988,6 +990,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         return {"created": created}
 
     install_enrichment_routes(app, owner=owner, after_page=release_orphans if hosted else None)
+    install_feature_routes(app, owner=owner)
+    install_guided_import_routes(app, owner=owner)
 
     # The one-time purchase (server/purchases): routes exist in both modes and answer 404 where there is no hosted account.
     purchases = None

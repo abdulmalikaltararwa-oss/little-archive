@@ -55,6 +55,17 @@ If your configured model service forwards requests elsewhere, that behavior belo
 
 The application keeps validated final suggestions and their review state. It does not store a model's reasoning trace. A suggestion is not a verified fact about a post or the person who saved it. Each suggestion records what it rested on (caption, transcript of the audio, title) and says that the pictures and video were not seen, because a text model cannot see them.
 
+## Recipes, places and asking your archive
+
+These use the same optional provider as suggestions, on the same terms, and are off unless a provider is configured (recipes and places also work without one, from the page's structured data and fixed text rules).
+
+- **Recipe cards and places.** When a model is used, the save's own text (title, caption, transcript, alternative text and, for a local provider, your notes) is sent to the provider the operator configured, as a JSON object; the save's link is not. A hosted provider receives only text that came from the post unless the operator allows more.
+- **Ask your archive.** Your question and short passages from the saves that match it (at most 12,000 characters, never the rest of the library) are sent to the provider. Passages that look like instructions to a model are held back. With no provider nothing is sent and you get the matching saves only.
+- **Geocoding places** is a separate network destination. Off unless the operator sets `LA_GEOCODER_URL` and a contact, and then only when you ask for it. Only a place's name, address, city and country are sent, with a `User-Agent` that carries the operator's contact; results are cached in your library. The save, its link and its text are never sent. If the operator points it at the public OpenStreetMap service, that service sees those place names from the operator's server address.
+- **Guided import.** The export file you add is kept in your library's own directory only until the import finishes or is cancelled. It is read on your server; nothing in it is sent anywhere, and files in it that are not saved posts or favorite videos (messages, comments, history) are never opened. A preview and the imported saves are ordinary library data.
+
+All of this is recorded by the existing usage counters (model calls and tokens), in your own library, and nothing is sent to anyone else. No telemetry is added.
+
 ## Shared cache (optional, off by default)
 
 If the operator sets `LA_PUBLIC_CACHE=true`, results derived from a public post can be reused for everyone who saves the same post, so it is read, transcribed and analysed once. The cache is a separate file from any library and from backups.
