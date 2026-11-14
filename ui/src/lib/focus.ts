@@ -25,9 +25,13 @@ export interface FocusMemory {
   navKey: string | null;
 }
 
-/** Remembers a control in a way that survives it being re-rendered (a card is found again by its save). */
+/**
+ * Remembers a control in a way that survives it being re-rendered (a card is found again by its save). When nothing has
+ * focus (the page itself does, <body>) there is no control to remember: a shortcut pressed then, or just after a dialog has
+ * left, must not send focus back to the page when its own dialog closes.
+ */
 export function rememberFocus(node: Element | null = document.activeElement): FocusMemory {
-  const element = node instanceof HTMLElement ? node : null;
+  const element = node instanceof HTMLElement && node !== document.body ? node : null;
   return {
     node: element,
     itemId: element?.closest<HTMLElement>('[data-item-id]')?.dataset.itemId ?? null,
