@@ -22,7 +22,7 @@ export function ConfirmHost() {
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-[60] bg-scrim backdrop-blur-[3px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <AlertDialog.Content
-          onCloseAutoFocus={event => { event.preventDefault(); restoreFocus(shown?.opener ?? null); }}
+          onCloseAutoFocus={event => { event.preventDefault(); restoreFocus(shown?.opener ?? null, { strict: true }); }}
           className={cn(
             'fixed inset-x-0 bottom-0 z-[60] w-full rounded-t-xl border border-line bg-card p-6 pb-[calc(var(--safe-bottom)+1.25rem)] shadow-lg outline-none',
             'duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 max-sm:data-[state=open]:slide-in-from-bottom-10',

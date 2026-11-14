@@ -36,9 +36,14 @@ export function rememberFocus(node: Element | null = document.activeElement): Fo
   };
 }
 
-export function restoreFocus(memory: FocusMemory | Element | null) {
+/**
+ * Puts focus back where it was. With `strict`, nothing happens when that place is gone: used by a question
+ * asked from inside another dialog, whose own closing decides where focus goes.
+ */
+export function restoreFocus(memory: FocusMemory | Element | null, { strict = false }: { strict?: boolean } = {}) {
   const remembered: FocusMemory = memory && 'node' in memory ? memory : rememberFocus(memory as Element | null);
   let target: Element | null = usable(remembered.node) ? remembered.node : null;
+  if (strict && !target) return;
   if (!target && remembered.itemId && remembered.control) {
     target = document.querySelector(`[data-item-id="${CSS.escape(remembered.itemId)}"] [data-card-control="${CSS.escape(remembered.control)}"]`);
   }

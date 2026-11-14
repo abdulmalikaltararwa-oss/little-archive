@@ -1,7 +1,7 @@
 // The frame around every screen: sidebar on a wide screen, a floating dock on a phone, the top bar, and the
 // demo's banner. The dock replaces the buildless interface's hamburger: the four things a thumb reaches for
 // (library, search, save, browse) are one tap away, with Save in the middle.
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { cn } from 'cn';
 import { FolderHeart, House, Plus, RotateCcw, Search, Settings, Sparkles, Upload } from 'lucide-react';
 import { useArchive, useArchiveState } from '@/app/archive-context';
@@ -9,6 +9,7 @@ import { openDialog, type OpenDialog } from '@/app/ui-state';
 import { Brand } from '@/components/brand';
 import { Modal } from '@/components/modal';
 import { Button } from '@/components/ui/button';
+import { restoreFocus, VIEW_TITLE_ID } from '@/lib/focus';
 import { NavContent } from './nav';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -100,9 +101,21 @@ function Dock({ hidden }: { hidden: boolean }) {
 
 /** The phone's navigation sheet: the sidebar's content in a dialog. */
 export function BrowseSheet({ spec, close }: { spec: OpenDialog; close(): void }) {
+  const left = useRef<'view' | 'dialog' | null>(null);
   return (
-    <Modal open={spec.open} onClose={close} title="Browse your archive" opener={spec.opener} bodyClassName="pb-8">
-      <NavContent onNavigate={close} />
+    <Modal
+      open={spec.open}
+      onClose={close}
+      title="Browse your archive"
+      bodyClassName="pb-8"
+      closeFocus={() => {
+        // A view chosen here announces itself: focus lands on its heading. A dialog opened from here keeps the
+        // focus it took. Closing without choosing returns to the dock.
+        if (left.current === 'view') document.getElementById(VIEW_TITLE_ID)?.focus({ preventScroll: true });
+        else if (left.current !== 'dialog') restoreFocus(spec.opener);
+      }}
+    >
+      <NavContent onNavigate={to => { left.current = to; close(); }} />
     </Modal>
   );
 }

@@ -10,7 +10,6 @@ import { Whisper } from '@/components/field';
 import { PlatformIcon } from '@/components/icons';
 import type { SeamScreen } from '@/data/location';
 import type { Collection, Platform } from '@/data/types';
-import { VIEW_TITLE_ID } from '@/lib/focus';
 
 const DOTS: Record<string, string> = { '#c9959c': 'bg-petal', '#8ea8b7': 'bg-[#8ea8b7]', '#c4aa70': 'bg-[#c4aa70]', '#94a98b': 'bg-[#94a98b]' };
 
@@ -53,7 +52,7 @@ function Group({ label, action, children, navLabel }: { label: string; action?: 
   );
 }
 
-export function NavContent({ onNavigate }: { onNavigate?(): void }) {
+export function NavContent({ onNavigate }: { onNavigate?(to: 'view' | 'dialog'): void }) {
   const archive = useArchive();
   const stats = useArchiveState(state => state.stats);
   const collections = useArchiveState(state => state.collections);
@@ -63,12 +62,10 @@ export function NavContent({ onNavigate }: { onNavigate?(): void }) {
 
   const go = (view: string) => {
     archive.goView(view);
-    onNavigate?.();
-    // Chosen from the phone's sheet, the new view announces itself: focus lands on its heading.
-    if (onNavigate) requestAnimationFrame(() => document.getElementById(VIEW_TITLE_ID)?.focus({ preventScroll: true }));
+    onNavigate?.('view');
   };
-  const screen = (next: SeamScreen) => { archive.goScreen(next); onNavigate?.(); };
-  const dialog = (spec: Parameters<typeof openDialog>[0]) => { onNavigate?.(); openDialog(spec); };
+  const screen = (next: SeamScreen) => { archive.goScreen(next); onNavigate?.('view'); };
+  const dialog = (spec: Parameters<typeof openDialog>[0]) => { onNavigate?.('dialog'); openDialog(spec); };
   const isView = (view: string) => library && loc.view === view;
   const locals = collections.filter(collection => collection.kind === 'local');
   const sources = (platform: Platform) => collections.filter(collection => collection.kind === 'source' && collection.platform === platform);

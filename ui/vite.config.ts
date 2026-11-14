@@ -43,6 +43,7 @@ export default defineConfig({
     globals: false,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
-    css: false,
+    // Styles are not needed to test behaviour; the one exception is the token file, which a test reads as text.
+    css: { include: [/tokens\.css/] },
   },
 });

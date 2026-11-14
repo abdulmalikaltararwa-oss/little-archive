@@ -7,14 +7,16 @@ import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { useTheme, type Theme } from '@/app/theme';
 import { confirm, openDialog, toast } from '@/app/ui-state';
 import { Field, FormError, Notice, Section } from '@/components/field';
+import { AsciiProgress } from '@/components/fx/ascii';
 import { Modal } from '@/components/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import type { ExtensionToken } from '@/data/types';
+import type { Account, ExtensionToken } from '@/data/types';
 import { copyText, downloadFile } from '../actions';
+import { whenText } from '../refusals/refusals';
 import type { DialogProps } from './basic';
 
 function Connections() {
@@ -99,6 +101,59 @@ function Connections() {
         ))}
         {tokens && !tokens.length ? <p className="text-xs">No browser connections yet.</p> : null}
       </div>
+    </>
+  );
+}
+
+function bytes(value: number): string {
+  if (value < 1024 * 1024) return `${Math.max(0, Math.round(value / 1024))} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function Meter({ label, used, limit, unit, resetsAt }: { label: string; used: number; limit: number | null; unit?: (value: number) => string; resetsAt?: string | null }) {
+  const show = unit ?? ((value: number) => value.toLocaleString());
+  const when = resetsAt ? whenText({ resetsAt: new Date(resetsAt), retryAfter: null }) : '';
+  return (
+    <div className="flex flex-col gap-1 rounded-md bg-card-2 px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm text-ink">{label}</span>
+        <span className="num text-xs text-ink-soft">{limit == null ? `${show(used)} · no limit` : `${show(used)} of ${show(limit)}`}</span>
+      </div>
+      {limit != null ? <AsciiProgress label={label} value={Math.min(used, limit)} max={Math.max(1, limit)} width={20} className="text-xs" /> : null}
+      {limit != null && used >= limit && when ? <span className="label-mono">{when}</span> : null}
+    </div>
+  );
+}
+
+/** What this account may use, from GET /api/account. On your own server there are no limits, and it says so in one line. */
+function Allowances() {
+  const archive = useArchive();
+  const [account, setAccount] = useState<Account | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let stale = false;
+    archive.api.account().then(value => { if (!stale) setAccount(value); }, caught => { if (!stale) setError(errorMessage(caught)); });
+    return () => { stale = true; };
+  }, [archive]);
+  if (error) return <p>{error}</p>;
+  if (!account) return <p role="status">Checking…</p>;
+  const { entitlements, storage } = account;
+  const limited = storage.quota_bytes != null || entitlements.deep_reads.limit != null || entitlements.suggestions?.daily.limit != null || entitlements.feature_calls?.daily.limit != null;
+  if (!limited) return <p>{account.mode === 'hosted' ? 'This account has no limits.' : 'On your own server nothing is metered: no storage quota, no allowances, nothing locked.'} <span className="num">{bytes(storage.used_bytes)}</span> in use.</p>;
+  const via = entitlements.unlocked_via;
+  return (
+    <>
+      <p>{entitlements.unlocked ? `This account is unlocked${via === 'apple' ? ' through the App Store' : via === 'google' ? ' through Google Play' : ''}.` : 'This account is on the free plan. Saving, searching, importing and exporting are not limited.'}</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Meter label="Storage" used={storage.used_bytes} limit={storage.quota_bytes} unit={bytes} />
+        <Meter label="Closer reads this month" used={entitlements.deep_reads.used} limit={entitlements.deep_reads.limit} resetsAt={entitlements.deep_reads.resets_at} />
+        {entitlements.suggestions ? <Meter label="Suggestions today" used={entitlements.suggestions.daily.used} limit={entitlements.suggestions.daily.limit} resetsAt={entitlements.suggestions.daily.resets_at} /> : null}
+        {entitlements.suggestions ? <Meter label="Suggestions this month" used={entitlements.suggestions.monthly.used} limit={entitlements.suggestions.monthly.limit} resetsAt={entitlements.suggestions.monthly.resets_at} /> : null}
+        {entitlements.feature_calls ? <Meter label="Recipe, place and ask requests today" used={entitlements.feature_calls.daily.used} limit={entitlements.feature_calls.daily.limit} resetsAt={entitlements.feature_calls.daily.resets_at} /> : null}
+        {entitlements.feature_calls ? <Meter label="Recipe, place and ask requests this month" used={entitlements.feature_calls.monthly.used} limit={entitlements.feature_calls.monthly.limit} resetsAt={entitlements.feature_calls.monthly.resets_at} /> : null}
+      </div>
+      <p className="text-xs">Reading, editing, exporting and anything worked out without AI cost nothing. A request that fails is given back.</p>
     </>
   );
 }
@@ -245,11 +300,12 @@ export function SettingsDialog({ spec, close }: DialogProps<'settings'>) {
         <div><Button size="sm" disabled={demoBusy} aria-busy={demoBusy || undefined} onClick={() => void addDemo()}><Sparkles />Add demo collection</Button></div>
       </Section>
 
-      {/* Seam: the one-time unlock arrives in the next wave. Today the screen only reports what the server says. */}
-      <Section title="Unlock">
-        <p>Little Archive is free on your own server, always. For the hosted service a one-time unlock is on its way.</p>
-        <div><Button variant="ghost" size="sm" className="-ms-2" onClick={() => { close(); archive.goScreen('unlock'); }}><KeyRound />See what is planned</Button></div>
-      </Section>
+      {backend.real ? (
+        <Section title="What this account may use">
+          <Allowances />
+          <div><Button variant="ghost" size="sm" className="-ms-2" onClick={() => { close(); archive.goScreen('unlock'); }}><KeyRound />About the one-time unlock</Button></div>
+        </Section>
+      ) : null}
 
       <AccountSection />
 

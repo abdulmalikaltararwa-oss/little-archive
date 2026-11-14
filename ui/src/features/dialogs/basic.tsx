@@ -12,6 +12,8 @@ import { Pick } from '@/components/pick';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import type { AccountDeletion } from '@/data/types';
+import { deletionWords } from './words';
 
 export interface DialogProps<K extends OpenDialog['kind']> {
   spec: Extract<OpenDialog, { kind: K }>;
@@ -262,8 +264,11 @@ export function DeleteAccountDialog({ spec, close }: DialogProps<'delete-account
   const [typed, setTyped] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<AccountDeletion | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const armed = typed.trim() === 'DELETE';
+  // Once the library is gone the only way on is out: the app signs this device out.
+  const leave = () => void archive.backend.account?.signOut({ deleted: true });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -271,26 +276,37 @@ export function DeleteAccountDialog({ spec, close }: DialogProps<'delete-account
     setError('');
     setBusy(true);
     try {
-      await archive.api.deleteAccount();
-      await archive.backend.account?.signOut({ deleted: true });
+      setDone(await archive.api.deleteAccount());
     } catch (caught) {
       setError(errorMessage(caught));
+    } finally {
       setBusy(false);
     }
   };
+
+  if (done) {
+    const words = deletionWords(done);
+    return (
+      <Modal open={spec.open} onClose={leave} size="sm" title={words.title} opener={spec.opener} footer={<Button variant="primary" onClick={leave}>Done</Button>}>
+        <p role="status" className="text-sm leading-relaxed text-ink-soft">{words.body}</p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">Copies you exported or backed up are yours and are not affected.</p>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
       open={spec.open}
       onClose={close}
+      canClose={() => !busy}
       size="sm"
       title="Delete your account"
-      description="This permanently deletes your library from the service: every save, collection, note and preview, and your storage. It cannot be undone. Copies you exported or backed up are not affected, and neither is the sign-in itself: your email stays registered with the sign-in provider until the service removes it."
+      description="This permanently deletes your library from the service: every save, collection, note and preview, your unlock and your storage, and then your sign-in. It cannot be undone. Copies you exported or backed up are not affected."
       opener={spec.opener}
       initialFocus={input}
       footer={
         <>
-          <Button onClick={close}>Cancel</Button>
+          <Button onClick={close} disabled={busy}>Cancel</Button>
           <Button type="submit" form="delete-account-form" variant="danger" disabled={!armed || busy} aria-busy={busy || undefined}><Trash2 />Delete my account</Button>
         </>
       }

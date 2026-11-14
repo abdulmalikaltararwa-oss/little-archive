@@ -147,7 +147,7 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
 
   const suggest = () => runTool(async () => {
     const result = await archive.api.queueAi({ ids: [item.id] });
-    toast(`${result.queued} classification job queued. Check activity, then reopen this save to review.`);
+    toast(result.skipped && !result.queued ? 'Not queued: the suggestions allowance is used for now.' : `${result.queued} classification job queued. Check activity, then reopen this save to review.`);
   });
 
   const deepRead = item.enrichment?.deep_read;
@@ -388,11 +388,16 @@ export function DetailPanel() {
   const [viewId, setViewId] = useState('');
   const [opener, setOpener] = useState<FocusMemory | null>(null);
   const [dirty, setDirtyState] = useState(false);
-  if (id && id !== viewId) {
-    setViewId(id);
-    setDirtyState(false);
-    // Focus returns to whatever opened the panel, found again by its save if the card was re-rendered.
-    if (!viewId || !opener) setOpener(rememberFocus());
+  const [seenId, setSeenId] = useState('');
+  if (id !== seenId) {
+    setSeenId(id);
+    if (id) {
+      setViewId(id);
+      setDirtyState(false);
+      // Focus returns to whatever opened the panel, found again by its save if the card was re-rendered.
+      // Moving from one open save straight to the next keeps the original opener.
+      if (!seenId) setOpener(rememberFocus());
+    }
   }
   // What the wall already knows is shown at once; the full record replaces it when it arrives.
   const known = useArchiveState(state => (viewId ? state.items.find(entry => entry.id === viewId) : undefined));
@@ -435,7 +440,7 @@ export function DetailPanel() {
   return (
     <Modal
       open={Boolean(id)}
-      onClose={() => { void archive.closeItem({ force: true }); setOpener(null); }}
+      onClose={() => void archive.closeItem({ force: true })}
       canClose={async () => !dirtyRef.current || confirmDiscard()}
       title="A closer look"
       variant="panel"

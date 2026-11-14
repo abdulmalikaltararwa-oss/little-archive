@@ -2,7 +2,9 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { errorMessage } from '@web/utils.js';
 import { useStore } from 'zustand';
 import type { Archive, ArchiveState } from '@/data/archive';
-import { toast } from './ui-state';
+import { ApiError } from '@/data/client';
+import { isRefusal } from '@/features/refusals/refusals';
+import { openDialog, toast } from './ui-state';
 
 const ArchiveContext = createContext<Archive | null>(null);
 
@@ -36,7 +38,11 @@ export function useBusy() {
     try {
       return await operation();
     } catch (error) {
-      toast(errorMessage(error), { error: true });
+      // A sign-in that ran out is told on the sign-in screen, calmly, not as an error on top of it.
+      if (error instanceof ApiError && error.status === 401) return undefined;
+      // "Not now" (an allowance used, the unlock, a busy service) gets its own explanation: what, until when, what to do.
+      if (isRefusal(error)) openDialog({ kind: 'refusal', error });
+      else toast(errorMessage(error), { error: true });
       return undefined;
     } finally {
       running.current = false;

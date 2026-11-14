@@ -2,6 +2,7 @@
 // screen to see their library.
 import { lazy, Suspense } from 'react';
 import { useDialogs, type OpenDialog } from '@/app/ui-state';
+import { RefusalDialog } from '../refusals/refusal';
 import { BrowseSheet } from '../shell/shell';
 import { BulkDialog, CollectionDialog, CopyTextDialog, DeleteAccountDialog, SaveLinkDialog } from './basic';
 
@@ -21,6 +22,7 @@ function One({ spec }: { spec: OpenDialog }) {
     case 'copy-text': return <CopyTextDialog spec={spec} close={close} />;
     case 'delete-account': return <DeleteAccountDialog spec={spec} close={close} />;
     case 'browse': return <BrowseSheet spec={spec} close={close} />;
+    case 'refusal': return <RefusalDialog spec={spec} close={close} />;
     case 'organize': return <OrganizeDialog spec={spec} close={close} />;
     case 'import': return <ImportDialog spec={spec} close={close} />;
     case 'activity': return <ActivityDialog spec={spec} close={close} />;

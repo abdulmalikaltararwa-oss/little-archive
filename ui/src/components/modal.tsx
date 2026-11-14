@@ -23,6 +23,8 @@ export interface ModalProps {
   canClose?: () => boolean | Promise<boolean>;
   /** What had focus before the dialog opened; focus returns there. */
   opener?: FocusMemory | Element | null;
+  /** Decides where focus goes when the dialog closes, in place of returning to the opener. */
+  closeFocus?: () => void;
   /** 'content' rests focus on the dialog itself, which keeps a phone's keyboard closed. */
   initialFocus?: 'content' | RefObject<HTMLElement | null>;
   /** Extra controls beside the close button. */
@@ -36,7 +38,7 @@ export interface ModalProps {
 
 const SIZES = { sm: 'sm:max-w-[440px]', md: 'sm:max-w-[580px]', lg: 'sm:max-w-[720px]' };
 
-export function Modal({ open, onClose, title, description, children, footer, size = 'md', variant = 'dialog', canClose, opener, initialFocus, headerExtra, className, bodyClassName, quietEnter, testId }: ModalProps) {
+export function Modal({ open, onClose, title, description, children, footer, size = 'md', variant = 'dialog', canClose, opener, closeFocus, initialFocus, headerExtra, className, bodyClassName, quietEnter, testId }: ModalProps) {
   const descriptionId = useId();
   const closing = useRef(false);
 
@@ -71,7 +73,8 @@ export function Modal({ open, onClose, title, description, children, footer, siz
           }}
           onCloseAutoFocus={event => {
             event.preventDefault();
-            restoreFocus(opener ?? null);
+            if (closeFocus) closeFocus();
+            else restoreFocus(opener ?? null);
           }}
           className={cn(
             'fixed z-50 flex flex-col bg-card text-ink shadow-lg outline-none focus-visible:outline-none',

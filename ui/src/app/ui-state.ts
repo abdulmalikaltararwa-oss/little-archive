@@ -1,6 +1,7 @@
 // Interface state that is not the library: which dialogs are open, what the island is saying, and the one
 // question waiting for a yes or no. Kept apart from src/data so the data layer stays free of presentation.
 import { create } from 'zustand';
+import type { ApiError } from '@/data/client';
 import type { Collection, SharedLink } from '@/data/types';
 
 /* The island ------------------------------------------------------------------------------------------- */
@@ -55,6 +56,7 @@ export type DialogSpec =
   | { kind: 'settings'; section?: 'connections' | '' }
   | { kind: 'delete-account' }
   | { kind: 'copy-text'; text: string }
+  | { kind: 'refusal'; error: ApiError }
   | { kind: 'browse' }
   | { kind: 'palette' };
 

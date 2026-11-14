@@ -11,6 +11,7 @@ import { Pick } from '@/components/pick';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { openReview } from '../actions';
+import { skippedWhy } from '../refusals/refusals';
 import type { DialogProps } from './basic';
 
 type ScopeName = 'all' | 'view' | 'review';
@@ -61,7 +62,7 @@ export function OrganizeDialog({ spec, close }: DialogProps<'organize'>) {
 
   const queue = () => runQueue(async () => {
     const result = await archive.api.queueAi({ filters: currentScope() });
-    toast(`${result.queued} queued · ${result.unchanged} already current · ${result.matched} matched.`);
+    toast(`${result.queued} queued · ${result.unchanged} already current · ${result.matched} matched.${result.skipped ? ` ${result.skipped} left for later: ${skippedWhy(result.limit?.scope)}.` : ''}`);
     close();
     openDialog({ kind: 'activity', tab: 'ai' });
   });
