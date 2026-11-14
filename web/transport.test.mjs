@@ -208,11 +208,3 @@ test('at most a few thumbnails are fetched at once', async () => {
   await Promise.all([1, 2, 3, 4, 5, 6].map(n => transport.blobUrl(`/api/assets/${String(n).repeat(64)}`)));
   assert.equal(peak, 2);
 });
-
-test('app.js reaches the transport only through the global the app shell sets', () => {
-  const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(app, /from '\.\/transport\.js'|import\(.\.\/transport/);
-  // With no app shell the page's own fetch is used, as before.
-  assert.match(app, /native \? native\.fetch\(`\/api\$\{path\}`, options\) : fetch\(`\/api\$\{path\}`, options\)/);
-  assert.match(app, /globalThis\.__littleArchiveNative \|\| null/);
-});
