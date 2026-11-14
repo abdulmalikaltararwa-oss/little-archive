@@ -496,6 +496,8 @@ function renderCard(item) {
     if (event.target.checked && state.selected.size >= 200) { event.target.checked = false; toast('Select up to 200 saves, or use Organize to update every match.'); return; }
     event.target.checked ? state.selected.add(item.id) : state.selected.delete(item.id); renderSelection();
   } });
+  // The label is a finger-sized hit area around the small checkbox; it has no effect with a mouse.
+  const selectArea = h('label', { class: 'card-select-hit' }, checkbox);
   const favorite = iconBtn(item.favorite ? 'Remove from favorites' : 'Add to favorites', 'heart', event => {
     const trigger = event.currentTarget;
     const hadFocus = document.activeElement === trigger;
@@ -506,7 +508,7 @@ function renderCard(item) {
     });
   }, 'card-favorite');
   favorite.setAttribute('aria-pressed', String(Boolean(item.favorite)));
-  card.append(open, checkbox, favorite); return card;
+  card.append(open, selectArea, favorite); return card;
 }
 
 function renderSelection() {

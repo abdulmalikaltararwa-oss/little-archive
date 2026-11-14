@@ -85,12 +85,17 @@ Treat the token like a password. It cannot read your library or change your note
 - **The public demo is not installable** and does not advertise a share target. It has no backend.
 - Little Archive is independent software. Instagram and TikTok are named only as places you can share from; there is no affiliation or endorsement.
 
+## What changed in the phone layout
+
+The save-a-link flow and the gallery were measured at 390 by 844 with touch emulation. Controls on touch screens and screens up to 500 px wide now have a hit area of at least 44 px (some through an invisible area around a smaller icon), form text is 16 px so iOS Safari does not zoom into a field, the Save row stays pinned when the dialog scrolls on a short screen, collection edit buttons are visible where there is no hover, and the keyboard-shortcut hint is hidden. Dropdowns are sized with `height` because the WebKit build tried here ignores `min-height` on them. The look is otherwise unchanged.
+
 ## What was and was not verified
 
 Run, with the results recorded in the test files named:
 
 - **Manifest and installability.** Chromium (Chrome for Testing build 1254 from Playwright 1.65.0) parsed the manifest with no errors or warnings and reported no installability errors on a loopback origin. The manifest, each declared icon, its type and its pixel size are checked in `web/install.test.mjs`, `tests/test_installable_app.py` and `tests/e2e/phone.spec.mjs`. The page loads with no Content Security Policy violation, and the policy is unchanged.
 - **Share flow** (`tests/e2e/phone.spec.mjs`, `web/share.test.mjs`). Signed in and signed out, a share launch fills the dialog and sends no write request until Save; cancelling and saving both return the address to `/`; hostile values (`javascript:`, `data:`, credentials, markup, hidden and direction-changing characters, huge input) end up as inert text or are dropped; a TikTok short link is explained and refused by the real server.
+- **Phone layout** (`tests/e2e/phone.spec.mjs`). In Chromium with touch emulation: no sideways scroll, every control in the gallery, the save dialog, the detail dialog and the navigation drawer is hit-testable over at least 44 px, form text is at least 16 px, and Save stays on screen on a 560 px tall viewport. As an exploratory check only, the same spec also passed on an older cached WebKit build (2336, not the build Playwright 1.65.0 pins), apart from the Chromium-only DevTools test; that run is what showed the dropdown sizing problem above.
 - **Import-token requests** for the iPhone Shortcut, as described above.
 - The public demo build still contains exactly the files in its allowlist and boots with 60 synthetic saves.
 

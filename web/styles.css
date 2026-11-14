@@ -402,3 +402,42 @@
 
   @media(max-width:500px) { .hero { padding:24px; border-radius:24px; } .hero-copy { max-width:68%; } .hero p { max-width:200px; } .hero-art { right:-40px; top:auto; bottom:-8px; transform:rotate(6deg) scale(.58); } .card { padding:5px; border-radius:18px; } .card-cover { border-radius:13px; aspect-ratio:1; } .card-favorite { top:10px; right:10px; width:28px; height:28px; } .cover-title { font-size:1.12rem; } .grid { gap:12px; } .detail-dialog { border-radius:0; } .library-title h2 { font-size:1.35rem; } }
 }
+
+/* Phone and touch. Finger-sized hit areas, 16px form text (iOS Safari zooms into anything smaller when a field
+   takes focus), and a Save row that stays in view. The look is unchanged; tests/e2e/phone.spec.mjs measures it. */
+@layer theme {
+  dialog { overscroll-behavior:contain; }
+  dialog:focus-visible { outline:none; }
+
+  @media (pointer:coarse), (max-width:500px) {
+    :where(input:not([type="checkbox"],[type="radio"],[type="file"],[type="range"])) { min-height:44px; }
+    /* Safari ignores min-height on a select but honors height. */
+    :where(select) { height:44px; }
+    .filterbar select { height:46px; }
+    :where(input:not([type="checkbox"],[type="radio"],[type="file"],[type="range"]),textarea,select) { font-size:16px; }
+    .btn,.btn.small,.source-tabs .tab,.nav-button,.check-row { min-height:44px; }
+    details summary { padding-block:16px; }
+    .demo-banner .btn { min-height:30px; }
+    /* Icon buttons keep their size; an invisible 44px area around them takes the touch. */
+    .icon-btn:not(.card-favorite) { position:relative; }
+    .icon-btn::after { content:""; position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); }
+    /* The checkbox is 17-20px; its label, 44px square, is the target while the checkbox is showing. */
+    .card-select-hit { position:absolute; z-index:2; top:4px; left:4px; width:44px; height:44px; display:grid; place-items:center; pointer-events:none; }
+    .card-select-hit .card-select { position:static; pointer-events:auto; }
+    .selecting .card-select-hit,.card.selected .card-select-hit,.card:focus-within .card-select-hit { pointer-events:auto; }
+  }
+  @media (max-width:500px) { .card-select-hit { pointer-events:auto; } }
+
+  /* Touch has no hover: show what hover would reveal, and drop the keyboard-shortcut hint. */
+  @media (hover:none) {
+    .collection-row .collection-edit { opacity:1; }
+    .keyhint { display:none; }
+    .search input { padding-right:16px; }
+  }
+
+  /* Save stays reachable when the dialog scrolls on a short or narrow screen. */
+  @media (max-width:500px), (max-height:720px) {
+    .form-actions { --bleed:25px; position:sticky; bottom:0; z-index:1; margin:12px calc(var(--bleed) * -1) -23px; padding:12px var(--bleed); background:var(--surface); border-top:1px solid var(--line); }
+  }
+  @media (max-width:500px) { .form-actions { --bleed:19px; } }
+}

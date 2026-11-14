@@ -1,6 +1,6 @@
 import { test, expect, apiAction, login, uniqueName, waitForItems } from './fixtures.mjs';
 
-// Installable app and share target. Everything runs against the real server and the real UI;
+// Installable app, share target and phone layout. Everything runs against the real server and the real UI;
 // no /api response is replaced. Share links are plain GET navigations, exactly what Android's share sheet opens.
 
 const DIALOG = 'Save a little discovery';
@@ -33,6 +33,37 @@ async function signIn(page) {
   await page.getByLabel('Password', { exact: true }).fill(process.env.LA_E2E_OWNER_PASSWORD);
   await apiAction(page, 'POST', '/api/auth/login', () => page.getByRole('button', { name: 'Open my archive', exact: true }).click());
 }
+
+// A control counts as finger-sized when a 44px cross centred on it still lands on it (or the label around a checkbox).
+// Hit-testing includes the invisible areas that CSS adds around small controls.
+async function undersizedTargets(page, rootSelector) {
+  return page.evaluate(rootSelector => {
+    const root = document.querySelector(rootSelector);
+    const problems = [];
+    const seen = new Set();
+    for (const element of root.querySelectorAll('button, a[href], select, textarea, summary, input:not([type="hidden"]):not([type="file"])')) {
+      if (element.closest('[inert], [hidden]') || element.classList.contains('sr-only')) continue;
+      const control = element.matches('input[type="checkbox"], input[type="radio"]') ? element.closest('label') || element : element;
+      if (seen.has(control)) continue;
+      seen.add(control);
+      const style = getComputedStyle(control);
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      control.scrollIntoView({ block: 'center', inline: 'center' });
+      const box = control.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      const missed = [[0, 0], [-21, 0], [21, 0], [0, -21], [0, 21]].filter(([dx, dy]) => {
+        const hit = document.elementFromPoint(x + dx, y + dy);
+        return !hit || !(hit === control || control.contains(hit));
+      });
+      if (missed.length) problems.push(`${control.tagName.toLowerCase()}.${String(control.className).trim()} "${(control.getAttribute('aria-label') || control.textContent || '').trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`);
+    }
+    return problems;
+  }, rootSelector);
+}
+
+const noSidewaysScroll = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 test.describe('installable app', () => {
   test('the manifest, icons and page tags are served for installation and load under the existing policy', async ({ page }) => {
@@ -172,5 +203,86 @@ test.describe('installable app', () => {
     expect((await refused).status()).toBe(400);
     await expect(dialog.getByRole('alert')).toContainText('Open the TikTok short link and copy the full post URL');
     expect(await itemsMatching(page, key)).toEqual([]);
+  });
+});
+
+test.describe('on a phone', () => {
+  // Decided before any browser context is created: Playwright rejects isMobile for Firefox.
+  test.skip(({ browserName }) => browserName === 'firefox', 'Playwright cannot emulate a mobile device in Firefox.');
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+
+  test('the gallery and the save-a-link flow have finger-sized targets, 16px form text and no sideways scroll', async ({ page }) => {
+    const auth = await login(page);
+    const headers = { 'X-CSRF-Token': auth.csrf_token, Origin: new URL(page.url()).origin };
+    const key = uniqueName('Phone').split(' ').at(-1);
+    const collection = await page.request.post('/api/collections', { headers, data: { name: `Phone shelf ${key}` } });
+    expect(collection.ok()).toBe(true);
+    for (const [index, url] of [`https://example.com/e2e/${key}/page`, `https://www.instagram.com/p/PHONE${key}/`].entries()) {
+      const created = await page.request.post('/api/items', { headers, data: { url, title: `Phone card ${key} ${index}` } });
+      expect(created.ok(), await created.text()).toBe(true);
+    }
+    await page.reload();
+    await waitForItems(page);
+    expect(await noSidewaysScroll(page)).toBe(true);
+    expect(await undersizedTargets(page, 'main')).toEqual([]);
+
+    await page.locator('.topbar').getByRole('button', { name: 'Save a link', exact: true }).tap();
+    const dialog = page.getByRole('dialog', { name: DIALOG, exact: true });
+    await expect(dialog).toBeVisible();
+    expect(await undersizedTargets(page, 'dialog[open]')).toEqual([]);
+    expect(await noSidewaysScroll(page)).toBe(true);
+    // iOS Safari zooms the page into any text field under 16px. Check every visible text control.
+    const smallText = await dialog.locator('input[type="url"], input[type="text"], textarea').evaluateAll(fields => fields.map(field => parseFloat(getComputedStyle(field).fontSize)).filter(size => size < 16));
+    expect(smallText).toEqual([]);
+
+    // On a short screen the dialog scrolls, and Save stays in view rather than below the fold.
+    await page.setViewportSize({ width: 390, height: 560 });
+    const scrolls = await dialog.evaluate(element => element.scrollHeight > element.clientHeight);
+    expect(scrolls).toBe(true);
+    const save = await dialog.getByRole('button', { name: 'Save to archive', exact: true }).boundingBox();
+    expect(save.y).toBeGreaterThanOrEqual(0);
+    expect(save.y + save.height).toBeLessThanOrEqual(560);
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).tap();
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.locator('.card-open').first().tap();
+    const detail = page.getByRole('dialog', { name: 'A closer look', exact: true });
+    // The dialog opens with a loading line; measure once the save's own controls have rendered.
+    await expect(detail.getByRole('button', { name: 'Save changes', exact: true })).toBeVisible();
+    expect(await undersizedTargets(page, 'dialog[open]')).toEqual([]);
+    expect(await noSidewaysScroll(page)).toBe(true);
+    await detail.getByRole('button', { name: 'Close dialog', exact: true }).tap();
+
+    await page.getByRole('button', { name: 'Open navigation', exact: true }).tap();
+    await expect(page.locator('#sidebar')).toBeVisible();
+    expect(await undersizedTargets(page, '#sidebar')).toEqual([]);
+    // Touch has no hover, so the way to edit a collection is visible.
+    await expect(page.getByRole('button', { name: `Edit Phone shelf ${key}`, exact: true })).toBeVisible();
+    await expect(page.locator('.keyhint')).toBeHidden();
+  });
+
+  test('the small select checkbox and favorite heart can be hit anywhere in a 44px area', async ({ page }) => {
+    const auth = await login(page);
+    const headers = { 'X-CSRF-Token': auth.csrf_token, Origin: new URL(page.url()).origin };
+    const key = uniqueName('Targets').split(' ').at(-1);
+    const created = await page.request.post('/api/items', { headers, data: { url: `https://example.com/e2e/${key}`, title: `Target card ${key}` } });
+    expect(created.ok()).toBe(true);
+    await page.reload();
+    await waitForItems(page);
+    const card = page.locator('article.card').filter({ hasText: `Target card ${key}` });
+    await expect(card).toHaveCount(1);
+    await card.scrollIntoViewIfNeeded();
+
+    const checkbox = await card.locator('.card-select').boundingBox();
+    expect(checkbox.width).toBeLessThan(24);
+    await page.touchscreen.tap(checkbox.x + checkbox.width / 2 - 14, checkbox.y + checkbox.height / 2 - 14);
+    await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+    await expect(card.locator('.card-select')).toBeChecked();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    const heart = await card.locator('.card-favorite').boundingBox();
+    expect(heart.width).toBeLessThan(36);
+    await apiAction(page, 'PATCH', `/api/items/${(await created.json()).id}`, () => page.touchscreen.tap(heart.x + heart.width / 2, heart.y + heart.height / 2 + 15));
+    await expect(card.locator('.card-favorite')).toHaveAttribute('aria-pressed', 'true');
   });
 });
