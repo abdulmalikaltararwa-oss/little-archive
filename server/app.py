@@ -13,6 +13,7 @@ import hmac
 import html
 import io
 import json
+import logging
 import mimetypes
 import os
 from pathlib import Path
@@ -44,9 +45,11 @@ from .security import RateLimiter, token_hash, verify_password
 from .storage import LibraryClosed, LibraryFull, Store, clean_tags, json_text, normalize_url, now
 
 
+log = logging.getLogger("little_archive")
 COOKIE = "little_archive_session"
 BEARER = {"WWW-Authenticate": "Bearer"}
 BODY = "little_archive.body"  # this request's buffered body, in its own ASGI scope
+STORE = "little_archive.store"  # the library this request resolved to, so an error handler can look at it
 FULL = "This library has reached its storage limit. Delete items or thumbnails to make room."
 # Writes that cannot grow a library stay available to an account at its quota.
 QUOTA_EXEMPT = {"/api/account/delete", "/api/ai/jobs/cancel"}
@@ -222,9 +225,15 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
 
         @app.exception_handler(sqlite3.OperationalError)
         async def out_of_space(request, exc):
-            # SQLite refused to grow an account's database past its ceiling; the write was rolled back.
+            # SQLite says "database or disk is full" for two different things. The write was rolled back either way.
             if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL:
-                return JSONResponse({"detail": FULL}, status_code=507)
+                store = request.scope.get(STORE)
+                if store is not None and not store.disk_is_full():
+                    return JSONResponse({"detail": FULL}, status_code=507)  # the account's own ceiling: it can make room
+                # The server's disk is out of room. That is the operator's to fix, not something the account did, and it
+                # must not read as "delete your items". Nothing about the request or the account is logged.
+                log.error("The data volume has no room left; a write was refused.")
+                return JSONResponse({"detail": "This service cannot save right now. Nothing was lost; try again later."}, status_code=503, headers={"Retry-After": "300"})
             raise exc
 
     def same_origin(request):
@@ -283,6 +292,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             if request.method in {"POST", "PUT", "PATCH"} and request.url.path not in QUOTA_EXEMPT:
                 if store.used_bytes() + len(request.scope.get(BODY, b"")) > quota:
                     raise HTTPException(507, FULL)
+            request.scope[STORE] = store
             return Principal("account", store, user_id=account.user_id)
         token = bearer_token(request)
         if token is not None:

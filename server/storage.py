@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
 import sqlite3
 from threading import RLock
 import unicodedata
@@ -230,6 +231,20 @@ class Store:
     def ceiling_bytes(self):
         """The hard limit: the quota plus room for the write that crosses it and for clean-up."""
         return self.quota_bytes + max(256 * 1024, self.quota_bytes // 16)
+
+    DISK_FULL_BYTES = 1024 * 1024
+
+    def disk_is_full(self):
+        """True when the volume holding this library has next to no room left.
+
+        SQLite reports "database or disk is full" both for the page limit set on an account's database and for a disk with
+        nothing left. Only the first is the account's doing, and only the first is something deleting content can fix. When
+        the limit is what stopped a write, the disk still has room (the limit is far below what the volume holds).
+        """
+        try:
+            return shutil.disk_usage(self.root).free < self.DISK_FULL_BYTES
+        except OSError:
+            return False
 
     def assets_size(self):
         with self.lock:

@@ -285,6 +285,27 @@ class LibraryManager:
         return None
 
 
+def isolate_shared_cache(service):
+    """On a multi-account service, keep what the shared cache is, and what an account can see of it, apart.
+
+    Page details are not shared between accounts (see `HostedCacheView`), the usage counters count the same
+    whether or not another account already had the answer (see `LedgerSink`), and an item never says
+    "cache" as where its transcript came from. Transcripts and suggestions for identical public text are
+    still shared, which is the point of the cache. Call once per account library, before it is used.
+    """
+    from .enrich.cache import HostedCacheView
+    if service.cache is not None:
+        service.configure(cache=HostedCacheView(service.cache))
+    if getattr(service, "ledger", None) is not None:
+        service.ledger.equalize = True
+
+    def hide_where_it_came_from(c, item):
+        transcript = (item.get("enrichment") or {}).get("transcript")
+        if transcript and transcript.get("source") == "cache":
+            transcript["source"] = service.transcriber.name if service.transcriber is not None else "server"
+    service.store.item_hooks.append(hide_where_it_came_from)
+
+
 class AccountWorker:
     """Hosted mode: one thread serves every account's queue, one group of jobs per account in turn.
 
@@ -299,6 +320,7 @@ class AccountWorker:
     def adopt(self, store, service, charge_deep_read=None):
         """Attach an account library's understanding service and route its queueing through here."""
         store.enrichment = service
+        isolate_shared_cache(service)
         worker = service.worker
         worker.wake = self.wake
         enqueue, enqueue_deep = worker.enqueue, worker.enqueue_deep

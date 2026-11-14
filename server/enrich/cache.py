@@ -107,3 +107,35 @@ class PublicPostCache:
     def stats(self) -> dict:
         with self._connect() as c:
             return {kind: count for kind, count in c.execute("SELECT kind, count(*) FROM public_posts GROUP BY kind")}
+
+
+class HostedCacheView:
+    """What one account's understanding service gets of the service-wide cache on a multi-account deployment.
+
+    Page details are never shared between accounts: a hit comes back instantly while a miss means a network
+    read, so an account could time it to learn whether anyone else on the service had saved a given public
+    address. Reading a page is cheap and each account's reads are rate limited; the entries that are worth
+    sharing (a transcript, a suggestion for identical text) cost real money to make, and those still are.
+    The remaining difference between a hit and a miss is how long a job takes; docs/hosted-mode.md says so.
+    """
+
+    PRIVATE = frozenset({"extraction"})
+
+    def __init__(self, cache):
+        self._cache = cache
+
+    def get(self, url, kind, input_hash=""):
+        if kind in self.PRIVATE:
+            return None
+        return self._cache.get(url, kind, input_hash)
+
+    def put(self, url, kind, payload, input_hash=""):
+        if kind in self.PRIVATE:
+            return False
+        return self._cache.put(url, kind, payload, input_hash)
+
+    def purge_expired(self):
+        return self._cache.purge_expired()
+
+    def stats(self):
+        return self._cache.stats()
