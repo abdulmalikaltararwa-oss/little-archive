@@ -439,6 +439,9 @@ test.describe('on a phone', () => {
     await expect(palette).toBeVisible();
     await page.keyboard.press('Control+k');
     await expect(palette).toHaveCount(0);
+    // The dialog leaves the page first and hands focus back a moment later; a key pressed in between would be answered by
+    // whatever the page has focused then. A person cannot press that fast, so wait for the hand-back before the next key.
+    await expect(page.getByRole('heading', { level: 1, name: 'Your favorites', exact: true })).toBeFocused();
     await page.keyboard.press('/');
     await expect(searchBox(page)).toBeFocused();
     await expect(searchBox(page)).toHaveValue('');
