@@ -1,0 +1,305 @@
+[
+  {
+    "timestamp": 1731000300,
+    "media": [],
+    "label_values": [
+      {
+        "label": "URL",
+        "value": "https://www.instagram.com/p/SYNTHaaa001/",
+        "href": "https://www.instagram.com/p/SYNTHaaa001/"
+      },
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "Pancakes au citron fa\u00c3\u00a7on caf\u00c3\u00a9 #petitdejeuner"
+      },
+      {
+        "label": "Titre",
+        "value": ""
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "Nom",
+                "value": "breakfast"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Hashtags"
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/example_baker"
+              },
+              {
+                "label": "Nom",
+                "value": "Example Baker"
+              },
+              {
+                "label": "Nom de profil",
+                "value": "example_baker"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Propri\u00c3\u00a9taire"
+      },
+      {
+        "dict": [],
+        "title": "Partenaire de marque"
+      }
+    ],
+    "fbid": "17900000000000001"
+  },
+  {
+    "timestamp": 1731000200,
+    "media": [],
+    "label_values": [
+      {
+        "label": "URL",
+        "value": "https://www.instagram.com/reel/SYNTHaaa002/",
+        "href": "https://www.instagram.com/reel/SYNTHaaa002/"
+      },
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "Nouilles \u00c3\u00a0 l'ail"
+      },
+      {
+        "label": "Titre",
+        "value": ""
+      },
+      {
+        "dict": [],
+        "title": "Hashtags"
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/example_cook"
+              },
+              {
+                "label": "Nom",
+                "value": "Example Cook"
+              },
+              {
+                "label": "Nom de profil",
+                "value": "example_cook"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Propri\u00c3\u00a9taire"
+      },
+      {
+        "dict": [],
+        "title": "Partenaire de marque"
+      }
+    ],
+    "fbid": "17900000000000002"
+  },
+  {
+    "timestamp": 1731000100,
+    "media": [],
+    "label_values": [
+      {
+        "label": "URL",
+        "value": "https://www.instagram.com/p/SYNTHaaa003/",
+        "href": "https://www.instagram.com/p/SYNTHaaa003/"
+      },
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "\u00d9\u0088\u00d8\u00b5\u00d9\u0081\u00d8\u00a9 \u00d9\u0084\u00d8\u00a8\u00d9\u0086\u00d8\u00a9 \u00d9\u0085\u00d9\u0086\u00d8\u00b2\u00d9\u0084\u00d9\u008a\u00d8\u00a9 \u00d8\u00a8\u00d8\u00a7\u00d9\u0084\u00d8\u00b2\u00d8\u00b9\u00d8\u00aa\u00d8\u00b1"
+      },
+      {
+        "label": "Titre",
+        "value": ""
+      },
+      {
+        "dict": [],
+        "title": "Hashtags"
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/example_labneh"
+              },
+              {
+                "label": "Nom",
+                "value": "example_labneh"
+              },
+              {
+                "label": "Nom de profil",
+                "value": "example_labneh"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Propri\u00c3\u00a9taire"
+      },
+      {
+        "dict": [],
+        "title": "Partenaire de marque"
+      }
+    ],
+    "fbid": "17900000000000003"
+  },
+  {
+    "timestamp": 1730999000,
+    "media": [],
+    "label_values": [
+      {
+        "label": "URL",
+        "value": "https://www.instagram.com/p/SYNTHaaa001/",
+        "href": "https://www.instagram.com/p/SYNTHaaa001/"
+      },
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "Pancakes au citron fa\u00c3\u00a7on caf\u00c3\u00a9 #petitdejeuner"
+      },
+      {
+        "label": "Titre",
+        "value": ""
+      },
+      {
+        "dict": [],
+        "title": "Hashtags"
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/example_baker"
+              },
+              {
+                "label": "Nom",
+                "value": "example_baker"
+              },
+              {
+                "label": "Nom de profil",
+                "value": "example_baker"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Propri\u00c3\u00a9taire"
+      },
+      {
+        "dict": [],
+        "title": "Partenaire de marque"
+      }
+    ],
+    "fbid": "17900000000000004"
+  },
+  {
+    "timestamp": 1730998000,
+    "media": [],
+    "label_values": [
+      {
+        "label": "URL",
+        "value": "https://www.instagram.com/tv/SYNTHaaa004/",
+        "href": "https://www.instagram.com/tv/SYNTHaaa004/"
+      },
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "An old video"
+      },
+      {
+        "label": "Titre",
+        "value": ""
+      },
+      {
+        "dict": [],
+        "title": "Hashtags"
+      },
+      {
+        "dict": [
+          {
+            "dict": [
+              {
+                "label": "URL",
+                "value": "https://www.instagram.com/example_old"
+              },
+              {
+                "label": "Nom",
+                "value": "example_old"
+              },
+              {
+                "label": "Nom de profil",
+                "value": "example_old"
+              }
+            ],
+            "title": ""
+          }
+        ],
+        "title": "Propri\u00c3\u00a9taire"
+      },
+      {
+        "dict": [],
+        "title": "Partenaire de marque"
+      }
+    ],
+    "fbid": "17900000000000005"
+  },
+  {
+    "timestamp": 1730997000,
+    "media": [],
+    "label_values": [
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "no link in this entry"
+      }
+    ],
+    "fbid": "17900000000000006"
+  },
+  {
+    "timestamp": 1730996000,
+    "media": [],
+    "label_values": [
+      {
+        "label": "URL",
+        "value": "https://www.instagram.com/p/SYNTHaaa005/",
+        "href": "https://www.instagram.com/p/SYNTHaaa005/"
+      },
+      {
+        "label": "L\u00c3\u00a9gende",
+        "value": "Marche \u00c3\u00a0 l'aube"
+      },
+      {
+        "label": "Titre",
+        "value": ""
+      },
+      {
+        "dict": [],
+        "title": "Hashtags"
+      },
+      {
+        "dict": [],
+        "title": "Propri\u00c3\u00a9taire"
+      },
+      {
+        "dict": [],
+        "title": "Partenaire de marque"
+      }
+    ],
+    "fbid": "17900000000000007"
+  }
+]

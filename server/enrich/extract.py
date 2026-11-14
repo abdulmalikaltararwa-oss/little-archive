@@ -224,6 +224,108 @@ def _ld_url(value, base) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------- structured recipe and place data (additive)
+
+_LD_PLACE_TYPES = {"place", "localbusiness", "restaurant", "cafeorcoffeeshop", "barorpub", "bakery", "hotel", "lodgingbusiness", "touristattraction", "museum", "park",
+                   "landmarksorhistoricalbuildings", "foodestablishment", "store", "shoppingcenter", "beach", "city", "administrativearea", "country", "airport", "stadium"}
+
+
+def _ld_text(value, limit=1000) -> str:
+    if isinstance(value, str):
+        return clean_text(value, limit)
+    if isinstance(value, dict):
+        return _ld_text(value.get("text") or value.get("name") or "", limit)
+    return ""
+
+
+def capture_recipe_ld(node: dict, *, max_ingredients=100, max_steps=100) -> dict:
+    """A bounded, cleaned copy of the parts of a schema.org Recipe node that cooking needs. Plain parsing; no network, no model."""
+    def strings(value, limit=300, cap=100):
+        values = value if isinstance(value, list) else [value]
+        return [t for t in (_ld_text(v, limit) for v in values[:cap]) if t]
+
+    steps: list[dict] = []
+
+    def walk(value, section=None, depth=0):
+        if depth > 3 or len(steps) >= max_steps:
+            return
+        if isinstance(value, str):
+            for line in value.replace("\r", "\n").split("\n"):
+                text = clean_text(line, 1000)
+                if text:
+                    steps.append({"text": text, "section": section})
+        elif isinstance(value, list):
+            for entry in value[:200]:
+                walk(entry, section, depth + 1)
+        elif isinstance(value, dict):
+            if "itemlistelement" in {k.lower() for k in value} or "HowToSection" in (value.get("@type") if isinstance(value.get("@type"), list) else [value.get("@type")]):
+                walk(value.get("itemListElement"), clean_text(value.get("name") or "", 120) or section, depth + 1)
+            else:
+                text = _ld_text(value.get("text") or value.get("name") or "", 1000)
+                if text:
+                    steps.append({"text": text, "section": section})
+
+    walk(node.get("recipeInstructions"))
+    raw_yield = node.get("recipeYield")
+    yields = [str(raw_yield)] if isinstance(raw_yield, (int, float)) and not isinstance(raw_yield, bool) else strings(raw_yield, 80, 3) if raw_yield is not None else []
+    ingredients = node.get("recipeIngredient") if node.get("recipeIngredient") is not None else node.get("ingredients")
+    return {
+        "name": _ld_text(node.get("name"), 300), "description": _ld_text(node.get("description"), 1000), "yield": yields,
+        "prep_time": node.get("prepTime") if isinstance(node.get("prepTime"), str) else None, "cook_time": node.get("cookTime") if isinstance(node.get("cookTime"), str) else None,
+        "total_time": node.get("totalTime") if isinstance(node.get("totalTime"), str) else None,
+        "ingredients": strings(ingredients, 300, max_ingredients), "steps": steps[:max_steps],
+    }
+
+
+def _ld_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number and abs(number) <= 180 else None
+
+
+def _ld_place(node: dict) -> dict | None:
+    name = _ld_text(node.get("name"), 200)
+    address = node.get("address")
+    if isinstance(address, dict):
+        parts = [_ld_text(address.get(k), 120) for k in ("streetAddress", "addressLocality", "addressRegion", "postalCode")]
+        country = address.get("addressCountry")
+        country = _ld_text(country.get("name") if isinstance(country, dict) else country, 80)
+        address_text, city = ", ".join(p for p in parts if p), _ld_text(address.get("addressLocality"), 120)
+    else:
+        address_text, city, country = _ld_text(address, 300), "", ""
+    geo = node.get("geo") if isinstance(node.get("geo"), dict) else {}
+    lat, lon = _ld_number(geo.get("latitude")), _ld_number(geo.get("longitude"))
+    if lat is not None and (abs(lat) > 90 or lon is None):
+        lat = lon = None
+    if not name:
+        return None
+    out = {"name": name, "address": address_text or None, "city": city or None, "country": country or None, "types": sorted(_ld_types(node))[:4]}
+    if lat is not None and lon is not None:
+        out["lat"], out["lon"] = lat, lon
+    return out
+
+
+def capture_places_ld(nodes: list[dict], limit: int = 8) -> list[dict]:
+    """Named places the page's own structured data describes, with the coordinates it gives. Never inferred."""
+    found: list[dict] = []
+    for node in nodes:
+        candidates = []
+        if _ld_types(node) & _LD_PLACE_TYPES:
+            candidates.append(node)
+        for key in ("contentLocation", "location", "locationCreated", "spatialCoverage"):
+            value = node.get(key)
+            candidates.extend(v for v in (value if isinstance(value, list) else [value])[:4] if isinstance(v, dict))
+        for candidate in candidates:
+            place = _ld_place(candidate)
+            if place and not any(p["name"] == place["name"] for p in found):
+                found.append(place)
+            if len(found) >= limit:
+                return found
+    return found
+
+
 _ISO_DURATION = re.compile(r"^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$", re.I)
 
 
@@ -520,6 +622,15 @@ def extract_page(html, url: str, *, oembed: dict | None = None, content_type: st
         caption=caption, thumbnail_url=thumbnail, video_url=video, published_at=published, duration_seconds=duration,
         language=language, site_name=site_name, canonical_url=page_canonical or post.canonical, sources=list(f.used),
     )
+    # Additive: present only when the page carried that structured data (used by recipe cards and places).
+    recipe_node = next((n for n in ld if "recipe" in _ld_types(n)), None)
+    if recipe_node is not None:
+        captured = capture_recipe_ld(recipe_node)
+        if captured["ingredients"]:
+            result["recipe_ld"] = captured
+    places = capture_places_ld(ld)
+    if places:
+        result["places_ld"] = places
     return result
 
 

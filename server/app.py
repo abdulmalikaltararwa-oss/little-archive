@@ -36,9 +36,11 @@ from .config import Config
 from .devices import DeviceTokens
 from .enrich.build import build_enrichment
 from .enrich.images import reencode_image, write_asset
+from .enrich.feature_routes import install_feature_routes
 from .enrich.routes import install_routes as install_enrichment_routes
 from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
+from .guided_routes import install_guided_import_routes
 from .models import AccountDeletion, AIJobs, BulkAction, CollectionInput, CollectionPatch, DeviceLogin, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput
 from .security import RateLimiter, token_hash, verify_password
 from .storage import LibraryClosed, LibraryFull, Store, clean_tags, json_text, normalize_url, now
@@ -893,6 +895,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         return {"created": created}
 
     install_enrichment_routes(app, owner=owner, after_page=release_orphans if hosted else None)
+    install_feature_routes(app, owner=owner)
+    install_guided_import_routes(app, owner=owner)
 
     if not hosted:
         # The bundled web UI signs in with the owner password, so a hosted service is API-only.

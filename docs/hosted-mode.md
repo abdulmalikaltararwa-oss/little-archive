@@ -114,6 +114,14 @@ A library is created empty the first time an account makes an authenticated requ
 - **The shared cache** (`LA_PUBLIC_CACHE`), if turned on, is one file for the whole service at `<LA_DATA_DIR>/public-posts.sqlite3` unless a path is set. It holds only what was derived from public posts, as the understanding guide explains. Sharing it between accounts has one consequence that does not exist for a single owner: an account's usage counters show a cache hit when some other account already had the same public post read or analysed, which reveals that someone else on the service saved it. Leave it off if that matters.
 - **Stored covers** count toward the storage quota like thumbnails, are refused when they would pass it, and are removed when no item uses them.
 
+## Recipe cards, places, ask and the guided import
+
+These are the same routes as self-hosted, scoped to the caller's own library like every other route. They differ in two ways.
+
+**The unlock gates recipes, places and ask.** Every route of the three (`/api/items/{id}/recipe*`, `/api/recipes`, `/api/items/{id}/places*`, `/api/places`, `/api/ask`) answers `402` to an account that has not unlocked, with the body `{"detail": "This comes with the full unlock.", "code": "unlock_required", "feature": "recipes" | "places" | "ask"}`, before anything is read, stored or sent to a model. `GET /api/features` (not gated) tells a client in advance: `unlocked`, and `locked` per feature. A self-hosted owner is never gated. Their model calls go through the usage hook and appear in the account's own `/api/enrichment/usage`; like ordinary suggestions they are **not limited**, so with a paid provider an unlocked account can ask without a cap. A per-account rate limit belongs with the hardening of this mode. The guided import is not gated: bringing your saves in is part of the free product.
+
+**The guided import stages one export at a time.** The file is sent in pieces no larger than the request limit allows (`LA_HOSTED_MAX_JSON_KB` less 8 KiB, at most 256 KiB), stored under the account's own directory, limited to 64 MiB (`LA_IMPORT_MAX_ARCHIVE_MB` changes it), and removed when the import finishes, is cancelled or is rejected, or when the account is deleted. **Staged files are not counted against the storage quota** while they exist; the one-import, 64 MiB limit is what bounds them. The import job runs in a background thread per import (at most two at once in the process) and writes through the same quota-limited connection as every other write, so a library that fills up stops the job cleanly (`state: failed`, resumable). Geocoding, if the operator enables it, shares one one-request-a-second limiter across every account.
+
 ## What a hosted server does not offer
 
 - **Password sign-in, cookies and device tokens.** `/api/auth/login`, `/api/auth/logout` and `/api/auth/devices` answer `404`. A cookie is never a credential.
