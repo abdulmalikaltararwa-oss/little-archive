@@ -8,6 +8,7 @@ import unicodedata
 
 from . import __version__
 from .config import Config
+from .webui import is_public
 
 
 def _result(status, code, summary, next_action, *, applied=False):
@@ -29,8 +30,7 @@ def setup_configuration(config_file=Path(".env"), *, data_dir="./data",
     """
     target = Path(config_file)
     try:
-        public_web = Path(__file__).resolve().parent.parent / "web"
-        if target.resolve().is_relative_to(public_web.resolve()):
+        if is_public(target):
             return _result("blocked", "configuration_in_public_directory", "Configuration cannot be placed in the public web directory.", "Choose a private configuration location outside web.")
         existing = target.lstat()
     except FileNotFoundError:

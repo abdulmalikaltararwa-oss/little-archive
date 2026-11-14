@@ -171,8 +171,20 @@ A new screen is a default export in `src/features/<name>/screen.tsx`, registered
 
 ## Content-Security-Policy
 
-The server sends `script-src 'self'` and `img-src 'self' data: https:`; the demo page is stricter
-(`connect-src 'none'`, `img-src 'self'`). So: no inline scripts (the theme is set by `public/theme-init.js`),
-no `data:` images in CSS, no requests from the demo. Styles set from script are fine; the dialog primitives
-add one small `<style>` element for scroll locking, which needs `style-src 'unsafe-inline'` (the server
-already allows it; the demo page in `ui/demo.html` does too).
+The server sends `script-src 'self'`, `style-src 'self' 'nonce-…'` and `img-src 'self' data: https:`, with a fresh
+nonce on every response for the page (`server/webui.py`); there is no `'unsafe-inline'` for styles. The demo page in
+`ui/demo.html` carries its own stricter policy for connections (`connect-src 'none'`, `img-src 'self'`) but allows
+inline styles, because a static host cannot make a nonce. So:
+
+- No inline scripts (the theme is set by `public/theme-init.js`), no `style` attributes and no `<style>` in markup:
+  use classes. The page's first frame in `index.html` is styled by `.boot` in `src/styles/index.css`.
+- Styles set from script (`element.style`, React's `style` prop) are fine: to the browser they are not inline styles.
+- A library that adds its own `<style>` element at run time must be given the nonce. `cspNonce()` in
+  `src/lib/nonce.ts` returns it. Today that is the dialog's scroll lock (it reads `window.__webpack_nonce__`, which
+  `theme-init.js` sets), the select's scrollbar rule (`nonce` on the viewport, in `components/ui/select.tsx`), motion's
+  pop layout (`nonce` on `MotionConfig`) and the segmented control (it reads `meta[property="csp-nonce"]` itself).
+  Add the next one beside these.
+- No `data:` images in CSS and no requests from the demo.
+
+`tests/e2e/fixtures.mjs` fails any browser test on a policy violation, and `tests/e2e/screens.spec.mjs` opens every screen
+and dialog on a real server, so a new inline style is found by the suite, not by a user.

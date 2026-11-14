@@ -1,6 +1,6 @@
 # Little Archive v0.1 API contract
 
-Independent self-hosted saved-content library. Single owner per instance, multiple source accounts. Backend Python 3.12+, FastAPI, sqlite3; frontend buildless ES modules, HTML/CSS; Chrome MV3 extension. Public fixtures and screenshots use synthetic content.
+Independent self-hosted saved-content library. Single owner per instance, multiple source accounts. Backend Python 3.12+, FastAPI, sqlite3; frontend a React app (`ui/`, built to static files the server serves); Chrome MV3 extension. Public fixtures and screenshots use synthetic content.
 
 The same server has an opt-in hosted mode (`LA_MODE=hosted`): many accounts, one private library each, identical routes and JSON. Everything below applies to both modes unless a line says otherwise; the differences are collected under **Hosted mode**.
 

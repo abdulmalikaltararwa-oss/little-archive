@@ -110,4 +110,4 @@ Not verified, and not claimed:
 
 ## For contributors
 
-The PNG icons are generated from `web/icon.svg` and committed. After changing the SVG, run `npm run build:icons` (it uses the Chromium that the browser tests install) and review `web/icons/` and `web/apple-touch-icon.png`. The maskable and Apple icons are full-bleed and opaque; the ordinary icons keep the rounded tile.
+The manifest, the PNG icons and the touch icon live in `ui/public/` (the web interface's static files) and are committed. The PNG icons are generated from `ui/public/icon.svg`. After changing the SVG, run `npm run build:icons` (it uses the Chromium that the browser tests install) and review `ui/public/icons/` and `ui/public/apple-touch-icon.png`. The maskable and Apple icons are full-bleed and opaque; the ordinary icons keep the rounded tile.

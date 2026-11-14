@@ -43,7 +43,8 @@ function Group({ label, action, children, navLabel }: { label: string; action?: 
   const Tag = navLabel ? 'nav' : 'div';
   return (
     <Tag aria-label={navLabel} className="flex flex-col gap-0.5">
-      <div className="mb-1 flex h-7 items-center justify-between ps-3 pe-1">
+      {/* A header that holds a button is a finger-sized row on touch, so the button's area is not shared with the row below. */}
+      <div className={cn('mb-1 flex h-7 items-center justify-between ps-3 pe-1', action && 'coarse:h-11')}>
         <Whisper>{label}</Whisper>
         {action}
       </div>

@@ -8,8 +8,13 @@ Developer ID or notarized: the app gets an ad-hoc signature only. See docs/mac-a
 
     python3 scripts/build_mac_app.py --python /path/to/python3.12
 
+The web interface is the React app in ui/. It is built first (`npm ci && npm run build` in
+ui/, Node 22 or newer, found on PATH or in Homebrew's node@24/node@22) and its built files are
+bundled as `webui`, where the server looks for them. `--skip-ui-build` uses an existing ui/dist.
+
 This script uses only the standard library. It creates its own virtual environment from
-packaging/mac/requirements-build.txt, which needs network access to install packages.
+packaging/mac/requirements-build.txt, and installs the interface's packages from ui/package-lock.json;
+both need network access on the first run.
 """
 from __future__ import annotations
 
@@ -27,6 +32,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 MAC = ROOT / "packaging" / "mac"
+UI = ROOT / "ui"
+ICON_SOURCE = UI / "public" / "icon.svg"
+NODE_MINIMUM = 22
+# Where a suitable Node may live when the one on PATH is too old (this checks the PATH one first).
+NODE_PLACES = ["/opt/homebrew/opt/node@24/bin", "/opt/homebrew/opt/node@22/bin", "/usr/local/opt/node@24/bin", "/usr/local/opt/node@22/bin", "/opt/homebrew/bin", "/usr/local/bin"]
 BUILD = ROOT / ".mac-build"
 OUTPUT = ROOT / "dist-mac"
 APP_NAME = "Little Archive"
@@ -86,22 +96,73 @@ def prepare_environment(python):
     return interpreter
 
 
+def node_major(output):
+    """The major version in `node --version` output ("v24.22.2"), or None."""
+    match = re.fullmatch(r"v(\d+)\.\d+\.\d+\s*", output or "")
+    return int(match.group(1)) if match else None
+
+
+def find_node(places=None):
+    """An environment in which `node` and `npm` are Node 22 or newer, or a stop with how to get one."""
+    for place in [None, *(NODE_PLACES if places is None else places)]:
+        environment = dict(os.environ)
+        if place is not None:
+            if not (Path(place) / "node").is_file():
+                continue
+            environment["PATH"] = place + os.pathsep + environment.get("PATH", "")
+        try:
+            result = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=30, env=environment)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        major = node_major(result.stdout) if result.returncode == 0 else None
+        if major is not None and major >= NODE_MINIMUM:
+            return environment
+    fail(f"Node {NODE_MINIMUM} or newer is required to build the web interface (for example `brew install node@24`), "
+         "or build it yourself with `npm ci && npm run build` in ui/ and pass --skip-ui-build.")
+
+
+def build_interface(skip):
+    """The built web interface, ready to bundle: ui/dist, made now unless it already exists and --skip-ui-build was given."""
+    if skip:
+        if not (UI / "dist" / "index.html").is_file():
+            fail("--skip-ui-build was given but ui/dist has no build. Run `npm ci && npm run build` in ui/.")
+        say("Using the web interface already built in ui/dist")
+        return UI / "dist"
+    environment = find_node()
+    say("Building the web interface (npm ci needs network access on the first run)")
+    run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=UI, env=environment)
+    run(["npm", "run", "build"], cwd=UI, env=environment)
+    return UI / "dist"
+
+
+def stage_interface(source, destination):
+    """Copies the built interface to what is bundled: the files a visitor can load, not the build's own manifest."""
+    if not (source / "index.html").is_file():
+        fail(f"{source} has no index.html; the web interface is not built.")
+    for path in source.rglob("*"):
+        if path.is_symlink():
+            fail(f"{path} is a symbolic link; the bundled interface must be plain files.")
+    shutil.rmtree(destination, ignore_errors=True)
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(".vite", "demo.html"))
+    return destination
+
+
 def make_icon(interpreter):
     folder = BUILD / "icon"
     shutil.rmtree(folder, ignore_errors=True)
-    say("Rendering the app icon from web/icon.svg")
-    run([interpreter, MAC / "make_icon.py", ROOT / "web" / "icon.svg", folder / "icon.iconset"])
+    say(f"Rendering the app icon from {ICON_SOURCE.relative_to(ROOT)}")
+    run([interpreter, MAC / "make_icon.py", ICON_SOURCE, folder / "icon.iconset"])
     icns = folder / f"{APP_NAME}.icns"
     run(["iconutil", "-c", "icns", "-o", icns, folder / "icon.iconset"])
     return icns
 
 
-def build_bundle(interpreter, icon, version):
+def build_bundle(interpreter, icon, version, interface):
     work, dist = BUILD / "pyinstaller-work", BUILD / "pyinstaller-dist"
     shutil.rmtree(work, ignore_errors=True)
     shutil.rmtree(dist, ignore_errors=True)
     say("Bundling Python, the server and the web interface with PyInstaller")
-    environment = {**os.environ, "LITTLE_ARCHIVE_ICON": str(icon), "LITTLE_ARCHIVE_VERSION": version}
+    environment = {**os.environ, "LITTLE_ARCHIVE_ICON": str(icon), "LITTLE_ARCHIVE_VERSION": version, "LITTLE_ARCHIVE_WEBUI": str(interface)}
     run([interpreter, "-m", "PyInstaller", "--noconfirm", "--clean", "--distpath", dist, "--workpath", work, MAC / "little_archive.spec"], env=environment, cwd=ROOT)
     app = dist / BUNDLE
     if not app.is_dir():
@@ -207,6 +268,7 @@ def main(argv=None):
     parser.add_argument("--python", help="Path to a Python 3.12 interpreter (default: look for python3.12)")
     parser.add_argument("--clean", action="store_true", help="Delete .mac-build (including the build environment) first")
     parser.add_argument("--no-archives", action="store_true", help="Build only the .app; skip the .zip and .dmg")
+    parser.add_argument("--skip-ui-build", action="store_true", help="Bundle the web interface already built in ui/dist instead of building it")
     args = parser.parse_args(argv)
     if sys.platform != "darwin":
         fail("this builds a macOS app and must run on a Mac")
@@ -219,7 +281,8 @@ def main(argv=None):
     version, architecture = application_version(), platform.machine()
     interpreter = prepare_environment(find_python(args.python))
     icon = make_icon(interpreter)
-    built = build_bundle(interpreter, icon, version)
+    interface = stage_interface(build_interface(args.skip_ui_build), BUILD / "webui")
+    built = build_bundle(interpreter, icon, version, interface)
 
     minimum, binary = minimum_macos(built)
     say(f"Lowest macOS the bundled binaries allow: {minimum} (set by {binary.name})")

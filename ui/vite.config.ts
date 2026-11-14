@@ -33,6 +33,9 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
+    // dist/.vite/manifest.json lists every file each page needs, hashed names included. scripts/build_demo.py reads it
+    // to publish exactly the demo page's files. The server never serves it (dot-folders are refused).
+    manifest: true,
     chunkSizeWarningLimit: 400,
     rollupOptions: {
       input: { index: path.resolve(here, 'index.html'), demo: path.resolve(here, 'demo.html') },

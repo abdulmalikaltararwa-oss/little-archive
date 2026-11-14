@@ -209,12 +209,8 @@ test('at most a few thumbnails are fetched at once', async () => {
   assert.equal(peak, 2);
 });
 
-test('app.js reaches the transport only through the global the app shell sets, and imports nothing the public demo does not ship', () => {
+test('app.js reaches the transport only through the global the app shell sets', () => {
   const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
-  const demoFiles = readFileSync(new URL('../scripts/build_demo.py', import.meta.url), 'utf8').match(/files = \[(.*?)\]/s)[1].match(/"([^"]+)"/g).map(name => name.slice(1, -1));
-  const imports = [...app.matchAll(/(?:^|\n)import\s[^;]*?from\s+'\.\/([^']+)'/g)].map(match => match[1]);
-  assert.ok(imports.length > 0);
-  for (const name of imports) assert.ok(demoFiles.includes(name), `${name} is not in the demo allowlist`);
   assert.doesNotMatch(app, /from '\.\/transport\.js'|import\(.\.\/transport/);
   // With no app shell the page's own fetch is used, as before.
   assert.match(app, /native \? native\.fetch\(`\/api\$\{path\}`, options\) : fetch\(`\/api\$\{path\}`, options\)/);

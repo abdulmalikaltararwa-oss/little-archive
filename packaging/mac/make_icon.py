@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render web/icon.svg into a macOS .iconset (then `iconutil` makes the .icns).
+"""Render ui/public/icon.svg into a macOS .iconset (then `iconutil` makes the .icns).
 
 Runs inside the build virtual environment because it draws with AppKit (PyObjC).
 The icon is drawn from the vector at every size, inside the standard macOS icon

@@ -5,7 +5,9 @@ on:
   push:
     branches: [main]
     paths:
+      - 'ui/**'
       - 'web/**'
+      - 'LICENSE'
       - 'scripts/build_demo.py'
       - '.github/workflows/demo-pages.yml'
 
@@ -34,9 +36,20 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
-      - name: Check the shared interface and synthetic data
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Check the shared modules and synthetic data
         run: node --test web/*.test.mjs
+      - name: Install the interface's dependencies
+        run: npm ci --ignore-scripts
+        working-directory: ui
+      - name: Check the interface
+        run: npm test
+        working-directory: ui
+      - name: Build the interface
+        run: npm run build
+        working-directory: ui
       - name: Read Pages configuration
         uses: actions/configure-pages@v5
         with:
@@ -47,27 +60,46 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
+          # Checked here, apart from the build script that made the folder: this is the rule for what goes public.
           root = Path('dist-demo')
-          expected = {
-              'index.html', 'demo.js', 'demo-store.js', 'demo-data.js',
-              'app.js', 'utils.js', 'styles.css', 'icon.svg',
-              '.nojekyll', '.little-archive-demo-build', 'LICENSE',
-              'fonts/fraunces-soft.woff2', 'fonts/Fraunces-OFL.txt',
-          } | {f'demo-media/{number:03d}.webp' for number in range(1, 61)}
-          expected_dirs = {'fonts', 'demo-media'}
+          fixed = {'index.html', 'theme-init.js', 'icon.svg', 'LICENSE', '.nojekyll', '.little-archive-demo-build'}
+          hashed = re.compile(r'assets/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?|webp)')
           paths = list(root.rglob('*'))
           if any(path.is_symlink() for path in paths):
               raise SystemExit('The demo artifact must not contain symbolic links.')
           dirs = {str(path.relative_to(root)) for path in paths if path.is_dir()}
           files = [path for path in paths if not path.is_dir()]
-          actual = {str(path.relative_to(root)) for path in files}
-          if actual != expected or dirs != expected_dirs:
-              raise SystemExit(f'Unexpected demo artifact files: {sorted((actual ^ expected) | (dirs ^ expected_dirs))}')
+          names = {str(path.relative_to(root)) for path in files}
+          if dirs != {'assets'}:
+              raise SystemExit(f'Unexpected demo artifact folders: {sorted(dirs ^ {"assets"})}')
+          unexpected = sorted(name for name in names if name not in fixed and not hashed.fullmatch(name))
+          if unexpected:
+              raise SystemExit(f'Unexpected demo artifact files: {unexpected}')
+          if not fixed <= names:
+              raise SystemExit(f'Missing demo artifact files: {sorted(fixed - names)}')
           if any(not path.is_file() for path in files):
               raise SystemExit('The demo artifact must contain only regular files.')
-          print('Verified the synthetic demo artifact. No server or runtime data is included.')
+          media = [name for name in names if name.endswith('.webp')]
+          if len(media) != 60:
+              raise SystemExit(f'Expected the 60 synthetic demo images, found {len(media)}.')
+          # The demo has no backend and does not advertise the installable app.
+          installable = re.compile(r'(?:^|/)(?:manifest[.-]|apple-touch|icons/|share[.-])', re.I)
+          if any(installable.search(name) for name in names):
+              raise SystemExit('The demo artifact must not ship installable-app files.')
+          page = (root / 'index.html').read_text(encoding='utf-8')
+          if "connect-src 'none'" not in page or re.search(r'rel="(?:manifest|apple-touch-icon)"', page):
+              raise SystemExit('The demo page must forbid every connection and must not link the installable app.')
+          # No credential-shaped text in anything published.
+          for path in files:
+              if path.suffix in {'.js', '.css', '.html', '.svg'}:
+                  text = path.read_text(encoding='utf-8', errors='ignore')
+                  for needle in ('LA_ADMIN_PASSWORD', 'BEGIN PRIVATE KEY', 'secrets.env'):
+                      if needle in text:
+                          raise SystemExit(f'{path} mentions {needle}.')
+          print(f'Verified the synthetic demo artifact ({len(names)} files). No server or runtime data is included.')
           PY
       - name: Upload only the synthetic demo
         uses: actions/upload-pages-artifact@v4

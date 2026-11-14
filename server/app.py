@@ -28,7 +28,6 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -49,6 +48,7 @@ from .purchases.routes import install_routes as install_purchase_routes
 from .models import AccountDeletion, AIJobs, BulkAction, CollectionInput, CollectionPatch, DeviceLogin, ImportBatch, ImportFinish, ImportStart, ItemPatch, Login, NewItem, SettingsPatch, TokenInput
 from .security import RateLimiter, token_hash, verify_password
 from .storage import LibraryClosed, LibraryFull, Store, clean_tags, json_text, normalize_url, now
+from .webui import Interface, content_security_policy
 
 
 log = logging.getLogger("little_archive")
@@ -239,7 +239,9 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        # A page that carries its own nonce (see webui.py) keeps its policy; every other response gets the nonce-less one.
+        if "Content-Security-Policy" not in response.headers:
+            response.headers["Content-Security-Policy"] = content_security_policy()
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         if config.secure_cookies:
@@ -1006,15 +1008,20 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     install_purchase_routes(app, owner=owner, service=purchases, hosted_route=hosted_route, entitlements=entitlements)
 
     if not hosted:
-        # The bundled web UI signs in with the owner password, so a hosted service is API-only.
-        web = Path(__file__).resolve().parent.parent / "web"
+        # The bundled web interface signs in with the owner password, so a hosted service is API-only. It is the
+        # React app in ui/, built to static files (see webui.py for where the build is looked for).
+        interface = Interface()
 
-        # The installed app's share target (web/manifest.webmanifest) opens /share?title=&text=&url=. This is the
+        # The installed app's share target (manifest.webmanifest) opens /share?title=&text=&url=. This is the
         # ordinary static app: the server neither reads nor echoes those values, and a GET never saves anything.
         # The page itself prefills the save dialog and waits for the owner to tap Save.
+        @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+        @app.api_route("/index.html", methods=["GET", "HEAD"], include_in_schema=False)
         @app.api_route("/share", methods=["GET", "HEAD"], include_in_schema=False)
-        def share_target():
-            return FileResponse(web / "index.html", media_type="text/html")
+        def interface_page():
+            return interface.page()
 
-        app.mount("/", StaticFiles(directory=web, html=True), name="web")
+        files = interface.files()
+        if files is not None:
+            app.mount("/", files, name="web")
     return app

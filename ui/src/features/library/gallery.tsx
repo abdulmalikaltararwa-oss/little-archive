@@ -120,13 +120,15 @@ const SaveCard = memo(function SaveCard({ item, tile, index, total, compact, sel
         data-card-control="favorite"
         aria-pressed={item.favorite}
         aria-busy={pending || undefined}
-        disabled={pending}
+        // Not `disabled`: a disabled button that holds the keyboard's focus drops it, and the next key press would start from the top
+        // of the page. useBusy already refuses a second run while one is under way.
+        aria-disabled={pending || undefined}
         aria-label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
         title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
         onClick={() => void toggleFavorite()}
         className={cn(
           'hit-44 absolute end-3.5 top-3.5 z-[2] grid size-8 place-items-center rounded-full bg-card/92 text-ink-soft shadow-xs backdrop-blur-sm',
-          'transition-transform duration-200 ease-spring hov:scale-115 active:scale-90 disabled:opacity-70',
+          'transition-transform duration-200 ease-spring hov:scale-115 active:scale-90 aria-disabled:opacity-70',
           item.favorite && 'animate-pop bg-petal-pale text-petal-ink',
         )}
       >
@@ -271,6 +273,12 @@ export function Gallery() {
 /** Asks for the next page a little before the end of the wall is reached. The "Load more" button stays for the keyboard. */
 function AutoLoad({ archive }: { archive: ReturnType<typeof useArchive> }) {
   const node = useRef<HTMLDivElement>(null);
+  const list = useArchiveState(state => state.list);
+  const loaded = useArchiveState(state => state.items.length);
+  const busy = useArchiveState(state => state.busy);
+  // An observer reports only when the end of the wall comes into range or leaves it. If a page did not fill the screen
+  // (a wide window, a view without the banner) the end is already in range and would never report again, so the
+  // observer is made afresh whenever the list or its loading changes: a new one reports where things stand at once.
   useEffect(() => {
     const target = node.current;
     if (!target) return;
@@ -281,6 +289,6 @@ function AutoLoad({ archive }: { archive: ReturnType<typeof useArchive> }) {
     }, { rootMargin: '1200px 0px' });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [archive]);
+  }, [archive, list, loaded, busy]);
   return <div ref={node} aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-px" />;
 }

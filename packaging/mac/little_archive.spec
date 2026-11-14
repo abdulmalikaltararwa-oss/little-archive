@@ -22,8 +22,8 @@ analysis = Analysis(
     [str(HERE / "launcher_entry.py")],
     pathex=[str(ROOT), str(HERE)],
     binaries=[],
-    # The same static files the Docker image serves, and the license text.
-    datas=[(str(ROOT / "web"), "web"), (str(ROOT / "LICENSE"), ".")] + metadata,
+    # The built web interface (staged by scripts/build_mac_app.py), put where server/webui.py looks first, and the license text.
+    datas=[(os.environ["LITTLE_ARCHIVE_WEBUI"], "webui"), (str(ROOT / "LICENSE"), ".")] + metadata,
     hiddenimports=collect_submodules("server") + collect_submodules("uvicorn") + ["little_archive_mac.gui"],
     excludes=["tkinter", "_tkinter", "turtle", "idlelib", "lib2to3", "pydoc_data", "test", "unittest"],
     noarchive=False,

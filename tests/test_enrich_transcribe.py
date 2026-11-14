@@ -245,9 +245,10 @@ class SettingsTests(unittest.TestCase):
                 self.build(values)
 
     def test_no_cache_path_inside_the_public_web_directory(self):
-        web = Path(__file__).resolve().parent.parent / "web" / "cache.sqlite3"
-        with self.assertRaisesRegex(ValueError, "web directory"):
-            self.build({"LA_PUBLIC_CACHE_PATH": str(web)})
+        root = Path(__file__).resolve().parent.parent
+        for directory in ("web", "webui", "ui/dist"):
+            with self.subTest(directory=directory), self.assertRaisesRegex(ValueError, "web directory"):
+                self.build({"LA_PUBLIC_CACHE_PATH": str(root / directory / "cache.sqlite3")})
 
 
 class DoctorTests(unittest.TestCase):

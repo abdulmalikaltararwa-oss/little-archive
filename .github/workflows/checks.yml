@@ -5,6 +5,30 @@ on:
 permissions:
   contents: read
 jobs:
+  interface:
+    name: Interface (ui/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: ui
+      # Types, lint and the production build, in that order: the same command the Docker image runs.
+      - run: npm run build
+        working-directory: ui
+      - run: npm test
+        working-directory: ui
+      - name: Browser smoke test of the interface (the demo page, no server)
+        run: |
+          npx --no-install playwright install --with-deps chromium
+          npm run test:e2e
+        working-directory: ui
   test:
     runs-on: ubuntu-latest
     steps:
@@ -16,8 +40,15 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
       - run: pip install -r requirements.txt
+      # The server serves the built interface, and some tests (and the demo) need it.
+      - run: npm ci --ignore-scripts
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
       - run: python -m unittest discover -s tests -v
       - run: node --test extension/tests/*.test.mjs
       - run: node --test web/*.test.mjs
@@ -32,7 +63,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
       - run: npm ci
         working-directory: mobile
       - run: npm test
@@ -43,6 +74,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The image builds the interface itself (a Node stage), so the runner needs nothing but Docker.
       - run: docker build -t little-archive:test .
       - name: Container smoke test
         shell: bash
@@ -52,9 +84,18 @@ jobs:
           trap 'docker rm -f archive-test' EXIT
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://localhost:8787/api/health; then
-              exit 0
+              break
             fi
             sleep 1
+            if [ "$attempt" = 30 ]; then
+              docker logs archive-test
+              exit 1
+            fi
           done
-          docker logs archive-test
-          exit 1
+          # The image serves the React interface, with a policy that allows no inline styles, and not the old one.
+          page="$(curl --fail --silent --dump-header headers.txt http://localhost:8787/)"
+          grep -q '<div id="app">' <<<"$page"
+          grep -i '^content-security-policy:' headers.txt | grep -q "style-src 'self' 'nonce-"
+          ! grep -i '^content-security-policy:' headers.txt | grep -q "unsafe-inline"
+          curl --fail --silent http://localhost:8787/manifest.webmanifest | grep -q 'Little Archive'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8787/app.js)" = 404

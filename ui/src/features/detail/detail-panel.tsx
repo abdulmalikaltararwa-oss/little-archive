@@ -203,9 +203,11 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
         </span>
         <button
           type="button"
+          data-detail-focus="favorite"
           aria-pressed={item.favorite}
           aria-busy={favoriteBusy || undefined}
-          disabled={favoriteBusy}
+          // Not `disabled`: that would drop the keyboard's focus while the change is saved. useBusy refuses a second run.
+          aria-disabled={favoriteBusy || undefined}
           aria-label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
           title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
           onClick={() => void toggleFavorite()}
@@ -279,15 +281,16 @@ function Content({ item, setItem, dirty, setDirty, formId, panel }: { item: Item
           <Input value={draft.tags} dir="auto" placeholder="Separate topics with commas" data-detail-focus="tags" onChange={event => edit('tags', event.target.value)} />
         </Field>
         <Field label="Progress"><Pick<Status> value={draft.status} options={STATUS_OPTIONS} focusKey="status" onChange={value => edit('status', value)} /></Field>
-        <CheckRow checked={draft.review} focusKey="review" onChange={value => edit('review', value)}>Keep in Needs review</CheckRow>
+        {/* Its label reaches into the panel's padding, so the small box has a finger-sized area on every side. */}
+        <CheckRow checked={draft.review} focusKey="review" onChange={value => edit('review', value)} className="-mx-3 px-3">Keep in Needs review</CheckRow>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1.5 text-sm font-semibold text-ink">Local collections</legend>
-          <div className="max-h-44 overflow-y-auto rounded-md border border-line px-3.5">
+          <div className="max-h-44 overflow-y-auto rounded-md border border-line">
             {locals.length ? locals.map(collection => (
               <div key={collection.id} className="border-b border-line last:border-b-0">
-                <CheckRow checked={draft.collections.includes(collection.id)} onChange={on => edit('collections', on ? [...draft.collections, collection.id] : draft.collections.filter(id => id !== collection.id))}>{collection.name}</CheckRow>
+                <CheckRow checked={draft.collections.includes(collection.id)} onChange={on => edit('collections', on ? [...draft.collections, collection.id] : draft.collections.filter(id => id !== collection.id))} className="px-3.5">{collection.name}</CheckRow>
               </div>
-            )) : <p className="py-3 text-xs text-ink-soft">Create a local collection from the sidebar to organize your saves.</p>}
+            )) : <p className="px-3.5 py-3 text-xs text-ink-soft">Create a local collection from the sidebar to organize your saves.</p>}
           </div>
         </fieldset>
         {/* The visible Save button lives in the panel's footer, so it is always in reach. This one lets Enter submit. */}
@@ -417,8 +420,12 @@ export function DetailPanel() {
     archive.api.item(id).then(
       item => {
         if (stale) return;
+        // Where the keyboard is, if it is already inside the form: the form starts again from the full record, and the
+        // control that held focus is replaced, so focus is put back on its successor rather than left on the page.
+        const held = panel.current?.contains(document.activeElement) ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-detail-focus]')?.dataset.detailFocus : undefined;
         // Edits typed in the instant before the full record arrived are kept: the form is only restarted when it is clean.
         setLoaded(current => { const base = current.id === id ? current.version : 0; return { id, item, error: '', version: dirtyRef.current ? base : base + 1 }; });
+        if (held && !dirtyRef.current) requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>(`[data-detail-focus="${held}"]`)?.focus({ preventScroll: true }));
       },
       error => { if (!stale) setLoaded(current => ({ id, item: current.id === id ? current.item : null, error: errorMessage(error), version: current.id === id ? current.version : 0 })); },
     );

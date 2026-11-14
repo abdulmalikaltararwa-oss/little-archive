@@ -224,15 +224,6 @@
   button:disabled {
     cursor: not-allowed;
   }
-
-  /* iOS zooms into any field whose text is under 16px. On touch, fields are 16px. */
-  @media (pointer: coarse) {
-    input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']),
-    textarea,
-    select {
-      font-size: 16px;
-    }
-  }
 }
 
 @layer components {
@@ -300,6 +291,33 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* iOS zooms into any field whose text is under 16px. On touch, fields are 16px. This sits outside every layer on
+   purpose: a field's own text-base (15px) is a utility, and utilities would otherwise win over a base rule. */
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* The page's first frame, before the app has started. Classes rather than style attributes: the server's
+   style policy (style-src 'self' plus a nonce) does not allow inline style attributes. */
+.boot {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+}
+.boot h1 {
+  font-size: 1.6rem;
+  margin: 0.8rem 0 0.3rem;
+}
+.boot-note {
+  padding: 30px;
 }
 
 /* Shared-element movement between a card and its detail. The browser animates; nothing is measured in JS. */

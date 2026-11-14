@@ -1,6 +1,8 @@
 # Self-hosting
 
-Little Archive runs one private owner library per instance. Its web UI and API are served together. SQLite and local thumbnails persist in the configured data directory.
+Little Archive runs one private owner library per instance. Its web interface (a React app, built from `ui/`) and its API are served together. SQLite and local thumbnails persist in the configured data directory.
+
+The interface is built once into static files, and the server only serves them. **Docker users need nothing extra**: the image builds the interface itself and ships only the built files. A native Python install builds it with Node, as described [below](#build-the-web-interface-native-installs).
 
 The repository is in development toward 1.0. Use the [release gates](release-gates.md) and [verification record](verification.md) to distinguish completed checks from pending acceptance before choosing a build for your library.
 
@@ -41,6 +43,8 @@ docker compose up -d --build
 
 Open `http://localhost:8787`. Keep the generated owner password private. Check service output with `docker compose logs` if startup fails. Do not paste unredacted environment files or credentials into public issues.
 
+The image is built in two stages: a Node 24 stage runs `npm ci && npm run build` in `ui/`, and the final Python image copies only the built files (to `/app/webui`). It contains no Node, no npm packages, and no interface source. The build needs network access to the npm registry; run it on the machine that has it.
+
 The setup helper creates `.env` with owner-only permissions and refuses to overwrite an existing file. Retain that configuration with the checkout. The default container runs as a non-root user, has a read-only root filesystem, drops Linux capabilities, and stores the library in the named `archive-data` volume mounted at `/data`. Its `/tmp` is temporary. In Compose, `LA_DATA_DIR` is explicitly `/data`; changing the native `LA_DATA_DIR=./data` line in `.env` does not move the Docker volume.
 
 The default host binding is loopback. Keep the same checkout directory and Compose project name during updates: the project name determines the named-volume identity. If you move the checkout or choose another project name, deliberately attach the existing volume or restore a backup; an empty new project is a separate library.
@@ -63,9 +67,49 @@ Use Python 3.12, the packaged and CI runtime. Verify other Python versions separ
 ```sh
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+(cd ui && npm ci && npm run build)    # Node 22 or newer; see the next section
 python3 scripts/setup.py
 .venv/bin/python -m server.cli serve
 ```
+
+### Build the web interface (native installs)
+
+The server does not render the interface; it serves files built from `ui/`. From a checkout, with Node 22 or newer (the project's CI and Docker image use Node 24):
+
+```sh
+cd ui
+npm ci            # installs exactly what package-lock.json names
+npm run build     # type check, lint, then the production build into ui/dist
+```
+
+The server looks for a build in this order and uses the first folder that has an `index.html`:
+
+1. `webui/` beside `server/`. This is where the Docker image and the Mac app put the build they were made with.
+2. `ui/dist/` in a checkout, which is what the commands above make.
+
+If there is no build, the server still starts and the API (the phone app and the browser extension only need it) works, but every page answers with one line saying to run `npm ci && npm run build` in `ui/`, and the same sentence is logged at startup. Restart the server after building. A rebuild of an existing build is picked up for the page without a restart, but restart anyway after an upgrade so the server and the files agree. Hosted mode (`LA_MODE=hosted`) serves no interface at all and is not affected.
+
+Rebuild after every update of the checkout. The build is plain static files: nothing in `ui/` runs on the server, and `node_modules` can be deleted afterwards.
+
+### Map tiles for Places
+
+The Places screen draws a paper map and, only if a tile server is named, real map tiles. Nothing is requested from a tile server by default: a tile request tells that server the viewer's address and roughly where on Earth they are looking.
+
+Name a tile server for everyone who uses this instance when you build the interface (the values are fixed into the build, not read at run time):
+
+```sh
+cd ui
+VITE_LA_TILE_URL='https://tiles.example.org/{z}/{x}/{y}.png' \
+VITE_LA_TILE_ATTRIBUTION='Map data © your tile provider' \
+npm run build
+```
+
+The address must contain `{z}`, `{x}` and `{y}` (`{s}` and `{r}` are accepted). The attribution is shown on the map whenever tiles are, so use the wording your provider requires. An owner can also choose a server per browser from the Places screen; that choice is kept in that browser only and takes precedence over the build's. With Docker, add the two values to the `.env` beside `compose.yaml` and rebuild (`docker compose up -d --build`); `compose.yaml` passes them to the interface build. They are fixed into the image, so the published image (`compose.image.yaml`) names no tile server and cannot be given one; each owner can still choose a tile server for their own browser from the Places screen. An address that does not pass the checks above is ignored rather than half-used.
+
+Two things about how the server is configured affect which tile servers work:
+
+- **Tiles must be `https:`.** The page's policy allows images from `'self'`, `data:` and `https:` only (`img-src 'self' data: https:`), so a tile server on plain `http://` is blocked by the browser. The only exception is the interface's own check, which accepts `http://` for a tile server on this machine (`localhost`), but the policy still blocks it from the page. Put a local tile server behind HTTPS.
+- **Some public tile servers refuse requests with no referrer.** The server sends `Referrer-Policy: no-referrer`, so the browser sends no `Referer` header with a tile request, and some public servers (the OpenStreetMap Foundation's among them, for heavy or unidentified use) ask that applications identify themselves and may return an error instead of a tile. This was not tested against any external tile server. If the map stays blank, check the browser's network panel for refused tile requests, and use a provider whose terms suit an application with no referrer, or your own tile server.
 
 The CLI loads `.env` without requiring a separate dotenv package; variables already present in the process environment take precedence. The important settings are listed below; the Docker setup uses the same application configuration.
 
@@ -111,6 +155,8 @@ An HTTP public URL is accepted only for a loopback instance. Use HTTPS for a net
 
 Terminate HTTPS at a reverse proxy you administer and forward to the application's internal port. Preserve the original host and configure proxy trust deliberately. Do not expose the upstream container port publicly as an alternate unauthenticated or plain-HTTP route.
 
+The page (`/`, and the same page at `/share`) carries a fresh value in its `Content-Security-Policy` header and in the page itself on every response, which is what lets the interface use styles without the policy allowing every inline style (`style-src 'self' 'nonce-…'`). So: do not cache those pages, do not add a second `Content-Security-Policy` header of your own that is stricter about styles than the application's, and do not rewrite the page. Files under `/assets/` have hashed names and are served with a one-year `immutable` cache lifetime; everything else is revalidated.
+
 Set `LA_PUBLIC_URL=https://archive.example.com`, use your own DNS and certificate configuration, and test login, a state-changing action, a file import, and the extension connection through the public address. A working health endpoint alone does not verify the full deployment.
 
 Native apps sign in with a device token sent as `Authorization: Bearer`. The application therefore treats any bearer value in that header as a presented credential and answers `401` if it is not a valid device token, even when a browser session cookie is present. If your proxy adds its own `Authorization: Bearer` header (some single-sign-on proxies can), configure it not to forward that header to the application. Basic authentication at the proxy is unaffected.
@@ -155,10 +201,11 @@ docker compose ps
 
 The image build does not open the live SQLite volume. After replacement, verify login, total and collection counts, a note, Unicode search, a local thumbnail, and a new backup. Keep the previous backup until the updated instance is confirmed usable.
 
-For native Python, stop the server **before switching the checkout or replacing dependencies**, install the selected revision's requirements into the virtual environment, then restart:
+For native Python, stop the server **before switching the checkout or replacing dependencies**, install the selected revision's requirements into the virtual environment, rebuild the interface, then restart:
 
 ```sh
 .venv/bin/pip install -r requirements.txt
+(cd ui && npm ci && npm run build)
 .venv/bin/python -m server.cli serve
 ```
 

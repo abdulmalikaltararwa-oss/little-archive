@@ -2,6 +2,8 @@
 .env.*
 !.env.example
 data/
+# The React interface's data layer lives in ui/src/data; the rule above is for runtime data directories.
+!/ui/src/data/
 restored-data/
 backups/
 *.sqlite*

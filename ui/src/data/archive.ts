@@ -67,6 +67,10 @@ export interface HistoryPort {
 }
 
 export function browserHistory(): HistoryPort {
+  // Closing a save is a Back step, and by default the browser would then put the page back where it was when the save
+  // was opened, undoing anything the wall did meanwhile to keep the reading position (a rename that reorders the list).
+  // The wall is drawn from data and holds its own place, so the browser's saved scroll positions are not wanted.
+  try { history.scrollRestoration = 'manual'; } catch { /* A browser without the setting keeps its default. */ }
   return {
     hash: () => location.hash,
     write(hash, mode, mark) {
@@ -343,18 +347,28 @@ export function createArchive({ backend, history = browserHistory(), notify = ()
     return true;
   }
 
+  // One Back is reported twice by a browser (popstate, then hashchange). While the first is being decided, which can
+  // mean waiting for an answer about unsaved edits, the second is the same step and is ignored: answering two questions
+  // would put the open save back twice and leave a copy of it in the history.
+  let deciding = false;
   const stopListening = history.listen(() => {
+    if (deciding) return;
+    deciding = true;
     void (async () => {
-      const next = parseHash(history.hash());
-      const previous = here;
-      if (sameLoc(next, previous)) return;
-      if (previous.item && next.item !== previous.item && !(await passGuard())) {
-        // Back was pressed over unsaved edits and the person chose to stay: put the open save back.
-        history.write(formatHash(previous), 'push', 'item');
-        return;
+      try {
+        const next = parseHash(history.hash());
+        const previous = here;
+        if (sameLoc(next, previous)) return;
+        if (previous.item && next.item !== previous.item && !(await passGuard())) {
+          // Back was pressed over unsaved edits and the person chose to stay: put the open save back.
+          history.write(formatHash(previous), 'push', 'item');
+          return;
+        }
+        if (previous.item && !next.item) leaveGuard = null;
+        applyLoc(next);
+      } finally {
+        deciding = false;
       }
-      if (previous.item && !next.item) leaveGuard = null;
-      applyLoc(next);
     })();
   });
 

@@ -18,7 +18,7 @@ test('local previews persist and a downloaded backup contains verified data and 
   const uploaded = await persistedResponse.json();
   expect(uploaded.thumbnail_url).toMatch(/^\/api\/assets\/[0-9a-f]{64}$/);
   const absoluteThumbnail = new URL(uploaded.thumbnail_url, page.url()).href;
-  const image = saved.detail.locator('.detail-preview img');
+  const image = saved.detail.locator('img');
   await expect(image).toHaveAttribute('src', absoluteThumbnail);
   await expect.poll(() => image.evaluate(element => ({ loaded: element.complete, width: element.naturalWidth, height: element.naturalHeight })) ).toEqual({ loaded: true, width: 4, height: 4 });
   const asset = await context.request.get(uploaded.thumbnail_url);
@@ -29,8 +29,8 @@ test('local previews persist and a downloaded backup contains verified data and 
   await page.reload();
   await waitForItems(page);
   const persisted = await openItem(page, title);
-  await expect(persisted.locator('.detail-preview img')).toHaveAttribute('src', absoluteThumbnail);
-  await expect.poll(() => persisted.locator('.detail-preview img').evaluate(element => element.complete && element.naturalWidth === 4)).toBe(true);
+  await expect(persisted.locator('img')).toHaveAttribute('src', absoluteThumbnail);
+  await expect.poll(() => persisted.locator('img').evaluate(element => element.complete && element.naturalWidth === 4)).toBe(true);
   await expect(persisted.getByLabel('Your notes', { exact: true })).toHaveValue(notes);
   await closeDialog(persisted);
 
@@ -56,6 +56,6 @@ test('local previews persist and a downloaded backup contains verified data and 
   const detail = await openItem(page, title);
   const removed = await apiAction(page, 'DELETE', `/api/items/${saved.item.id}/thumbnail`, () => detail.getByRole('button', { name: 'Remove preview', exact: true }).click());
   expect((await removed.json()).thumbnail_url).toBeNull();
-  await expect(detail.locator('.detail-preview img')).toHaveCount(0);
+  await expect(detail.locator('img')).toHaveCount(0);
   await expect(detail.getByRole('button', { name: 'Add a local preview', exact: true })).toBeVisible();
 });

@@ -5,6 +5,8 @@ import re
 import unicodedata
 from urllib.parse import urlsplit
 
+from .webui import is_public
+
 
 SELF_HOSTED, HOSTED = "self-hosted", "hosted"
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
@@ -136,8 +138,7 @@ class Config:
         )
 
     def validate(self):
-        public_files = (Path(__file__).resolve().parent.parent / "web").resolve()
-        if Path(self.data_dir).resolve().is_relative_to(public_files):
+        if is_public(self.data_dir):
             raise ValueError("LA_DATA_DIR must be outside the public web directory.")
         if any(unicodedata.category(c) in {"Cc", "Cs", "Zl", "Zp"} for c in self.public_url) or len(self.public_url) > 2048:
             raise ValueError("Use a bounded public origin without control characters.")

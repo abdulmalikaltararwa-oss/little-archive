@@ -53,13 +53,14 @@ export function Section({ title, children, className, id, ...props }: { title: s
   );
 }
 
-export function CheckRow({ checked, onChange, children, disabled, focusKey }: { checked: boolean; onChange(next: boolean): void; children: ReactNode; disabled?: boolean; focusKey?: string }) {
+/** A checkbox with its words. The label is the whole row, padding included, so a thumb that misses the small box still lands. */
+export function CheckRow({ checked, onChange, children, disabled, focusKey, className }: { checked: boolean; onChange(next: boolean): void; children: ReactNode; disabled?: boolean; focusKey?: string; className?: string }) {
   const id = useId();
   return (
-    <div className="flex min-h-11 items-center gap-3">
+    <label htmlFor={id} className={cn('flex min-h-11 cursor-pointer items-center gap-3', disabled && 'cursor-default', className)}>
       <Checkbox id={id} checked={checked} disabled={disabled} data-detail-focus={focusKey} onCheckedChange={next => onChange(next === true)} />
-      <label htmlFor={id} className="min-w-0 flex-1 py-2 text-sm text-ink" dir="auto">{children}</label>
-    </div>
+      <span className="min-w-0 flex-1 py-2 text-sm text-ink" dir="auto">{children}</span>
+    </label>
   );
 }
 

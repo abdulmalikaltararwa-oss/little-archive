@@ -1,6 +1,6 @@
 # Architecture
 
-Little Archive is a single-owner web application with a small self-hosted server, SQLite storage, a buildless frontend, and an optional Chrome extension.
+Little Archive is a single-owner web application with a small self-hosted server, SQLite storage, a React web interface (the app in `ui/`, built into static files that the server serves), and an optional Chrome extension.
 
 ```mermaid
 flowchart TD

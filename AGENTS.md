@@ -1,7 +1,7 @@
 # Working on Little Archive
 
 Little Archive is a single-owner saved-content library. It uses Python 3.12,
-SQLite, plain browser ES modules, and a Chrome MV3 companion extension. This is
+SQLite, a React web interface (`ui/`, built with Vite and served by the server), and a Chrome MV3 companion extension. This is
 development toward v1; do not describe planned features as released.
 
 ## Choose the requested task
@@ -63,6 +63,7 @@ Run checks that address the changed behavior:
 .venv/bin/python -m unittest discover -s tests -v
 node --test extension/tests/*.test.mjs
 node --test web/*.test.mjs
+(cd ui && npm run build && npm test)   # the web interface; the server serves ui/dist
 npm run test:e2e:infra
 ```
 
@@ -84,7 +85,7 @@ permissions, or migration behavior incidentally to an unrelated change. Keep
 credentials and personal data outside the public UI directory and source package.
 Use explicit recovery/update operations instead of overwriting existing data.
 
-Use the existing UI and small dependency set. Add meaningful regression coverage
+Use the existing UI (`ui/DESIGN.md` is its direction and rules) and small dependency set. Build it with `npm ci && npm run build` in `ui/` before starting a server or running the Python tests. Add meaningful regression coverage
 for data loss, compatibility, permission, recovery, or navigation failures.
 Update the relevant task guide with a behavior change. In reports, state what
 changed, what was exercised, and which release gates still lack evidence.

@@ -7,6 +7,7 @@ on:
     paths:
       - 'server/**'
       - 'web/**'
+      - 'ui/**'
       - 'extension/**'
       - 'tests/**'
       - 'scripts/**'
@@ -41,8 +42,15 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
       - run: pip install -r requirements.txt
+      # The server serves the built interface, so a job that runs the server for real builds it first.
+      - run: npm ci --ignore-scripts
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - run: npm test
+        working-directory: ui
       - run: python -m unittest discover -s tests -v
       - run: node --test extension/tests/*.test.mjs web/*.test.mjs
       - run: npm run test:e2e:infra
@@ -66,10 +74,15 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: pip install -r requirements.txt
       - run: npm ci --ignore-scripts
+      # The server serves the built interface, so a job that runs the server for real builds it first.
+      - run: npm ci --ignore-scripts
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
       - run: npx --no-install playwright install --with-deps ${{ matrix.browser }}
       - name: Exercise the authenticated application
         run: npm run test:e2e -- --project=${{ matrix.browser }}
@@ -98,7 +111,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: pip install -r requirements.txt
       - run: npm ci --ignore-scripts
@@ -170,6 +183,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      # The server serves the built interface, so a job that runs the server for real builds it first.
+      - run: npm ci --ignore-scripts
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
       - name: Install into a clean native environment
         run: |
           python -m venv .venv
@@ -248,10 +269,15 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: pip install -r requirements.txt
       - run: npm ci --ignore-scripts
+      # The server serves the built interface, so a job that runs the server for real builds it first.
+      - run: npm ci --ignore-scripts
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
       - run: npx --no-install playwright install --with-deps chromium
       - name: Start a disposable CPU inference service
         run: docker run -d --name archive-model-check -p 127.0.0.1:11434:11434 ollama/ollama:0.40.16

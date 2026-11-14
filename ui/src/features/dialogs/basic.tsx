@@ -26,12 +26,12 @@ function CollectionChecklist({ value, onChange }: { value: string[]; onChange(ne
   return (
     <fieldset className="flex flex-col">
       <legend className="mb-1.5 text-sm font-semibold text-ink">Collections</legend>
-      <div className="max-h-40 overflow-y-auto rounded-md border border-line px-3.5">
+      <div className="max-h-40 overflow-y-auto rounded-md border border-line">
         {locals.length ? locals.map(collection => (
           <div key={collection.id} className="border-b border-line last:border-b-0">
-            <CheckRow checked={value.includes(collection.id)} onChange={on => onChange(on ? [...value, collection.id] : value.filter(id => id !== collection.id))}>{collection.name}</CheckRow>
+            <CheckRow checked={value.includes(collection.id)} onChange={on => onChange(on ? [...value, collection.id] : value.filter(id => id !== collection.id))} className="px-3.5">{collection.name}</CheckRow>
           </div>
-        )) : <p className="py-3 text-xs text-ink-soft">Create a local collection from the sidebar to organize your saves.</p>}
+        )) : <p className="px-3.5 py-3 text-xs text-ink-soft">Create a local collection from the sidebar to organize your saves.</p>}
       </div>
     </fieldset>
   );

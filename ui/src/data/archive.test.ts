@@ -2,7 +2,7 @@
 // behaviours the buildless interface's browser tests assert: page sizes, keeping the loaded window, the newest
 // request winning, focus-free navigation state, and leaving a save with unsaved edits.
 import { describe, expect, it, vi } from 'vitest';
-import { createArchive, memoryHistory, PAGE, type Archive } from './archive';
+import { browserHistory, createArchive, memoryHistory, PAGE, type Archive } from './archive';
 import type { Backend } from './backend';
 import type { Item } from './types';
 
@@ -253,6 +253,44 @@ describe('moving around', () => {
     guard.mockResolvedValue(true);
     expect(await archive.closeItem()).toBe(true);
     expect(state().loc.item).toBe('');
+  });
+
+  it('leaves scroll positions to the wall, not to the browser, so closing a save never moves the page', () => {
+    browserHistory();
+    expect(history.scrollRestoration).toBe('manual');
+  });
+
+  it('asks once when one Back is reported twice, as a browser does with popstate and hashchange', async () => {
+    const base = memoryHistory();
+    const listeners = new Set<() => void>();
+    const twice = {
+      ...base,
+      listen(listener: () => void) { listeners.add(listener); const stop = base.listen(listener); return () => { listeners.delete(listener); stop(); }; },
+      back() { base.back(); for (const listener of listeners) listener(); },
+    };
+    const world = server(50);
+    const archive = createArchive({ backend: world.backend, history: twice });
+    await archive.boot();
+    await archive.openItem('item-3');
+    let answer!: (leave: boolean) => void;
+    const guard = vi.fn(() => new Promise<boolean>(resolve => { answer = resolve; }));
+    archive.setLeaveGuard(guard);
+    twice.back();
+    await tick();
+    expect(guard).toHaveBeenCalledTimes(1);
+    answer(false);
+    await tick();
+    // Staying puts the save back as the one step Back had left, not as a second copy of it.
+    expect(archive.store.getState().loc.item).toBe('item-3');
+    expect(base.entries).toEqual(['', '#/?item=item-3']);
+    twice.back();
+    await tick();
+    expect(guard).toHaveBeenCalledTimes(2);
+    answer(true);
+    await tick();
+    expect(archive.store.getState().loc.item).toBe('');
+    expect(base.entries).toEqual(['', '#/?item=item-3']);
+    expect(base.hash()).toBe('');
   });
 
   it('welcomes a save that was just added when its detail is closed', async () => {

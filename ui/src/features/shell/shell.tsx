@@ -29,9 +29,13 @@ export function DemoBanner() {
   );
 }
 
-function TopBar() {
+/**
+ * The bar is as tall as its content plus the status bar or notch it sits under, so the brand and the buttons keep their
+ * 4rem (5rem on a wide screen). The demo's banner above it already pads for that inset, so with the banner the bar does not.
+ */
+function TopBar({ demo }: { demo: boolean }) {
   return (
-    <header className="flex h-16 items-center justify-between gap-3 px-4 pt-[var(--safe-top)] sm:px-6 lg:h-20 lg:px-10">
+    <header className={cn('flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-10', demo ? 'h-16 lg:h-20' : 'h-[calc(4rem+var(--safe-top))] pt-[var(--safe-top)] lg:h-[calc(5rem+var(--safe-top))]')}>
       <div className="lg:hidden"><Brand small /></div>
       <p className="display hidden text-lg font-normal text-ink-soft lg:block">A little space for everything you love</p>
       <div className="flex items-center gap-2">
@@ -130,7 +134,7 @@ export function Shell({ children, demo }: { children: ReactNode; demo: boolean }
       </aside>
       <div className="min-w-0">
         {demo ? <DemoBanner /> : null}
-        <TopBar />
+        <TopBar demo={demo} />
         <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--dock)+var(--safe-bottom)+40px)] outline-none sm:px-6 lg:px-10 lg:pb-14">
           {children}
         </main>

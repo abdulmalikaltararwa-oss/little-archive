@@ -1,6 +1,8 @@
 .git
 .env
 .env.*
+# Patterns here are matched from the root of the build context, so `data` is the runtime data folder only and does
+# not touch ui/src/data (the interface's data layer, which the interface build needs).
 data
 restored-data
 backups
@@ -12,10 +14,19 @@ __pycache__
 *.zip
 .venv
 node_modules
+**/node_modules
 tests
 test-results
 playwright-report
 blob-report
 dist-demo
+.demo-build-*
 dist-mac
 .mac-build
+# What the image does not need: the interface is built inside the image, from ui/ and web/ only.
+ui/dist
+ui/test-results
+ui/playwright-report
+mobile
+extension
+design-preview

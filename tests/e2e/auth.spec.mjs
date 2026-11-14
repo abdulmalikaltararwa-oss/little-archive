@@ -1,4 +1,4 @@
-import { test, expect, apiAction, login, settings, uniqueName, waitForItems } from './fixtures.mjs';
+import { test, expect, apiAction, login, saveButton, settings, uniqueName, waitForItems } from './fixtures.mjs';
 
 test('owner sign-in, strict session cookies, CSRF defenses, reload and sign-out use the real server', async ({ page, context, browser, baseURL }) => {
   await page.goto('/');
@@ -75,7 +75,7 @@ test('a revoked session returns the browser to sign-in without committing an edi
   const revoked = await context.request.post('/api/auth/logout', { headers: { 'X-CSRF-Token': auth.csrf_token, Origin: baseURL } });
   expect(revoked.status()).toBe(200);
   // The page still has its previous in-memory session state. Exercise a real UI write.
-  await page.locator('.topbar').getByRole('button', { name: 'Save a link', exact: true }).click();
+  await saveButton(page).click();
   const dialog = page.getByRole('dialog', { name: 'Save a little discovery', exact: true });
   const title = uniqueName('Expired session must not save');
   await dialog.getByLabel('Link', { exact: true }).fill(`https://example.com/${title.replaceAll(' ', '-')}`);
@@ -88,4 +88,26 @@ test('a revoked session returns the browser to sign-in without committing an edi
   await login(page);
   const items = await (await context.request.get('/api/items', { params: { q: title } })).json();
   expect(items.total).toBe(0);
+});
+
+// The sign-in screen's flower field is drawn at random, so what is checked is the layout that keeps it off the logo: on a
+// wide screen the field starts below the row the logo sits in, at every window size.
+test('the sign-in screen keeps its flowers clear of the logo on wide screens', async ({ page }) => {
+  for (const [width, height] of [[1024, 768], [1280, 720], [1440, 900], [1920, 1080], [2560, 1300]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Your archive awaits.' })).toBeVisible();
+    const field = page.getByRole('region', { name: 'About Little Archive' }).locator('canvas');
+    await expect(field).toHaveCount(1);
+    const wordmark = await page.getByText('little archive', { exact: true }).boundingBox();
+    const mark = await field.boundingBox();
+    expect(mark.y, `${width}x${height}: the field starts at ${mark.y}, the logo ends at ${wordmark.y + wordmark.height}`).toBeGreaterThanOrEqual(wordmark.y + wordmark.height);
+  }
+  // On a phone the field sits beside the headline, to the right of the logo's words.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your archive awaits.' })).toBeVisible();
+  const phoneWordmark = await page.getByText('little archive', { exact: true }).boundingBox();
+  const phoneField = await page.getByRole('region', { name: 'About Little Archive' }).locator('canvas').boundingBox();
+  expect(phoneField.x).toBeGreaterThanOrEqual(phoneWordmark.x + phoneWordmark.width - 1);
 });

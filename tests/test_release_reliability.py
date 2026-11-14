@@ -102,15 +102,22 @@ class DeploymentHardeningTests(unittest.TestCase):
             Config(data_dir=Path(folder), public_url="http://localhost:8787", testing=False).validate()
 
     def test_data_directory_cannot_be_served_as_public_static_files(self):
-        web = Path(__file__).resolve().parents[1] / "web"
-        for path in (web, web / "data"):
-            with self.subTest(path=path), self.assertRaises(ValueError):
-                Config(data_dir=path).validate()
+        root = Path(__file__).resolve().parents[1]
+        # The interface that is served (ui/dist in a checkout, webui in an image or app bundle), and the old one in web.
+        public = (root / "ui" / "dist", root / "webui", root / "web")
+        for directory in public:
+            for path in (directory, directory / "data"):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    Config(data_dir=path).validate()
         with TemporaryDirectory() as folder:
-            alias = Path(folder) / "public-web-alias"
-            alias.symlink_to(web, target_is_directory=True)
-            with self.assertRaises(ValueError):
-                Config(data_dir=alias / "data").validate()
+            for directory in public:
+                alias = Path(folder) / f"public-alias-{directory.name}"
+                alias.symlink_to(directory, target_is_directory=True)
+                with self.subTest(alias=alias), self.assertRaises(ValueError):
+                    Config(data_dir=alias / "data").validate()
+        # The interface's source folder is not served, so a sibling of it is no problem.
+        with TemporaryDirectory() as folder:
+            Config(data_dir=Path(folder) / "ui-data", public_url="http://localhost:8787").validate()
 
     def test_private_model_request_ignores_ambient_proxy_configuration(self):
         from server.classifier import classify_item

@@ -16,6 +16,7 @@ from . import __version__
 from .config import Config
 from .configuration import read_env_values
 from .security import validate_password
+from .webui import is_public
 
 
 CONFIG_KEYS = ("LA_ADMIN_PASSWORD", "LA_DATA_DIR", "LA_PUBLIC_URL", "LA_OLLAMA_URL", "LA_OLLAMA_MODEL", "LA_MODE", "LA_SUPABASE_URL")
@@ -151,7 +152,7 @@ def diagnose(*, env_file=Path(".env"), environment=None, check_ai=False, check_p
             checks.append(check("dependency_" + name.lower(), "failed", "dependency_missing", "A required application package is missing.", "Install requirements.txt using the selected Python environment.", package=name))
     values = {}
     try:
-        if Path(env_file).resolve().is_relative_to((Path(__file__).resolve().parent.parent / "web").resolve()):
+        if is_public(env_file):
             raise ValueError("Configuration is in the public directory.")
         values = read_env_values(env_file)
         checks.append(check("configuration_file", "passed" if Path(env_file).exists() else "warning", "configuration_read" if Path(env_file).exists() else "configuration_absent", "Configuration values were read without executing expansions." if Path(env_file).exists() else "No configuration file was found; environment values and defaults are being inspected."))

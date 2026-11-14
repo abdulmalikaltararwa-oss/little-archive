@@ -180,7 +180,9 @@ test('a screen the demo cannot offer says so instead of pretending', async ({ pa
   await page.goto('/demo.html#/ask');
   await expect(page.getByRole('heading', { name: 'Not in the demo' })).toBeVisible();
   await page.goto('/demo.html#/unlock');
-  await expect(page.getByRole('heading', { level: 1, name: 'Everything is open.' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Free on your own server.' })).toBeVisible();
+  // Nothing is claimed to be open or locked in a demo that has no account.
+  await expect(page.getByText('not in the demo').first()).toBeVisible();
 });
 
 test('on a phone the dock navigates and the new view takes focus', async ({ page }) => {

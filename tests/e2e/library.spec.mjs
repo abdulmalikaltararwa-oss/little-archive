@@ -1,4 +1,7 @@
-import { test, expect, apiAction, chooseSource, chooseView, closeDialog, createCollection, login, openItem, saveLink, search, uniqueName, waitForItems } from './fixtures.mjs';
+import {
+  test, expect, apiAction, cards, cardTitles, chooseSource, chooseTopic, chooseView, closeDialog, collectionButton, chooseColor, createCollection,
+  detailPanel, login, navigation, openItem, pick, saveLink, search, sortBy, uniqueName, waitForItems,
+} from './fixtures.mjs';
 
 test('links, notes, topics, favorites, progress and collections survive editing and reload', async ({ page, context }) => {
   await login(page);
@@ -17,18 +20,21 @@ test('links, notes, topics, favorites, progress and collections survive editing 
   });
   expect(saved.item.url).toBe(`https://example.com/e2e/${key}/noodles`);
   expect(saved.item.platform).toBe('web');
+  // The address names the open save, so it can be bookmarked and reloaded.
+  await expect(page).toHaveURL(new RegExp(`item=${saved.item.id}`));
   await apiAction(page, 'PATCH', `/api/items/${saved.item.id}`, () => saved.detail.getByRole('button', { name: 'Add to favorites', exact: true }).click());
   await expect(saved.detail.getByRole('button', { name: 'Remove from favorites', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await saved.detail.getByLabel('Title', { exact: true }).fill(title);
   await saved.detail.getByLabel('Summary', { exact: true }).fill(summary);
   await saved.detail.getByLabel('Your notes', { exact: true }).fill(notes);
   await saved.detail.getByLabel('Topics', { exact: true }).fill('food, weekday cooking, تعلم');
-  await saved.detail.getByLabel('Progress', { exact: true }).selectOption('to_revisit');
+  await pick(saved.detail, page, 'Progress', 'To revisit');
   await saved.detail.getByLabel('Keep in Needs review', { exact: true }).uncheck();
   await apiAction(page, 'PATCH', `/api/items/${saved.item.id}`, () => saved.detail.getByRole('button', { name: 'Save changes', exact: true }).click());
   await expect(saved.detail.getByLabel('Your notes', { exact: true })).toHaveValue(notes);
-  await expect(saved.detail.locator('.detail-title')).toHaveText(title);
+  await expect(saved.detail.getByRole('heading', { level: 2, name: title, exact: true })).toBeVisible();
   await closeDialog(saved.detail);
+  await expect(page).not.toHaveURL(/item=/);
 
   const secondTitle = `Morning ceramics ${key}`;
   const second = await saveLink(page, { title: secondTitle, url: `https://www.instagram.com/p/CI${key}/`, topics: 'craft' });
@@ -36,48 +42,51 @@ test('links, notes, topics, favorites, progress and collections survive editing 
   await closeDialog(second.detail);
 
   await search(page, `bookmarkquartz${key}`);
-  await expect(page.locator('article.card')).toHaveCount(1);
+  await expect(cards(page)).toHaveCount(1);
+  await expect(page).toHaveURL(new RegExp(`q=bookmarkquartz${key}`));
   await expect(page.getByRole('button', { name: `Open ${title}`, exact: true })).toBeVisible();
   await search(page, key);
-  await expect(page.locator('article.card')).toHaveCount(2);
+  await expect(cards(page)).toHaveCount(2);
   await chooseSource(page, 'Web links', 'web');
-  await expect(page.locator('article.card')).toHaveCount(1);
-  await expect(page.locator('.card-title')).toHaveText(title);
+  await expect(cards(page)).toHaveCount(1);
+  await expect(cardTitles(page)).toHaveText(title);
+  await expect(page).toHaveURL(/platform=web/);
   await chooseSource(page, 'Instagram', 'instagram');
-  await expect(page.locator('.card-title')).toHaveText(secondTitle);
+  await expect(cardTitles(page)).toHaveText(secondTitle);
   await chooseSource(page, 'Everything', '');
-  const topicResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/items' && new URL(response.url()).searchParams.get('tag') === 'food');
-  await page.getByLabel('Filter by topic').selectOption('food');
-  expect((await topicResponse).ok()).toBe(true);
-  await waitForItems(page);
-  await expect(page.locator('.card-title')).toHaveText(title);
-  await page.getByLabel('Filter by topic').selectOption('');
-  await expect(page.locator('article.card')).toHaveCount(2);
-  const sorted = page.waitForResponse(response => new URL(response.url()).pathname === '/api/items' && new URL(response.url()).searchParams.get('sort') === 'title');
-  await page.getByLabel('Sort saves').selectOption('title');
-  expect((await sorted).ok()).toBe(true);
-  await expect(page.locator('.card-title')).toHaveText([secondTitle, title]);
+  await chooseTopic(page, 'food');
+  await expect(cardTitles(page)).toHaveText(title);
+  await expect(page).toHaveURL(/tag=food/);
+  await chooseTopic(page, '');
+  await expect(cards(page)).toHaveCount(2);
+  await sortBy(page, 'title');
+  await expect(cardTitles(page)).toHaveText([secondTitle, title]);
 
   await chooseView(page, 'Favorites', 'Your favorites');
   await search(page, key);
-  await expect(page.locator('.card-title')).toHaveText(title);
+  await expect(cardTitles(page)).toHaveText(title);
   await chooseView(page, 'To revisit', 'A little later');
   await search(page, key);
-  await expect(page.locator('.card-title')).toHaveText(title);
+  await expect(cardTitles(page)).toHaveText(title);
   await chooseView(page, 'Needs review', 'Needs a little review');
   await search(page, key);
-  await expect(page.locator('.card-title')).toHaveText(secondTitle);
-  await page.locator('.sidebar').getByRole('button', { name: new RegExp(`^${collectionName}\\s`) }).click();
-  await expect(page.locator('.library-title h2')).toHaveText(collectionName);
-  await expect(page.locator('.card-title')).toHaveText(title);
+  await expect(cardTitles(page)).toHaveText(secondTitle);
+  const nav = await navigation(page);
+  await collectionButton(nav, collectionName).click();
+  await expect(page.getByRole('heading', { level: 1, name: collectionName, exact: true })).toBeVisible();
+  await waitForItems(page);
+  await expect(cardTitles(page)).toHaveText(title);
+  await expect(page).toHaveURL(new RegExp(`#/collection/${collection.id}`));
 
+  // The address carries the view, so a reload comes back to the same collection.
   await page.reload();
   await waitForItems(page);
+  await expect(page.getByRole('heading', { level: 1, name: collectionName, exact: true })).toBeVisible();
   const reopened = await openItem(page, title);
   await expect(reopened.getByLabel('Summary', { exact: true })).toHaveValue(summary);
   await expect(reopened.getByLabel('Your notes', { exact: true })).toHaveValue(notes);
   await expect(reopened.getByLabel('Topics', { exact: true })).toHaveValue('food, weekday cooking, تعلم');
-  await expect(reopened.getByLabel('Progress', { exact: true })).toHaveValue('to_revisit');
+  await expect(reopened.getByLabel('Progress', { exact: true })).toHaveText('To revisit');
   await expect(reopened.getByLabel(collectionName, { exact: true })).toBeChecked();
   await expect(reopened.getByLabel('Keep in Needs review', { exact: true })).not.toBeChecked();
   await expect(reopened.getByRole('button', { name: 'Remove from favorites', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -87,23 +96,29 @@ test('links, notes, topics, favorites, progress and collections survive editing 
   expect(persisted.tags).toEqual(['food', 'weekday cooking', 'تعلم']);
   expect(persisted.collections).toContainEqual(expect.objectContaining({ id: collection.id, name: collectionName }));
 
-  await page.getByRole('button', { name: `Edit ${collectionName}`, exact: true }).click();
+  await (await navigation(page)).getByRole('button', { name: `Edit ${collectionName}`, exact: true }).click();
   const edit = page.getByRole('dialog', { name: 'Edit collection', exact: true });
   const renamed = `Dinner plans ${key}`;
   await edit.getByLabel('Name', { exact: true }).fill(renamed);
-  await edit.getByLabel('Color', { exact: true }).selectOption('#8ea8b7');
+  await chooseColor(edit, '#8ea8b7');
   await apiAction(page, 'PATCH', `/api/collections/${collection.id}`, () => edit.getByRole('button', { name: 'Save changes', exact: true }).click());
   await expect(edit).not.toBeVisible();
-  await expect(page.getByRole('button', { name: `Edit ${renamed}`, exact: true })).toBeVisible();
+  await expect((await navigation(page)).getByRole('button', { name: `Edit ${renamed}`, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: renamed, exact: true })).toBeVisible();
   const afterRename = await openItem(page, title);
   await expect(afterRename.getByLabel(renamed, { exact: true })).toBeChecked();
   await closeDialog(afterRename);
-  await page.getByRole('button', { name: `Edit ${renamed}`, exact: true }).click();
+  await (await navigation(page)).getByRole('button', { name: `Edit ${renamed}`, exact: true }).click();
   await page.getByRole('dialog', { name: 'Edit collection', exact: true }).getByRole('button', { name: 'Delete', exact: true }).click();
-  const confirm = page.getByRole('dialog', { name: 'Delete this collection?', exact: true });
+  // The question is asked in the app's own dialog, not the browser's.
+  const confirm = page.getByRole('alertdialog', { name: 'Delete this collection?', exact: true });
   await apiAction(page, 'DELETE', `/api/collections/${collection.id}`, () => confirm.getByRole('button', { name: 'Delete', exact: true }).click());
-  await expect(page.getByRole('button', { name: `Edit ${renamed}`, exact: true })).toHaveCount(0);
+  await expect(confirm).not.toBeVisible();
+  await waitForItems(page);
+  await expect((await navigation(page)).getByRole('button', { name: `Edit ${renamed}`, exact: true })).toHaveCount(0);
   expect((await context.request.get(`/api/items/${saved.item.id}`)).status()).toBe(200);
+  // Deleting the collection being viewed returns to All saves, where the save is still kept.
+  await expect(page.getByRole('heading', { level: 1, name: 'All saves', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: `Open ${title}`, exact: true })).toBeVisible();
 });
 
@@ -117,46 +132,53 @@ test('bulk organization, archive, restore and delete update the selected items o
     await closeDialog(entry.detail);
   }
   await search(page, key);
-  await expect(page.locator('article.card')).toHaveCount(2);
+  await expect(cards(page)).toHaveCount(2);
+  const bar = page.getByRole('region', { name: 'Selection' });
   const selectBoth = async () => {
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     for (const entry of entries) await page.getByRole('checkbox', { name: `Select ${entry.title}`, exact: true }).check();
-    await expect(page.locator('.bulkbar')).toContainText('2 selected');
+    await expect(bar).toContainText('2 selected');
   };
+  const chooseAction = async action => {
+    await bar.getByRole('button', { name: 'Apply an action' }).click();
+    await page.getByRole('menuitem', { name: action, exact: true }).click();
+  };
+  // All the bulk actions are one menu now; a native select and an Apply button are gone.
   const bulk = async action => {
     await selectBoth();
-    await page.getByLabel('Bulk action').selectOption(action);
-    const response = await apiAction(page, 'POST', '/api/items/bulk', () => page.locator('.bulkbar').getByRole('button', { name: 'Apply', exact: true }).click());
+    const response = await apiAction(page, 'POST', '/api/items/bulk', () => chooseAction(action));
     expect(await response.json()).toEqual({ updated: 2 });
     await waitForItems(page);
+    await expect(bar).toHaveCount(0);
   };
-  await bulk('favorite');
+  await bulk('Add to favorites');
   for (const entry of entries) await expect(page.locator(`[data-item-id="${entry.id}"]`).getByRole('button', { name: 'Remove from favorites', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await selectBoth();
-  await page.getByLabel('Bulk action').selectOption('tag');
-  await page.locator('.bulkbar').getByRole('button', { name: 'Apply', exact: true }).click();
+  await chooseAction('Add a topic');
   const tagDialog = page.getByRole('dialog', { name: 'Add a topic to your selection', exact: true });
   await tagDialog.getByLabel('Topic', { exact: true }).fill(`reading-${key}`);
   await apiAction(page, 'POST', '/api/items/bulk', () => tagDialog.getByRole('button', { name: 'Update 2 saves', exact: true }).click());
   await expect(tagDialog).not.toBeVisible();
   await waitForItems(page);
   for (const entry of entries) expect((await (await context.request.get(`/api/items/${entry.id}`)).json()).tags).toContain(`reading-${key}`);
-  await bulk('archive');
-  await expect(page.locator('article.card')).toHaveCount(0);
+  await bulk('Archive');
+  await expect(cards(page)).toHaveCount(0);
   await chooseView(page, 'Archived', 'Archived saves');
   await search(page, key);
-  await expect(page.locator('article.card')).toHaveCount(2);
-  await bulk('restore');
-  await expect(page.locator('article.card')).toHaveCount(0);
+  await expect(cards(page)).toHaveCount(2);
+  await bulk('Move to inbox');
+  await expect(cards(page)).toHaveCount(0);
   await chooseView(page, 'All saves', 'All saves');
   await search(page, key);
-  await expect(page.locator('article.card')).toHaveCount(2);
+  await expect(cards(page)).toHaveCount(2);
   const detail = await openItem(page, entries[0].title);
   await detail.getByRole('button', { name: 'Delete from this archive', exact: true }).click();
-  const confirm = page.getByRole('dialog', { name: 'Delete this saved item?', exact: true });
+  const confirm = page.getByRole('alertdialog', { name: 'Delete this saved item?', exact: true });
   await apiAction(page, 'DELETE', `/api/items/${entries[0].id}`, () => confirm.getByRole('button', { name: 'Delete', exact: true }).click());
+  await expect(detailPanel(page)).not.toBeVisible();
   expect((await context.request.get(`/api/items/${entries[0].id}`)).status()).toBe(404);
-  await expect(page.locator('article.card')).toHaveCount(1);
-  await expect(page.locator('.card-title')).toHaveText(entries[1].title);
+  await waitForItems(page);
+  await expect(cards(page)).toHaveCount(1);
+  await expect(cardTitles(page)).toHaveText(entries[1].title);
   expect((await context.request.get(`/api/items/${entries[1].id}`)).status()).toBe(200);
 });
