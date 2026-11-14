@@ -4,7 +4,7 @@
 // The server alone decides what is unlocked (GET /api/features, GET /api/purchases); a store proof is handed
 // to it and its answer, including every way it can say no, is shown as it is.
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Check, KeyRound, Lock, RotateCw, Smartphone } from 'lucide-react';
+import { ArrowLeft, Check, KeyRound, Lock, Minus, RotateCw, Smartphone } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { toast } from '@/app/ui-state';
 import { Bloom } from '@/components/brand';
@@ -32,6 +32,12 @@ const LEDES = {
   unlocked: 'This account has the unlock. Thank you for keeping the lights on.',
   'buy-here': 'Saving, searching, importing and exporting are free. A few extras open with a single payment: no subscription, nothing to cancel.',
   'buy-in-app': 'Saving, searching, importing and exporting are free. A few extras open with a single payment: no subscription, nothing to cancel.',
+} as const;
+
+// The public demo is not a server and has no account, so neither "everything is open" nor "pay once" is true of it.
+const DEMO = {
+  title: 'Free on your own server.',
+  lede: 'This demo is synthetic and has no account, so there is nothing to unlock here. On your own server Little Archive is free, all of it, always. On the hosted service and in the phone app, a few extras open with a single payment.',
 } as const;
 
 export default function UnlockScreen({ demo }: FeatureScreenProps) {
@@ -100,7 +106,7 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
 
   return (
     <div data-unlock={view} className="mx-auto max-w-2xl pb-10">
-      <FeatureHeader whisper="a one-time unlock" title={TITLES[view]} lede={LEDES[view]} />
+      <FeatureHeader whisper="a one-time unlock" title={backend.real ? TITLES[view] : DEMO.title} lede={backend.real ? LEDES[view] : DEMO.lede} />
 
       <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-card">
         {ROWS.map(([name, title, line]) => {
@@ -108,8 +114,8 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
           const open = view === 'self-hosted' ? Boolean(flag?.available ?? true) : Boolean(flag?.available && !flag.locked);
           return (
             <li key={name} className="flex items-center gap-4 px-5 py-4">
-              <span className={open ? 'grid size-8 shrink-0 place-items-center rounded-full bg-sage-pale text-sage dark:text-sage-deep' : 'grid size-8 shrink-0 place-items-center rounded-full bg-card-2 text-ink-soft'}>
-                {open ? <Check className="size-4" aria-hidden="true" strokeWidth={2.4} /> : <Lock className="size-4" aria-hidden="true" />}
+              <span className={open && backend.real ? 'grid size-8 shrink-0 place-items-center rounded-full bg-sage-pale text-sage dark:text-sage-deep' : 'grid size-8 shrink-0 place-items-center rounded-full bg-card-2 text-ink-soft'}>
+                {!backend.real ? <Minus className="size-4" aria-hidden="true" /> : open ? <Check className="size-4" aria-hidden="true" strokeWidth={2.4} /> : <Lock className="size-4" aria-hidden="true" />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-ink">{title}</span>

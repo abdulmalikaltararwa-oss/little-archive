@@ -1,9 +1,11 @@
 """Checks for the installable phone app: manifest, icons, the share-target route, the import-token
 Shortcut recipe, and the boundary that keeps all of it out of the public demo.
 
+The page, manifest and icons are the React interface's: its source files in ui/public and ui/index.html, and the
+build the server actually serves (ui/dist, or webui in an image). Run `npm ci && npm run build` in ui/ first.
+
 Fixtures are synthetic; every instance lives in a temporary directory.
 """
-import ast
 from html.parser import HTMLParser
 import io
 import json
@@ -15,12 +17,14 @@ import unittest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from server import webui
 from server.app import create_app
 from server.config import Config
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB = ROOT / "web"
+UI = ROOT / "ui"
+PUBLIC = UI / "public"
 PASSWORD = "test-owner-password-2026"
 ORIGIN = {"Origin": "http://testserver"}
 
@@ -41,8 +45,15 @@ def head_tags(path):
     return parser.tags
 
 
+def policy_without_nonce(response):
+    """The page's policy names a per-response nonce for styles; every other part is the same on every response."""
+    return re.sub(r" 'nonce-[A-Za-z0-9_-]+'", "", response.headers["content-security-policy"])
+
+
 class InstallableAppTests(unittest.TestCase):
     def setUp(self):
+        self.build = webui.find_build()
+        self.assertIsNotNone(self.build, webui.MISSING)
         self.temporary = tempfile.TemporaryDirectory(prefix="little-archive-phone-")
         config = Config(data_dir=Path(self.temporary.name) / "data", admin_password=PASSWORD, public_url="http://testserver", testing=True)
         self.app = create_app(config)
@@ -53,7 +64,7 @@ class InstallableAppTests(unittest.TestCase):
         login = self.owner.post("/api/auth/login", json={"password": PASSWORD}, headers=ORIGIN)
         self.assertEqual(login.status_code, 200, login.text)
         self.write_headers = {"X-CSRF-Token": login.json()["csrf_token"], **ORIGIN}
-        self.manifest = json.loads((WEB / "manifest.webmanifest").read_text(encoding="utf-8"))
+        self.manifest = json.loads((PUBLIC / "manifest.webmanifest").read_text(encoding="utf-8"))
 
     def tearDown(self):
         self.owner.__exit__(None, None, None)
@@ -66,16 +77,19 @@ class InstallableAppTests(unittest.TestCase):
         self.assertEqual(response.headers["content-type"].split(";")[0], "application/manifest+json")
         self.assertEqual(response.json(), self.manifest)
         home = self.anonymous.get("/")
-        for header in ("content-security-policy", "x-content-type-options", "x-frame-options", "referrer-policy"):
+        for header in ("x-content-type-options", "x-frame-options", "referrer-policy"):
             self.assertEqual(response.headers[header], home.headers[header], header)
+        # The page's policy adds its own nonce for styles; the rest is identical, and neither allows inline styles outright.
+        self.assertEqual(response.headers["content-security-policy"], policy_without_nonce(home))
+        self.assertNotIn("unsafe-inline", home.headers["content-security-policy"])
 
     def test_manifest_describes_a_standalone_app_with_the_refreshed_colours(self):
         manifest = self.manifest
         self.assertEqual((manifest["name"], manifest["short_name"]), ("Little Archive", "Little Archive"))
         self.assertEqual(manifest["display"], "standalone")
         self.assertEqual((manifest["start_url"], manifest["scope"], manifest["id"]), ("/", "/", "/"))
-        css = (WEB / "styles.css").read_text(encoding="utf-8")
-        light_background = re.findall(r":root\s*\{[^}]*--bg:(#[0-9a-fA-F]{6})", css)[-1]
+        tokens = (UI / "src" / "styles" / "tokens.css").read_text(encoding="utf-8")
+        light_background = re.search(r":root\s*\{[^}]*?--paper:\s*(#[0-9a-fA-F]{6})", tokens, re.S).group(1)
         self.assertEqual(manifest["background_color"].lower(), light_background.lower())
         self.assertEqual(manifest["theme_color"].lower(), light_background.lower())
         wording = " ".join(str(manifest[key]) for key in ("name", "short_name", "description")).lower()
@@ -109,34 +123,42 @@ class InstallableAppTests(unittest.TestCase):
 
         # iOS fills transparency with black and a mask crops a maskable icon: both must be full-bleed and opaque.
         for name in ("icons/icon-maskable-512.png", "apple-touch-icon.png"):
-            self.assertEqual(alpha(WEB / name).getextrema(), (255, 255), name)
+            self.assertEqual(alpha(PUBLIC / name).getextrema(), (255, 255), name)
         # The ordinary icons keep their rounded tile: transparent corners, opaque centre.
         for name in ("icons/icon-192.png", "icons/icon-512.png"):
-            channel = alpha(WEB / name)
+            channel = alpha(PUBLIC / name)
             self.assertEqual(channel.getpixel((0, 0)), 0, name)
             self.assertEqual(channel.getpixel((channel.width // 2, channel.height // 2)), 255, name)
-        with Image.open(WEB / "apple-touch-icon.png") as image:
+        with Image.open(PUBLIC / "apple-touch-icon.png") as image:
             self.assertEqual(image.size, (180, 180))
 
     def test_index_links_the_manifest_and_the_touch_icon_and_stays_script_only_from_self(self):
-        tags = head_tags(WEB / "index.html")
-        links = {(attrs.get("rel"), attrs.get("href")): attrs for tag, attrs in tags if tag == "link"}
-        self.assertIn(("manifest", "/manifest.webmanifest"), links)
-        self.assertEqual(links[("apple-touch-icon", "/apple-touch-icon.png")]["sizes"], "180x180")
-        theme = [attrs["content"] for tag, attrs in tags if tag == "meta" and attrs.get("name") == "theme-color"]
-        self.assertEqual(theme, [self.manifest["theme_color"]])
-        html = (WEB / "index.html").read_text(encoding="utf-8")
-        # The policy allows only same-origin scripts, so the page must not need an inline one.
-        self.assertEqual(re.findall(r"<script\b[^>]*>", html), ['<script type="module" src="/app.js">'])
+        for label, path in (("source", UI / "index.html"), ("build", self.build / "index.html")):
+            with self.subTest(page=label):
+                tags = head_tags(path)
+                links = {(attrs.get("rel"), attrs.get("href")): attrs for tag, attrs in tags if tag == "link"}
+                self.assertIn(("manifest", "./manifest.webmanifest"), links)
+                self.assertEqual(links[("apple-touch-icon", "./apple-touch-icon.png")]["sizes"], "180x180")
+                theme = [attrs["content"] for tag, attrs in tags if tag == "meta" and attrs.get("name") == "theme-color"]
+                self.assertEqual(theme, [self.manifest["theme_color"]])
+                html = path.read_text(encoding="utf-8")
+                # The policy allows only same-origin scripts, and styles only from the page's own files and its nonce:
+                # no inline script, no inline <style>, and no style attributes in the markup.
+                self.assertEqual([tag for tag in re.findall(r"<script\b[^>]*>", html) if " src=" not in tag], [])
+                self.assertNotRegex(html, r"<style\b")
+                self.assertNotRegex(html, r"\sstyle=")
 
-    def test_share_route_serves_the_static_app_and_never_reads_or_echoes_the_query(self):
+    def test_the_served_page_is_the_build_with_this_responses_nonce_and_the_share_route_never_echoes_the_query(self):
         hostile = "/share?title=%3Cb%3Ex&text=%3Cscript%3Ealert(1)%3C%2Fscript%3E&url=javascript%3Aalert(1)"
         response = self.anonymous.get(hostile)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"].split(";")[0], "text/html")
-        self.assertEqual(response.content, (WEB / "index.html").read_bytes())
-        self.assertNotIn(b"alert(1)", response.content)
-        self.assertEqual(response.headers["content-security-policy"], self.anonymous.get("/").headers["content-security-policy"])
+        built = (self.build / "index.html").read_text(encoding="utf-8")
+        nonce = re.search(r'<meta property="csp-nonce" nonce="([A-Za-z0-9_-]+)">', response.text).group(1)
+        self.assertEqual(response.text.replace(f'<meta property="csp-nonce" nonce="{nonce}">', "", 1), built)
+        self.assertIn(f"style-src 'self' 'nonce-{nonce}'", response.headers["content-security-policy"])
+        self.assertNotIn("alert(1)", response.text)
+        self.assertEqual(policy_without_nonce(response), policy_without_nonce(self.anonymous.get("/")))
         self.assertEqual(self.anonymous.head("/share?url=https%3A%2F%2Fexample.com%2F").status_code, 200)
 
     def test_a_share_link_never_saves_anything_even_for_a_signed_in_owner(self):
@@ -199,39 +221,144 @@ class InstallableAppTests(unittest.TestCase):
 
 
 class DemoBoundaryTests(unittest.TestCase):
-    """The public demo has no backend and must not advertise or depend on the phone-app files."""
+    """The public demo has no backend and must not advertise or depend on the phone-app files.
 
-    @staticmethod
-    def demo_files():
-        tree = ast.parse((ROOT / "scripts" / "build_demo.py").read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "files" for t in node.targets):
-                return ast.literal_eval(node.value)
-        raise AssertionError("scripts/build_demo.py no longer lists its files in a `files` variable.")
+    scripts/build_demo.py works out the demo's files from the page and the build's manifest. The logic is tested on a
+    small synthetic build; the last test runs it on the real one."""
 
-    def test_demo_scripts_only_import_files_the_demo_build_copies(self):
-        shipped = set(self.demo_files())
-        pending = ["demo.js"]
-        while pending:
-            name = pending.pop()
-            source = (WEB / name).read_text(encoding="utf-8")
-            for relative in re.findall(r"""(?:from\s+|import\s*\(\s*)['"]\./([^'"]+)['"]""", source):
-                self.assertIn(relative, shipped, f"{name} imports ./{relative}, which scripts/build_demo.py does not copy; the demo would break.")
-                if relative.endswith(".js") and relative not in pending and relative != name:
-                    pending.append(relative)
-            if len(pending) > 20:
-                self.fail("Unexpected import cycle while checking the demo.")
+    def setUp(self):
+        from scripts import build_demo
+        self.build = build_demo
+        self.temporary = tempfile.TemporaryDirectory(prefix="little-archive-demo-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.dist = self.root / "dist"
+        self.out = self.root / "out"
 
-    def test_demo_neither_links_nor_ships_the_manifest_icons_or_share_route(self):
-        shipped = " ".join(self.demo_files())
-        for needle in ("manifest", "icons", "apple-touch", "share"):
-            self.assertNotIn(needle, shipped)
-        links = [attrs.get("rel") for tag, attrs in head_tags(WEB / "demo.html") if tag == "link"]
-        self.assertEqual(sorted(links), ["icon", "stylesheet"])
+    def make_dist(self, page=None, manifest=None, extra=()):
+        """A build shaped like Vite's: hashed files, a manifest keyed by source file, and both pages sharing one bundle."""
+        (self.dist / "assets").mkdir(parents=True)
+        (self.dist / ".vite").mkdir()
+        (self.dist / "icons").mkdir()
+        files = {
+            "assets/main-AAAAAAAA.js": "import './shared-BBBBBBBB.js';", "assets/shared-BBBBBBBB.js": "export {};",
+            "assets/screen-CCCCCCCC.js": "export {};", "assets/demo-DDDDDDDD.js": "export {};", "assets/main-EEEEEEEE.css": "body{}",
+            "assets/face-FFFFFFFF.woff2": "font", "assets/001-GGGGGGGG.webp": "image", "assets/orphan-HHHHHHHH.js": "export {};",
+            "theme-init.js": "// theme", "icon.svg": "<svg/>", "index.html": "<!doctype html><title>app</title>",
+            "manifest.webmanifest": "{}", "apple-touch-icon.png": "png", "icons/icon-192.png": "png",
+        }
+        for name, text in dict(files, **dict(extra)).items():
+            (self.dist / name).write_text(text)
+        (self.dist / "demo.html").write_text(page or (
+            '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src \'none\'">'
+            '<link rel="icon" href="./icon.svg"><script src="./theme-init.js"></script>'
+            '<script type="module" src="./assets/main-AAAAAAAA.js"></script><script type="module" src="./assets/shared-BBBBBBBB.js"></script>'
+            '<link rel="stylesheet" href="./assets/main-EEEEEEEE.css"></head><body><img src="./icon.svg"></body></html>'))
+        (self.dist / ".vite" / "manifest.json").write_text(json.dumps(manifest or {
+            "src/main.tsx": {"file": "assets/main-AAAAAAAA.js", "imports": ["_shared"], "dynamicImports": ["src/screen.tsx", "src/demo.ts"], "css": ["assets/main-EEEEEEEE.css"]},
+            "_shared": {"file": "assets/shared-BBBBBBBB.js"},
+            "src/screen.tsx": {"file": "assets/screen-CCCCCCCC.js", "assets": ["assets/face-FFFFFFFF.woff2"]},
+            "src/demo.ts": {"file": "assets/demo-DDDDDDDD.js", "assets": ["assets/001-GGGGGGGG.webp"]},
+        }))
+
+    def published(self):
+        return {str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_file()}
+
+    def test_the_demo_is_the_demo_page_and_exactly_the_files_it_can_load(self):
+        self.make_dist()
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        self.assertEqual(self.published(), {
+            "index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build",
+            "assets/main-AAAAAAAA.js", "assets/shared-BBBBBBBB.js", "assets/screen-CCCCCCCC.js", "assets/demo-DDDDDDDD.js",
+            "assets/main-EEEEEEEE.css", "assets/face-FFFFFFFF.woff2", "assets/001-GGGGGGGG.webp",
+        })
+        self.assertEqual((self.out / "index.html").read_bytes(), (self.dist / "demo.html").read_bytes())
+        self.assertEqual((self.out / "LICENSE").read_bytes(), (ROOT / "LICENSE").read_bytes())
+        self.assertFalse(any(path.is_symlink() for path in self.out.rglob("*")))
+
+    def test_files_the_page_does_not_load_stay_behind(self):
+        self.make_dist()
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        for name in ("assets/orphan-HHHHHHHH.js", "manifest.webmanifest", "apple-touch-icon.png", "icons/icon-192.png", ".vite/manifest.json", "demo.html"):
+            self.assertNotIn(name, self.published(), name)
+
+    def test_the_demo_ships_nothing_that_belongs_to_the_installable_app(self):
+        self.make_dist()
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        self.assertFalse([name for name in self.published() if re.search(r"(?:^|/)(?:manifest[.-]|apple-touch|icons/|share[.-])", name, re.I)])
+        self.assertIn("assets/shared-BBBBBBBB.js", self.published(), "a chunk that is merely called shared is an ordinary file")
+
+    def test_a_file_the_demo_may_not_publish_stops_the_build_even_when_the_page_loads_it(self):
+        for number, name in enumerate(("assets/main-AAAAAAAA.js.map", "assets/notes-IIIIIIII.json", "assets/leak.env", "assets/share-JJJJJJJJ.js")):
+            with self.subTest(name=name):
+                self.dist, out = self.root / f"case-{number}", self.root / f"case-out-{number}"
+                self.make_dist(extra={name: "x"}, manifest={"src/main.tsx": {"file": "assets/main-AAAAAAAA.js", "assets": [name]}})
+                with self.assertRaises(SystemExit) as stopped:
+                    self.build.main(["--dist", str(self.dist), "--output", str(out)])
+                self.assertIn("demo", str(stopped.exception).lower())
+                self.assertFalse(out.exists())
+
+    def test_a_page_that_reaches_outside_its_own_files_stops_the_build(self):
+        for number, reference in enumerate(("https://cdn.example.com/x.js", "//cdn.example.com/x.js", "/assets/main-AAAAAAAA.js", "./../secret.js", "data:text/javascript,1")):
+            with self.subTest(reference=reference):
+                self.dist = self.root / f"page-{number}"
+                self.make_dist(page=f'<!doctype html><script src="{reference}"></script>')
+                with self.assertRaises(SystemExit):
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        self.assertFalse(self.out.exists())
+
+    def test_a_symbolic_link_in_the_build_stops_the_build(self):
+        self.make_dist()
+        (self.dist / "assets" / "main-AAAAAAAA.js").unlink()
+        (self.dist / "assets" / "main-AAAAAAAA.js").symlink_to(self.root / "elsewhere.js")
+        (self.root / "elsewhere.js").write_text("export {};")
+        with self.assertRaises(SystemExit):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+
+    def test_a_missing_build_says_how_to_make_one(self):
+        with self.assertRaises(SystemExit) as stopped:
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        self.assertIn("npm ci && npm run build", str(stopped.exception))
+
+    def test_a_folder_that_is_not_a_demo_build_is_not_replaced(self):
+        self.make_dist()
+        self.out.mkdir()
+        (self.out / "precious.txt").write_text("keep")
+        with self.assertRaises(SystemExit):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        self.assertEqual((self.out / "precious.txt").read_text(), "keep")
+
+    def test_rebuilding_replaces_a_previous_demo(self):
+        self.make_dist()
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        (self.out / "stale.txt").write_text("old")
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+        self.assertNotIn("stale.txt", self.published())
+
+    def test_demo_page_source_links_no_manifest_and_forbids_every_connection(self):
+        tags = head_tags(UI / "demo.html")
+        self.assertEqual(sorted(attrs.get("rel") for tag, attrs in tags if tag == "link"), ["icon"])
+        policy = next(attrs["content"] for tag, attrs in tags if tag == "meta" and attrs.get("http-equiv") == "Content-Security-Policy")
+        for part in ("default-src 'self'", "script-src 'self'", "connect-src 'none'", "img-src 'self'", "form-action 'none'", "object-src 'none'"):
+            self.assertIn(part, policy)
         workflow = (ROOT / ".github" / "workflows" / "demo-pages.yml").read_text(encoding="utf-8")
-        for needle in ("manifest", "apple-touch", "/share", "icons/"):
-            self.assertNotIn(needle, workflow)
-        self.assertIn("IS_DEMO ? null : readShareTarget", (WEB / "app.js").read_text(encoding="utf-8"))
+        self.assertEqual(re.findall(r"^\s+path: (.+)$", workflow, re.M), ["dist-demo"], "only the demo folder is uploaded")
+        self.assertIn("python scripts/build_demo.py", workflow)
+
+    def test_the_real_build_makes_a_demo_that_passes_the_same_rules(self):
+        build = webui.find_build()
+        self.assertIsNotNone(build, webui.MISSING)
+        self.assertTrue((build / "demo.html").is_file() and (build / ".vite" / "manifest.json").is_file(), "ui/dist must be a full build, not the packaged copy")
+        self.build.main(["--dist", str(build), "--output", str(self.out)])
+        names = self.published()
+        self.assertEqual(sum(name.endswith(".webp") for name in names), 60)
+        self.assertFalse([name for name in names if re.search(r"(?:^|/)(?:manifest[.-]|apple-touch|icons/|share[.-])|\.map$|\.json$", name, re.I)])
+        page = (self.out / "index.html").read_text(encoding="utf-8")
+        self.assertIn("connect-src 'none'", page)
+        self.assertNotRegex(page, r'rel="(?:manifest|apple-touch-icon)"')
+        # Every file the page names is in the folder, so the demo is complete on a static host.
+        for reference in re.findall(r'(?:src|href)="\./([^"]+)"', page):
+            self.assertIn(reference, names)
 
 
 if __name__ == "__main__":
