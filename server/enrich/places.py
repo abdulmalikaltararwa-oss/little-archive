@@ -137,7 +137,7 @@ def places_from_ld(page: dict | None) -> list[dict]:
     return out
 
 
-_PIN = re.compile(r"^\s*(?:[📍📌🗺️🏨🍽️☕🍴]️?\s*|(?:location|where|address|place|spot|venue|find them at|located at|الموقع|العنوان|المكان)\s*[:：-]\s*)(?P<rest>.+)$", re.I | re.U)
+_PIN = re.compile(r"^\s*(?:[📍📌🗺]\uFE0F?\s*|(?:location|where|address|place|spot|venue|find them at|located at|الموقع|العنوان|المكان)\s*[:：-]\s*)(?P<rest>.+)$", re.I | re.U)
 _SEP = re.compile(r"\s+[-–—|·•]\s+|\s*[|•·]\s*")
 
 
@@ -157,7 +157,7 @@ def places_from_text_rules(ev: EvidenceText) -> tuple[list[dict], int]:
             pin = _PIN.match(_URL.sub(" ", line))
             name = address = note = None
             if pin:
-                rest = re.sub(r"[#@][\w.]+", "", pin["rest"]).strip(" ,;:-–—|")
+                rest = re.sub(r"[#@][\w.]+", "", _LAT_LON.sub(" ", pin["rest"])).strip(" ,;:-–—|")
                 first = _SEP.split(rest, maxsplit=1)[0]
                 name_part, _, after = first.partition(",")
                 after = (after + (" " + rest[len(first):].strip(" -–—|·•") if rest[len(first):].strip(" -–—|·•") else "")).strip(" ,")

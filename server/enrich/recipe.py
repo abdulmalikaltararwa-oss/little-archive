@@ -282,24 +282,21 @@ _NAME_STOP = {"fresh", "large", "small", "medium", "chopped", "diced", "sliced",
 
 
 def compute_refs(step_text: str, ingredients: list[dict]) -> list[int]:
-    """Indexes of the ingredients a step mentions: the ingredient's main word (or all its words) appears in the step.
+    """Indexes of the ingredients a step mentions.
 
-    The main word is the last one ("olive oil" -> "oil"). It is enough on its own when no other ingredient ends in the same
-    word; otherwise the step must also use another word of the name, so "olive oil" and "sesame oil" are not confused.
+    A step mentions an ingredient when it uses a word that belongs to that ingredient alone ("ricotta" for "ricotta cheese"), or
+    all the words of its name. A word several ingredients share ("oil" in "olive oil" and "sesame oil") does not decide it, so
+    "add the oil" refers to neither.
     """
     words = {_stem(t) for t in match_tokens(step_text)}
-    stems = []
-    for ingredient in ingredients:
-        tokens = [_stem(t) for t in match_tokens(ingredient.get("name", "")) if len(t) > 2 and t not in _NAME_STOP and not t.isdigit()]
-        stems.append(tokens)
-    heads = [t[-1] for t in stems if t]
+    stems = [[_stem(t) for t in match_tokens(i.get("name", "")) if len(t) > 2 and t not in _NAME_STOP and not t.isdigit()] for i in ingredients]
+    owners: dict[str, int] = {}
+    for tokens in stems:
+        for token in set(tokens):
+            owners[token] = owners.get(token, 0) + 1
     refs = []
     for index, tokens in enumerate(stems):
-        if not tokens:
-            continue
-        head = tokens[-1]
-        shared = heads.count(head) > 1
-        if all(t in words for t in tokens) or (head in words and (not shared or any(t in words for t in tokens[:-1]))):
+        if tokens and (any(owners[t] == 1 and t in words for t in set(tokens)) or all(t in words for t in tokens)):
             refs.append(index)
     return refs
 
@@ -583,11 +580,9 @@ def clean_user_recipe(data: dict, *, existing_provenance: dict | None = None) ->
         ingredients.append({"text": (entry.get("text") or text)[:300], "quantity": quantity, "quantity_max": quantity_max, "unit": unit, "unit_text": unit_raw,
                             "name": name[:200], "note": (entry.get("note") or "").strip()[:300] or None, "optional": bool(entry.get("optional")),
                             "scalable": quantity is not None, "group": (entry.get("group") or "").strip()[:80] or None, "source": "user"})
-    steps_in = []
-    for entry in data.get("steps", [])[:MAX_STEPS]:
-        steps_in.append({"text": entry["text"], "section": (entry.get("section") or "").strip()[:80] or None, "source": "user"})
-    steps = finish_steps(steps_in, ingredients)
-    for step, given in zip(steps, data.get("steps", [])):
+    given_steps = [e for e in data.get("steps", [])[:MAX_STEPS] if " ".join(str(e.get("text", "")).split())]
+    steps = finish_steps([{"text": e["text"], "section": (e.get("section") or "").strip()[:80] or None, "source": "user"} for e in given_steps], ingredients)
+    for step, given in zip(steps, given_steps):
         if given.get("timer_seconds") is not None:
             step["timer_seconds"] = given["timer_seconds"]
         elif given.get("no_timer"):
@@ -922,12 +917,15 @@ class RecipeService:
             tried.append("rules")
             doc = recipe_from_text_rules(ev, fallback_title=title)
             used = "rules" if doc else ""
-        if doc is None and method in {"auto", "ai"} and caps["ai"] and ev.fields:
+        # A provider is asked when nothing else found a recipe, or when the rules found ingredients but no method.
+        thin_rules = method == "auto" and doc is not None and used == "rules" and not doc["steps"]
+        if (doc is None or thin_rules) and method in {"auto", "ai"} and caps["ai"] and ev.fields:
             tried.append("ai")
             raw = structured_call(self.service, system=RECIPE_SYSTEM, user=ev.payload(), schema=RECIPE_OUTPUT, max_tokens=2048, item_id=item_id)
-            doc = verify_ai_recipe(raw, ev, fallback_title=title)
-            doc["provenance"] = {**doc["provenance"], **ai_label(self.service, ev)}
-            used = "ai"
+            candidate = verify_ai_recipe(raw, ev, fallback_title=title)
+            candidate["provenance"] = {**candidate["provenance"], **ai_label(self.service, ev)}
+            if doc is None or len(candidate["ingredients"]) + len(candidate["steps"]) > len(doc["ingredients"]) + len(doc["steps"]):
+                doc, used = candidate, "ai"
         if doc is None:
             reason = "no_text" if not ev.fields else ("ai_not_configured" if method == "auto" and not caps["ai"] else "no_recipe_found")
             view = self.view(item_id)

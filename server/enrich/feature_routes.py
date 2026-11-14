@@ -6,7 +6,7 @@ and answers 402 with ``{"detail": ..., "code": "unlock_required", "feature": ...
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from fastapi import Depends, Query, Request
 from pydantic import Field, model_validator
@@ -20,7 +20,19 @@ from .recipe import RecipeService
 
 # ---------------------------------------------------------------- request bodies
 
-class IngredientIn(StrictModel):
+class EditModel(StrictModel):
+    """A body the owner edits. Fields the server computes (``READONLY``) are accepted and ignored, so what a GET returned can be
+    sent back after changing it; any other unknown field is still refused, so a misspelt name is an error rather than lost data."""
+    READONLY: ClassVar[frozenset] = frozenset()
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_computed(cls, data):
+        return {k: v for k, v in data.items() if k not in cls.READONLY} if isinstance(data, dict) else data
+
+
+class IngredientIn(EditModel):
+    READONLY = frozenset({"unit_text", "scalable", "source", "display", "exact", "approximate", "scaled", "warnings"})
     text: str | None = Field(default=None, max_length=300)
     quantity: float | None = Field(default=None, ge=0, le=100000)
     quantity_max: float | None = Field(default=None, ge=0, le=100000)
@@ -31,7 +43,8 @@ class IngredientIn(StrictModel):
     optional: bool = False
 
 
-class StepIn(StrictModel):
+class StepIn(EditModel):
+    READONLY = frozenset({"source", "quote"})
     text: str = Field(min_length=1, max_length=1000)
     timer_seconds: int | None = Field(default=None, ge=1, le=259200)
     no_timer: bool = False                                   # keep a step without a timer even when its text mentions a time
@@ -46,7 +59,8 @@ class TimesIn(StrictModel):
     cook_seconds: int | None = Field(default=None, ge=0, le=7 * 86400)
 
 
-class RecipeIn(StrictModel):
+class RecipeIn(EditModel):
+    READONLY = frozenset({"schema", "confidence", "reason", "incomplete", "evidence", "provenance", "dropped"})
     is_recipe: bool = True
     title: str = Field(default="", max_length=200)
     servings: float | None = Field(default=None, gt=0, le=1000)
@@ -63,12 +77,14 @@ class RecipeExtractIn(StrictModel):
     fetch_page: bool = False        # read the public page first (needs the operator's page reading to be on)
 
 
-class CoordinatesIn(StrictModel):
+class CoordinatesIn(EditModel):
+    READONLY = frozenset({"source", "detail", "provider", "precision", "display_name", "attribution"})
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
 
 
-class PlaceIn(StrictModel):
+class PlaceIn(EditModel):
+    READONLY = frozenset({"evidence", "origin", "provenance"})
     id: str | None = Field(default=None, max_length=20)
     name: str = Field(min_length=1, max_length=200)
     kind: Literal[tuple(KINDS)] = "other"   # type: ignore[valid-type]
