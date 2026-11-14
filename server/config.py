@@ -55,6 +55,12 @@ class Config:
     hosted_suggestions_monthly_free: int = 300
     hosted_suggestions_daily_unlocked: int = 200
     hosted_suggestions_monthly_unlocked: int = 3000
+    # Feature calls: the model calls and geocoder requests behind recipe cards, places and ask-your-archive. Those features are part of
+    # the unlock, so a free account has 0 unless the operator gives it some (which also opens the features to it).
+    hosted_feature_calls_daily_free: int = 0
+    hosted_feature_calls_monthly_free: int = 0
+    hosted_feature_calls_daily_unlocked: int = 100
+    hosted_feature_calls_monthly_unlocked: int = 1500
     # Request limits, in this process's memory (see server/limits.py). 0 turns a rate limit off.
     hosted_rate_address_per_minute: int = 600
     hosted_rate_account_per_minute: int = 300
@@ -105,6 +111,10 @@ class Config:
             hosted_suggestions_monthly_free=_whole_number(values, "LA_HOSTED_SUGGESTIONS_MONTHLY_FREE", 300),
             hosted_suggestions_daily_unlocked=_whole_number(values, "LA_HOSTED_SUGGESTIONS_DAILY_UNLOCKED", 200),
             hosted_suggestions_monthly_unlocked=_whole_number(values, "LA_HOSTED_SUGGESTIONS_MONTHLY_UNLOCKED", 3000),
+            hosted_feature_calls_daily_free=_whole_number(values, "LA_HOSTED_FEATURE_CALLS_DAILY_FREE", 0),
+            hosted_feature_calls_monthly_free=_whole_number(values, "LA_HOSTED_FEATURE_CALLS_MONTHLY_FREE", 0),
+            hosted_feature_calls_daily_unlocked=_whole_number(values, "LA_HOSTED_FEATURE_CALLS_DAILY_UNLOCKED", 100),
+            hosted_feature_calls_monthly_unlocked=_whole_number(values, "LA_HOSTED_FEATURE_CALLS_MONTHLY_UNLOCKED", 1500),
             hosted_rate_address_per_minute=_whole_number(values, "LA_HOSTED_RATE_ADDRESS_PER_MINUTE", 600),
             hosted_rate_account_per_minute=_whole_number(values, "LA_HOSTED_RATE_ACCOUNT_PER_MINUTE", 300),
             hosted_rate_auth_failures=_whole_number(values, "LA_HOSTED_RATE_AUTH_FAILURES", 30),
@@ -197,6 +207,10 @@ class Config:
             ("LA_HOSTED_SUGGESTIONS_MONTHLY_FREE", self.hosted_suggestions_monthly_free, 0, 1000000),
             ("LA_HOSTED_SUGGESTIONS_DAILY_UNLOCKED", self.hosted_suggestions_daily_unlocked, 0, 1000000),
             ("LA_HOSTED_SUGGESTIONS_MONTHLY_UNLOCKED", self.hosted_suggestions_monthly_unlocked, 0, 1000000),
+            ("LA_HOSTED_FEATURE_CALLS_DAILY_FREE", self.hosted_feature_calls_daily_free, 0, 1000000),
+            ("LA_HOSTED_FEATURE_CALLS_MONTHLY_FREE", self.hosted_feature_calls_monthly_free, 0, 1000000),
+            ("LA_HOSTED_FEATURE_CALLS_DAILY_UNLOCKED", self.hosted_feature_calls_daily_unlocked, 0, 1000000),
+            ("LA_HOSTED_FEATURE_CALLS_MONTHLY_UNLOCKED", self.hosted_feature_calls_monthly_unlocked, 0, 1000000),
             ("LA_HOSTED_RATE_ADDRESS_PER_MINUTE", self.hosted_rate_address_per_minute, 0, 1000000),
             ("LA_HOSTED_RATE_ACCOUNT_PER_MINUTE", self.hosted_rate_account_per_minute, 0, 1000000),
             ("LA_HOSTED_RATE_AUTH_FAILURES", self.hosted_rate_auth_failures, 0, 100000),

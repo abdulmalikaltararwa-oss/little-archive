@@ -9,6 +9,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import stat
 from threading import RLock
 import unicodedata
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -258,12 +259,28 @@ class Store:
                 self.asset_bytes = sum(entry.stat(follow_symlinks=False).st_size for entry in os.scandir(self.assets) if entry.is_file(follow_symlinks=False))
             return self.asset_bytes
 
+    def staged_bytes(self):
+        """What a guided import has staged on disk for this library (pieces of an export being uploaded, or the joined file), if anything.
+
+        It is not in the database or the thumbnail folder, but it is the account's data on the service's disk, so it counts as used.
+        """
+        total = 0
+        for folder, _, names in os.walk(self.root / "imports"):
+            for name in names:
+                try:
+                    info = os.lstat(os.path.join(folder, name))
+                except OSError:
+                    continue
+                if stat.S_ISREG(info.st_mode):
+                    total += info.st_size
+        return total
+
     def used_bytes(self):
-        """Live database pages plus local thumbnails; freed pages are reusable, so not counted."""
+        """Live database pages, local thumbnails and staged import files; freed pages are reusable, so not counted."""
         with self.lock:
             with self.transaction() as c:
                 pages, free, size = (c.execute("PRAGMA " + name).fetchone()[0] for name in ("page_count", "freelist_count", "page_size"))
-            return (pages - free) * size + self.assets_size()
+            return (pages - free) * size + self.assets_size() + self.staged_bytes()
 
     def meta(self, key):
         with self.transaction() as c:

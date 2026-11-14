@@ -262,11 +262,12 @@ class LibraryContract(ContractScenarios):
         body = self.ok("GET", "/api/account").json()
         self.assertEqual(set(body), {"mode", "user_id", "storage", "entitlements"})
         self.assertEqual(set(body["storage"]), {"used_bytes", "quota_bytes"})
-        self.assertEqual(set(body["entitlements"]), {"unlocked", "unlocked_via", "deep_reads", "suggestions"})
+        self.assertEqual(set(body["entitlements"]), {"unlocked", "unlocked_via", "deep_reads", "suggestions", "feature_calls"})
         self.assertEqual(set(body["entitlements"]["deep_reads"]), {"period", "used", "limit", "remaining"})
-        self.assertEqual(set(body["entitlements"]["suggestions"]), {"daily", "monthly"})
-        for window in body["entitlements"]["suggestions"].values():
-            self.assertEqual(set(window), {"period", "used", "limit", "remaining", "resets_at"})
+        for family in ("suggestions", "feature_calls"):
+            self.assertEqual(set(body["entitlements"][family]), {"daily", "monthly"})
+            for window in body["entitlements"][family].values():
+                self.assertEqual(set(window), {"period", "used", "limit", "remaining", "resets_at"})
         self.assertEqual(body["mode"], self.target.mode)
         self.assertGreater(body["storage"]["used_bytes"], 0)
         if self.target.mode == "hosted":
@@ -389,7 +390,7 @@ class ModeParity(unittest.TestCase):
     MODE_SPECIFIC = {("GET /api/account", "user_id"), ("GET /api/account", "storage.quota_bytes"),
                      ("GET /api/account", "entitlements.deep_reads.limit"), ("GET /api/account", "entitlements.deep_reads.remaining"),
                      ("GET /api/account", "entitlements.unlocked_via")} | {
-        ("GET /api/account", f"entitlements.suggestions.{window}.{field}") for window in ("daily", "monthly") for field in ("limit", "remaining", "resets_at")}
+        ("GET /api/account", f"entitlements.{family}.{window}.{field}") for family in ("suggestions", "feature_calls") for window in ("daily", "monthly") for field in ("limit", "remaining", "resets_at")}
 
     def script(self, target):
         def call(method, path, data=None, **kwargs):

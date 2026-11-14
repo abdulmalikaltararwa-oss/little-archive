@@ -12,6 +12,10 @@ its account for the rest of the period (deleting and coming back does not refill
   has not unlocked and for one that has. A reservation is granted in part when the room left is smaller than the request.
   Failed work is refunded from the daily and monthly counts but not from an attempts count that is never refunded and is capped
   at three times the daily limit, so work that fails after it has cost something cannot be repeated without end.
+* feature calls (`reserve_feature_calls` and friends): the model calls and geocoder requests behind recipe cards, places and
+  ask-your-archive, counted exactly like suggestions but in a family of their own, with their own limits.
+
+Both families are one mechanism, `reserve(user_id, family, wanted)`; the named methods are the same calls with the family filled in.
 """
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -22,6 +26,8 @@ from threading import RLock
 
 
 ATTEMPT_FACTOR = 3  # attempts counted per day, as a multiple of the daily limit; never refunded
+# The three counts of each family, as stored: a day, a month, and the attempts made that day.
+FAMILIES = {"suggestions": ("day", "month", "attempts"), "features": ("fday", "fmonth", "fattempts")}
 
 
 def usage_key(user_id):
@@ -58,7 +64,8 @@ def next_reset(kind, clock=None):
 
 @dataclass(frozen=True)
 class SuggestionLimits:
-    """Ordinary AI suggestions (titles, folders, summaries) per account: what each kind of account may queue."""
+    """What each kind of account may spend of one family per day and per month. The defaults are for ordinary AI suggestions
+    (titles, folders, summaries); `FEATURE_LIMITS` is the other family's."""
     free_daily: int = 25
     free_monthly: int = 300
     unlocked_daily: int = 200
@@ -68,13 +75,23 @@ class SuggestionLimits:
         return (self.unlocked_daily, self.unlocked_monthly) if unlocked else (self.free_daily, self.free_monthly)
 
 
+AllowanceLimits = SuggestionLimits
+# Feature calls (a model call or an uncached geocoder request made for a recipe card, a place or an answer). Those features are part of
+# the unlock, so a free account has none unless an operator gives it some.
+FEATURE_LIMITS = SuggestionLimits(free_daily=0, free_monthly=0, unlocked_daily=100, unlocked_monthly=1500)
+
+
 @dataclass(frozen=True)
 class Reservation:
     """What `reserve_suggestions` granted. `blocked` names what stopped a full grant: daily, monthly, attempts or not_included."""
     granted: int
     wanted: int
     blocked: str | None
-    suggestions: dict   # the account's counts after the reservation (the same shape `suggestions()` returns)
+    suggestions: dict   # the account's counts after the reservation (the same shape `allowance()` returns)
+
+    @property
+    def report(self):
+        return self.suggestions
 
     @property
     def refused(self):
@@ -120,17 +137,36 @@ class Entitlements:
         """Give back deep reads whose work failed, without going below zero for this month."""
         raise NotImplementedError
 
-    def suggestions(self, user_id) -> dict:
-        """`{daily: {period, used, limit, remaining, resets_at}, monthly: {...}}`."""
+    def allowance(self, user_id, family="suggestions") -> dict:
+        """`{daily: {period, used, limit, remaining, resets_at}, monthly: {...}}` for one family."""
         raise NotImplementedError
 
-    def reserve_suggestions(self, user_id, wanted) -> Reservation:
+    def reserve(self, user_id, family, wanted) -> Reservation:
         raise NotImplementedError
 
-    def refund_suggestions(self, user_id, count, unspent=False) -> None:
+    def refund(self, user_id, family, count, unspent=False) -> None:
         """Give back daily and monthly counts for work that failed. `unspent=True` is for a reservation that was never used
         for a job at all, and also gives back the attempt, which a failed job keeps."""
         raise NotImplementedError
+
+    # The same calls with the family filled in.
+    def suggestions(self, user_id):
+        return self.allowance(user_id, "suggestions")
+
+    def reserve_suggestions(self, user_id, wanted):
+        return self.reserve(user_id, "suggestions", wanted)
+
+    def refund_suggestions(self, user_id, count, unspent=False):
+        return self.refund(user_id, "suggestions", count, unspent)
+
+    def feature_calls(self, user_id):
+        return self.allowance(user_id, "features")
+
+    def reserve_feature_calls(self, user_id, wanted):
+        return self.reserve(user_id, "features", wanted)
+
+    def refund_feature_calls(self, user_id, count, unspent=False):
+        return self.refund(user_id, "features", count, unspent)
 
     def forget(self, user_id) -> None:
         """Remove what is stored about a deleted account. This month's usage count
@@ -159,13 +195,13 @@ class OwnerEntitlements(Entitlements):
     def refund_deep_reads(self, user_id, count=1):
         return None
 
-    def suggestions(self, user_id):
+    def allowance(self, user_id, family="suggestions"):
         return {name: {"period": period(), "used": 0, "limit": None, "remaining": None, "resets_at": None} for name, period in (("daily", current_day), ("monthly", current_period))}
 
-    def reserve_suggestions(self, user_id, wanted):
-        return Reservation(wanted, wanted, None, self.suggestions(user_id))
+    def reserve(self, user_id, family, wanted):
+        return Reservation(wanted, wanted, None, self.allowance(user_id, family))
 
-    def refund_suggestions(self, user_id, count, unspent=False):
+    def refund(self, user_id, family, count, unspent=False):
         return None
 
     def forget(self, user_id):
@@ -173,9 +209,13 @@ class OwnerEntitlements(Entitlements):
 
 
 class _Metered(Entitlements):
-    def __init__(self, unlocked_limit, free_limit, clock=None, suggestion_limits=None):
+    def __init__(self, unlocked_limit, free_limit, clock=None, suggestion_limits=None, feature_limits=None):
         self.unlocked_limit, self.free_limit, self.clock = int(unlocked_limit), int(free_limit), clock
         self.suggestion_limits = suggestion_limits or SuggestionLimits()
+        self.feature_limits = feature_limits or FEATURE_LIMITS
+
+    def _limits(self, family, unlocked):
+        return (self.feature_limits if family == "features" else self.suggestion_limits).for_account(unlocked)
 
     def _limit(self, unlocked):
         return self.unlocked_limit if unlocked else self.free_limit
@@ -184,8 +224,8 @@ class _Metered(Entitlements):
     def _report(period, used, limit):
         return {"period": period, "used": used, "limit": limit, "remaining": max(0, limit - used)}
 
-    def _suggestion_report(self, unlocked, used):
-        daily, monthly = self.suggestion_limits.for_account(unlocked)
+    def _suggestion_report(self, unlocked, used, family="suggestions"):
+        daily, monthly = self._limits(family, unlocked)
         return {
             "daily": {**self._report(current_day(self.clock), used["daily"], daily), "resets_at": next_reset("daily", self.clock)},
             "monthly": {**self._report(current_period(self.clock), used["monthly"], monthly), "resets_at": next_reset("monthly", self.clock)},
@@ -207,8 +247,8 @@ class _Metered(Entitlements):
 class MemoryEntitlements(_Metered):
     """Process-local implementation for tests and experiments; nothing persists."""
 
-    def __init__(self, unlocked_limit=300, free_limit=0, clock=None, suggestion_limits=None):
-        super().__init__(unlocked_limit, free_limit, clock, suggestion_limits)
+    def __init__(self, unlocked_limit=300, free_limit=0, clock=None, suggestion_limits=None, feature_limits=None):
+        super().__init__(unlocked_limit, free_limit, clock, suggestion_limits, feature_limits)
         self._unlocked, self._used, self._lock, self._counts = {}, {}, RLock(), {}
 
     def is_unlocked(self, user_id):
@@ -250,32 +290,35 @@ class MemoryEntitlements(_Metered):
             if key in self._used:
                 self._used[key] = max(0, self._used[key] - count)
 
-    # suggestions: counts live under (hash, meter, period); a new period drops the earlier ones
-    def _used_suggestions(self, key):
-        return {"daily": self._counts.get((key, "day", current_day(self.clock)), 0), "monthly": self._counts.get((key, "month", current_period(self.clock)), 0),
-                "attempts": self._counts.get((key, "attempts", current_day(self.clock)), 0)}
+    # allowances: counts live under (hash, meter, period); a new period drops the earlier ones
+    def _used_family(self, key, family):
+        day_name, month_name, attempts_name = FAMILIES[family]
+        return {"daily": self._counts.get((key, day_name, current_day(self.clock)), 0), "monthly": self._counts.get((key, month_name, current_period(self.clock)), 0),
+                "attempts": self._counts.get((key, attempts_name, current_day(self.clock)), 0)}
 
-    def suggestions(self, user_id):
+    def allowance(self, user_id, family="suggestions"):
         with self._lock:
-            return self._suggestion_report(user_id in self._unlocked, self._used_suggestions(usage_key(user_id)))
+            return self._suggestion_report(user_id in self._unlocked, self._used_family(usage_key(user_id), family), family)
 
-    def reserve_suggestions(self, user_id, wanted):
+    def reserve(self, user_id, family, wanted):
         wanted = self._natural(wanted)
         with self._lock:
             key, unlocked = usage_key(user_id), user_id in self._unlocked
-            used = self._used_suggestions(key)
-            granted, blocked = plan_reservation(wanted, self.suggestion_limits.for_account(unlocked), used)
+            used = self._used_family(key, family)
+            granted, blocked = plan_reservation(wanted, self._limits(family, unlocked), used)
             day, month = current_day(self.clock), current_period(self.clock)
             self._counts = {k: v for k, v in self._counts.items() if k[2] in {day, month}}
-            for meter, period in (("day", day), ("month", month), ("attempts", day)):
+            day_name, month_name, attempts_name = FAMILIES[family]
+            for meter, period in ((day_name, day), (month_name, month), (attempts_name, day)):
                 self._counts[(key, meter, period)] = self._counts.get((key, meter, period), 0) + granted
-            return Reservation(granted, wanted, blocked, self._suggestion_report(unlocked, self._used_suggestions(key)))
+            return Reservation(granted, wanted, blocked, self._suggestion_report(unlocked, self._used_family(key, family), family))
 
-    def refund_suggestions(self, user_id, count, unspent=False):
+    def refund(self, user_id, family, count, unspent=False):
         count = self._natural(count)
         with self._lock:
             key = usage_key(user_id)
-            for meter, period in (("day", current_day(self.clock)), ("month", current_period(self.clock))) + ((("attempts", current_day(self.clock)),) if unspent else ()):
+            day_name, month_name, attempts_name = FAMILIES[family]
+            for meter, period in ((day_name, current_day(self.clock)), (month_name, current_period(self.clock))) + (((attempts_name, current_day(self.clock)),) if unspent else ()):
                 if (key, meter, period) in self._counts:
                     self._counts[(key, meter, period)] = max(0, self._counts[(key, meter, period)] - count)
 
@@ -294,8 +337,8 @@ CREATE TABLE IF NOT EXISTS suggestion_counts(user_hash TEXT NOT NULL, meter TEXT
 class SQLiteEntitlements(_Metered):
     """Durable implementation in the hosted service's own account database."""
 
-    def __init__(self, path, unlocked_limit=300, free_limit=0, clock=None, suggestion_limits=None):
-        super().__init__(unlocked_limit, free_limit, clock, suggestion_limits)
+    def __init__(self, path, unlocked_limit=300, free_limit=0, clock=None, suggestion_limits=None, feature_limits=None):
+        super().__init__(unlocked_limit, free_limit, clock, suggestion_limits, feature_limits)
         self.path, self._lock = path, RLock()
         with self._transaction() as c:
             c.executescript(ENTITLEMENT_SCHEMA)
@@ -359,38 +402,41 @@ class SQLiteEntitlements(_Metered):
             c.execute("BEGIN IMMEDIATE")
             c.execute("UPDATE deep_reads SET used=MAX(0,used-?) WHERE user_hash=? AND period=?", (count, usage_key(user_id), current_period(self.clock)))
 
-    def _used_suggestions(self, c, key):
+    def _used_family(self, c, key, family):
         day, month = current_day(self.clock), current_period(self.clock)
+        day_name, month_name, attempts_name = FAMILIES[family]
         read = lambda meter, period: (c.execute("SELECT used FROM suggestion_counts WHERE user_hash=? AND meter=? AND period=?", (key, meter, period)).fetchone() or (0,))[0]
-        return {"daily": read("day", day), "monthly": read("month", month), "attempts": read("attempts", day)}
+        return {"daily": read(day_name, day), "monthly": read(month_name, month), "attempts": read(attempts_name, day)}
 
-    def suggestions(self, user_id):
+    def allowance(self, user_id, family="suggestions"):
         with self._transaction() as c:
-            return self._suggestion_report(self._is_unlocked(c, user_id), self._used_suggestions(c, usage_key(user_id)))
+            return self._suggestion_report(self._is_unlocked(c, user_id), self._used_family(c, usage_key(user_id), family), family)
 
-    def reserve_suggestions(self, user_id, wanted):
+    def reserve(self, user_id, family, wanted):
         wanted = self._natural(wanted)
         with self._transaction() as c:
             c.execute("BEGIN IMMEDIATE")
             key, unlocked = usage_key(user_id), self._is_unlocked(c, user_id)
-            used = self._used_suggestions(c, key)
-            granted, blocked = plan_reservation(wanted, self.suggestion_limits.for_account(unlocked), used)
+            used = self._used_family(c, key, family)
+            granted, blocked = plan_reservation(wanted, self._limits(family, unlocked), used)
             if granted:
                 day, month = current_day(self.clock), current_period(self.clock)
                 # Earlier days and months are not kept once a new one is in use, for any account.
-                c.execute("DELETE FROM suggestion_counts WHERE (meter IN ('day','attempts') AND period<>?) OR (meter='month' AND period<>?)", (day, month))
-                for meter, period in (("day", day), ("month", month), ("attempts", day)):
+                c.execute("DELETE FROM suggestion_counts WHERE (meter IN ('day','attempts','fday','fattempts') AND period<>?) OR (meter IN ('month','fmonth') AND period<>?)", (day, month))
+                day_name, month_name, attempts_name = FAMILIES[family]
+                for meter, period in ((day_name, day), (month_name, month), (attempts_name, day)):
                     c.execute("INSERT INTO suggestion_counts(user_hash,meter,period,used) VALUES(?,?,?,?) ON CONFLICT(user_hash,meter,period) DO UPDATE SET used=used+excluded.used", (key, meter, period, granted))
-            return Reservation(granted, wanted, blocked, self._suggestion_report(unlocked, self._used_suggestions(c, key)))
+            return Reservation(granted, wanted, blocked, self._suggestion_report(unlocked, self._used_family(c, key, family), family))
 
-    def refund_suggestions(self, user_id, count, unspent=False):
+    def refund(self, user_id, family, count, unspent=False):
         count = self._natural(count)
         if not count:
             return
         with self._transaction() as c:
             c.execute("BEGIN IMMEDIATE")
             key = usage_key(user_id)
-            for meter, period in (("day", current_day(self.clock)), ("month", current_period(self.clock))) + ((("attempts", current_day(self.clock)),) if unspent else ()):
+            day_name, month_name, attempts_name = FAMILIES[family]
+            for meter, period in ((day_name, current_day(self.clock)), (month_name, current_period(self.clock))) + (((attempts_name, current_day(self.clock)),) if unspent else ()):
                 c.execute("UPDATE suggestion_counts SET used=MAX(0,used-?) WHERE user_hash=? AND meter=? AND period=?", (count, key, meter, period))
 
     def forget(self, user_id):

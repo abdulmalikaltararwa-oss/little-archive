@@ -171,7 +171,9 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         entitlements = entitlements or SQLiteEntitlements(
             libraries.accounts_path, config.hosted_deep_reads_monthly, config.hosted_free_deep_reads_monthly,
             suggestion_limits=SuggestionLimits(config.hosted_suggestions_daily_free, config.hosted_suggestions_monthly_free,
-                                               config.hosted_suggestions_daily_unlocked, config.hosted_suggestions_monthly_unlocked))
+                                               config.hosted_suggestions_daily_unlocked, config.hosted_suggestions_monthly_unlocked),
+            feature_limits=SuggestionLimits(config.hosted_feature_calls_daily_free, config.hosted_feature_calls_monthly_free,
+                                            config.hosted_feature_calls_daily_unlocked, config.hosted_feature_calls_monthly_unlocked))
         libraries.on_delete.append(entitlements.forget)
         libraries.resume_deletions()
         identity = identity or SupabaseVerifier.from_config(config)
@@ -498,7 +500,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             "mode": config.mode, "user_id": auth.user_id,
             "storage": {"used_bytes": store.used_bytes(), "quota_bytes": quota},
             "entitlements": {"unlocked": entitlements.is_unlocked(auth.user_id), "unlocked_via": entitlements.unlock_source(auth.user_id),
-                             "deep_reads": entitlements.deep_reads(auth.user_id), "suggestions": entitlements.suggestions(auth.user_id)},
+                             "deep_reads": entitlements.deep_reads(auth.user_id), "suggestions": entitlements.suggestions(auth.user_id),
+                             "feature_calls": entitlements.feature_calls(auth.user_id)},
         }
 
     @app.post("/api/account/delete", dependencies=hosted_route)
@@ -912,9 +915,10 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             limited = getattr(store.enrichment.worker, "limited", None)  # hosted: an allowance cut this request short
         if limited:
             reservation, skipped = limited
+            unlocked = entitlements.is_unlocked(auth.user_id)
             if not queued:
-                raise meters.refusal_for(reservation, skipped)  # 402 (not part of the free tier) or 429, with `code` and `limit`
-            return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued - skipped, "skipped": skipped, "limit": meters.limited(reservation, skipped)}
+                raise meters.refusal_for(reservation, skipped, unlocked=unlocked)  # 402 (not part of the free tier) or 429, with `code` and `limit`
+            return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued - skipped, "skipped": skipped, "limit": meters.limited(reservation, skipped, unlocked)}
         return {"queued": queued, "matched": len(ids), "unchanged": len(ids) - queued}
 
     @app.get("/api/ai/jobs")
@@ -949,7 +953,7 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             queued = store.enrichment.worker.enqueue([job["item_id"]])
             limited = getattr(store.enrichment.worker, "limited", None)
             if limited and not queued:
-                raise meters.refusal_for(*limited)
+                raise meters.refusal_for(*limited, unlocked=entitlements.is_unlocked(auth.user_id))
             return {"queued": queued}
 
     @app.post("/api/items/{iid}/ai/accept")

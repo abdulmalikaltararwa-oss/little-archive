@@ -146,12 +146,18 @@ ROUTE_CLASSES = (
     ("heavy", "GET", re.compile(r"/api/(?:export|backup)")),
     ("heavy", "POST", re.compile(r"/api/imports/file")),
     ("heavy", "POST", re.compile(r"/api/items/[^/]+/thumbnail")),
+    ("heavy", "POST", re.compile(r"/api/imports/archives/[^/]+/finish")),     # joins a staged export and reads it: memory and disk
     ("fetch", "POST", re.compile(r"/api/items/[^/]+/page")),
+    ("fetch", "POST", re.compile(r"/api/items/[^/]+/recipe/extract")),        # may read the public page, and may ask a model
+    ("geocode", "POST", re.compile(r"/api/items/[^/]+/places/(?:extract|geocode)")),  # may ask a model, and waits its turn at the shared geocoder
     ("ai", "POST", re.compile(r"/api/ai/jobs(?:/[^/]+/retry)?")),
     ("ai", "POST", re.compile(r"/api/items/[^/]+/deep-read")),
+    ("ai", "POST", re.compile(r"/api/ask")),
+    ("import", "POST", re.compile(r"/api/imports/archives/[^/]+/commit")),    # starts a background job that writes in batches
 )
-COSTS = {"heavy": 10, "fetch": 5, "ai": 3}
-FETCH_GATE = (2, 16)  # page reading by the server holds a worker for up to twenty seconds
+COSTS = {"heavy": 10, "fetch": 5, "geocode": 5, "ai": 3, "import": 5}
+FETCH_GATE = (2, 16)    # page reading by the server holds a worker for up to twenty seconds
+GEOCODE_GATE = (1, 4)   # a geocoder lookup sleeps for its turn at a limiter shared by the whole process (one request a second)
 
 
 def route_class(method, path):
@@ -169,7 +175,7 @@ class HostedLimits:
         self.by_account = Buckets(config.hosted_rate_account_per_minute, clock=clock)
         # A failed sign-in costs one token of a bucket that holds this many and refills over ten minutes.
         self.failures = Buckets(config.hosted_rate_auth_failures / 10, burst=config.hosted_rate_auth_failures, clock=clock) if config.hosted_rate_auth_failures else Buckets(0)
-        self.gates = {"heavy": Gates(config.hosted_heavy_per_account, config.hosted_heavy_overall), "fetch": Gates(*FETCH_GATE)}
+        self.gates = {"heavy": Gates(config.hosted_heavy_per_account, config.hosted_heavy_overall), "fetch": Gates(*FETCH_GATE), "geocode": Gates(*GEOCODE_GATE)}
 
     def address(self, address, notification=False):
         """Seconds to wait, or 0.0."""

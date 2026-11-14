@@ -22,7 +22,7 @@ Same-origin `/api`. JSON unless noted. Errors `{detail: string}`; a refusal the 
 - POST `/api/auth/devices` `{password, name, expires_in_days?:1..3650}` -> `{id, name, token, created_at, expires_at:null|string}`. Exchanges the owner password for a full-access device token (`lad_…`), shown once and stored only as a hash in `devices.sqlite3` beside the library, never in the library database or a backup. No cookie is set. Same protections as login: the shared limit of 10 password attempts per peer per 15 minutes across both routes (`429` + `Retry-After`), and a foreign `Origin` or cross-site fetch is refused. At most 20 devices. Max body 8 KiB.
 - GET `/api/auth/devices` -> `{devices:[{id,name,created_at,last_used_at,expires_at:null|string,current:boolean}]}`. `last_used_at` is refreshed at most once a minute. `expires_at` is when the token stops working unless it is used again.
 - DELETE `/api/auth/devices/{id}` -> `{ok:true}`. The offline password reset revokes every device token.
-- GET `/api/account` -> `{mode, user_id:null|string, storage:{used_bytes, quota_bytes:null|number}, entitlements:{unlocked:boolean, unlocked_via:null|'apple'|'google'|'manual'|'owner', deep_reads:{period:'YYYY-MM', used, limit:null|number, remaining:null|number}, suggestions:{daily:Window, monthly:Window}}}` where `Window` is `{period:'YYYY-MM-DD'|'YYYY-MM', used, limit:null|number, remaining:null|number, resets_at:null|string}`. A self-hosted owner is unlocked (`unlocked_via:'owner'`) with no quota or cap (`null`).
+- GET `/api/account` -> `{mode, user_id:null|string, storage:{used_bytes, quota_bytes:null|number}, entitlements:{unlocked:boolean, unlocked_via:null|'apple'|'google'|'manual'|'owner', deep_reads:{period:'YYYY-MM', used, limit:null|number, remaining:null|number}, suggestions:{daily:Window, monthly:Window}, feature_calls:{daily:Window, monthly:Window}}}` where `Window` is `{period:'YYYY-MM-DD'|'YYYY-MM', used, limit:null|number, remaining:null|number, resets_at:null|string}`. A self-hosted owner is unlocked (`unlocked_via:'owner'`) with no quota or cap (`null`).
 
 A device token has no refresh. It stops working (`401`) once it has gone unused for `LA_DEVICE_TOKEN_IDLE_DAYS` (default 180; `0` turns it off), or past its `expires_at` lifetime if `LA_DEVICE_TOKEN_MAX_DAYS` or `expires_in_days` gave it one; an expired token is removed and is then exactly an unknown one. Tokens made before this existed keep working: their idle time is counted from the upgrade or their last use, whichever is later. Revoke tokens you no longer use. A device token and an extension import token are different credentials in different tables: neither is accepted where the other is expected.
 
@@ -187,10 +187,13 @@ A hosted refusal is `{detail:string, code:string, ...}`. `detail` is written for
 
 | Status | `code` | Extra fields | Meaning |
 | --- | --- | --- | --- |
-| 402 | `unlock_required` | `feature`: `deep_reads`, `suggestions` or a feature's name | Part of the one-time unlock. |
+| 402 | `unlock_required` | `feature`: `deep_reads`, `suggestions`, `recipes`, `places` or `ask` | Part of the one-time unlock. |
 | 429 | `deep_reads_exhausted` | `limit:{scope:'monthly', period, used, limit, remaining}` | This month's deep reads are used. |
 | 429 | `suggestions_daily_limit`, `suggestions_monthly_limit` | `limit:{scope, period, used, limit, remaining, resets_at, skipped}` | Nothing could be queued; `resets_at` is when it starts again (UTC). |
 | 429 | `suggestions_attempts_limit` | `limit:{scope:'attempts', resets_at, skipped}` | Too many tries today, including failed ones. |
+| 429 | `feature_calls_daily_limit`, `feature_calls_monthly_limit` | `limit:{scope, period, used, limit, remaining, resets_at, skipped}` | The account's recipe, place and ask requests (model calls and geocoder lookups) for the day or month are used. |
+| 429 | `feature_calls_attempts_limit` | `limit:{scope:'attempts', resets_at, skipped}` | Too many tries today, including failed ones. |
+| 507 | `storage_full` | | A guided-import file would not fit in the account's storage quota (a staged upload counts toward it). |
 | 429 | `rate_limited` | `scope:'address'|'account'`, `retry_after` | Too many requests. |
 | 429 | `too_many_concurrent` | `scope:'account'`, `retry_after` | This account already has one of these running. |
 | 429 | `auth_rate_limited` | `retry_after` | Too many failed sign-ins from this address. |

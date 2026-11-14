@@ -301,7 +301,17 @@ class Geocoder:
             age_days = (time.time() - _epoch(row["fetched_at"])) / 86400
             if age_days < (self.settings.geocoder_cache_days if row["found"] else min(7, self.settings.geocoder_cache_days)):
                 return loads(row["result"]) if row["found"] else None
-        result = self._request(query)
+        # A request to the geocoder is the one thing here that costs the operator something per use; on a hosted service it is charged to
+        # the account (and given back if it fails). A cache hit, above, is free.
+        guard = getattr(getattr(store, "enrichment", None), "call_guard", None)
+        if guard is not None:
+            guard.before("places")
+        try:
+            result = self._request(query)
+        except Exception:
+            if guard is not None:
+                guard.failed()
+            raise
         with store.transaction() as c:
             c.execute("INSERT INTO geocode_cache VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET result=excluded.result,found=excluded.found,fetched_at=excluded.fetched_at",
                       (key, dumps(result) if result else "null", int(result is not None), now()))
@@ -482,7 +492,7 @@ class PlacesService:
             found += rule_places
         if method in {"auto", "ai"} and caps["ai"] and ev.fields:
             tried.append("ai")
-            raw = structured_call(self.service, system=PLACES_SYSTEM, user=ev.payload(), schema=PLACES_OUTPUT, max_tokens=1500, item_id=item_id)
+            raw = structured_call(self.service, system=PLACES_SYSTEM, user=ev.payload(), schema=PLACES_OUTPUT, max_tokens=1500, item_id=item_id, feature="places")
             ai_places, ai_report = verify_ai_places(raw, ev, item.get("creator", ""))
             for place in ai_places:
                 place["provenance"] = ai_label(self.service, ev)

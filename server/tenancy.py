@@ -22,6 +22,7 @@ import time
 from weakref import WeakValueDictionary
 
 from .identity import valid_user_id
+from .metering import CallGuard
 from .storage import LibraryClosed, Store, now
 
 log = logging.getLogger("little_archive")
@@ -338,6 +339,8 @@ class AccountWorker:
         """
         store.enrichment = service
         isolate_shared_cache(service)
+        if meters is not None:
+            service.call_guard = CallGuard(meters, store.tenant)  # recipes, places and ask charge each model call and geocoder request here
         worker = service.worker
         worker.wake = self.wake
         enqueue, enqueue_deep, fail = worker.enqueue, worker.enqueue_deep, worker._fail

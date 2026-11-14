@@ -120,6 +120,9 @@ class AddressTests(unittest.TestCase):
         for method, path, kind in (("GET", "/api/export", "heavy"), ("GET", "/api/backup", "heavy"), ("POST", "/api/imports/file", "heavy"),
                                    ("POST", "/api/items/abc/thumbnail", "heavy"), ("POST", "/api/items/abc/page", "fetch"), ("POST", "/api/ai/jobs", "ai"),
                                    ("POST", "/api/ai/jobs/xyz/retry", "ai"), ("POST", "/api/items/abc/deep-read", "ai"), ("GET", "/api/items", None),
+                                   ("POST", "/api/ask", "ai"), ("POST", "/api/items/abc/recipe/extract", "fetch"), ("POST", "/api/items/abc/places/extract", "geocode"),
+                                   ("POST", "/api/items/abc/places/geocode", "geocode"), ("POST", "/api/imports/archives/r1/finish", "heavy"), ("POST", "/api/imports/archives/r1/commit", "import"),
+                                   ("PUT", "/api/imports/archives/r1/chunks/3", None), ("POST", "/api/imports/archives", None), ("GET", "/api/items/abc/places", None),
                                    ("DELETE", "/api/items/abc/thumbnail", None), ("GET", "/api/export/extra", None), ("POST", "/api/items/a/b/thumbnail", None)):
             self.assertEqual(route_class(method, path), kind, method + " " + path)
 
