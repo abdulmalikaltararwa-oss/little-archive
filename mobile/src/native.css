@@ -1,0 +1,52 @@
+/* Rules for the app only. They are copied into the app bundle beside the shared interface (styles.css) and never reach the
+   browser version. Unlayered rules win over the interface's layered ones, so nothing here needs a higher specificity. */
+
+/* The web view draws under the status bar, the notch and the home indicator (viewport-fit=cover). On Android, Capacitor's
+   SystemBars plugin supplies --safe-area-inset-* where env() is not available. */
+:root {
+  --sat: env(safe-area-inset-top, var(--safe-area-inset-top, 0px));
+  --sar: env(safe-area-inset-right, var(--safe-area-inset-right, 0px));
+  --sab: env(safe-area-inset-bottom, var(--safe-area-inset-bottom, 0px));
+  --sal: env(safe-area-inset-left, var(--safe-area-inset-left, 0px));
+}
+html { -webkit-text-size-adjust: 100%; }
+body { padding-left: var(--sal); padding-right: var(--sar); overscroll-behavior-y: none; -webkit-touch-callout: none; }
+/* Content scrolling up must not show through the status bar. */
+body::before { content: ""; position: fixed; inset: 0 0 auto 0; height: var(--sat); background: var(--bg); z-index: 200; pointer-events: none; }
+.topbar { padding-top: var(--sat); min-height: calc(86px + var(--sat)); }
+.sidebar { padding-top: calc(28px + var(--sat)); padding-bottom: calc(18px + var(--sab)); }
+.main { padding-bottom: calc(45px + var(--sab)); }
+.toast-region { bottom: calc(24px + var(--sab)); }
+dialog { max-height: calc(100dvh - 48px - var(--sat) - var(--sab)); }
+/* The detail panel fills the screen height, so its own header and last row clear the status bar and the home indicator. */
+.detail-dialog { max-height: 100dvh; }
+.detail-dialog .dialog-head { padding-top: calc(17px + var(--sat)); }
+.detail-dialog .dialog-body { padding-bottom: calc(22px + var(--sab)); }
+
+/* First-launch screens ---------------------------------------------------------------------------------------------- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.native-screen { min-height: 100dvh; width: min(460px, 100%); margin: 0 auto; padding: calc(28px + var(--sat)) 22px calc(32px + var(--sab)); display: flex; flex-direction: column; }
+.native-brand { display: flex; align-items: center; gap: 11px; font-weight: 600; font-size: 1.3rem; letter-spacing: -.015em; margin-bottom: 26px; }
+.native-screen h1 { font-size: 2rem; margin-bottom: 10px; text-wrap: balance; }
+.native-lede { color: var(--muted); margin-bottom: 22px; text-wrap: pretty; }
+.native-fineprint { margin: 4px 0 18px; }
+.native-screen form { display: flex; flex-direction: column; }
+.native-screen form .btn { width: 100%; min-height: 48px; }
+.native-screen form .btn.ghost { margin-top: 6px; }
+.native-screen input { font-size: 16px; min-height: 48px; } /* 16px keeps iOS from zooming into the field */
+.native-screen .notice { margin-bottom: 18px; }
+.native-actions { display: flex; flex-direction: column; gap: 8px; }
+.native-actions .btn { width: 100%; min-height: 48px; }
+.native-choices { display: flex; flex-direction: column; gap: 12px; }
+.native-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 18px 20px; min-height: 76px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.native-choice strong { font-size: 1.05rem; }
+.native-choice span { color: var(--muted); font-size: .88rem; line-height: 1.45; }
+.native-choice:active { background: var(--accent-pale); border-color: var(--accent); }
+.native-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.native-tabs .btn { flex: 1; min-height: 44px; }
+.native-tabs .btn[aria-pressed="true"] { background: var(--accent-pale); border-color: var(--accent); color: var(--accent); }
+.native-screen form .native-reveal { width: auto; align-self: flex-start; margin: -6px 0 14px -8px; min-height: 40px; }
+.native-error { display: flex; gap: 8px; align-items: flex-start; color: var(--danger); font-size: .85rem; line-height: 1.5; }
+.native-error[hidden] { display: none; }
+.native-error-general { padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--line)); border-radius: 12px; margin-bottom: 16px; background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.native-screen input[aria-invalid="true"] { border-color: var(--danger); }

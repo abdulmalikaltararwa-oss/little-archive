@@ -1,0 +1,27 @@
+{
+  "name": "little-archive-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The iOS and Android app for Little Archive, built with Capacitor around the shared web interface",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22.0.0" },
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "sync": "node scripts/build-web.mjs && cap sync",
+    "test": "node --test tests/*.test.mjs ../web/transport.test.mjs"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-secure-storage": "8.0.1",
+    "@capacitor/android": "8.6.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.2",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/ios": "8.6.2",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2",
+    "esbuild": "0.28.2"
+  }
+}

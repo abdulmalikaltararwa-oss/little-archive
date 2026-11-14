@@ -1,0 +1,18 @@
+{
+  "appId": "app.littlearchive.mobile",
+  "appName": "Little Archive",
+  "webDir": "www",
+  "backgroundColor": "#f8f3ea",
+  "ios": {
+    "contentInset": "never",
+    "allowsLinkPreview": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#f8f3ea"
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false },
+    "CapacitorCookies": { "enabled": false }
+  }
+}

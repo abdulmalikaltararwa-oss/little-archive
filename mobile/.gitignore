@@ -1,0 +1,11 @@
+# Dependencies and build output. The web bundle (www) is built from ../web by `npm run build:web` and copied into
+# the native projects by `npm run sync`; none of it is committed.
+node_modules/
+/www/
+*.log
+
+# Native build output and copies of the web bundle (the generated ios/.gitignore and android/.gitignore cover the rest).
+/ios/App/App/public/
+/android/app/src/main/assets/public/
+DerivedData/
+.gradle/
