@@ -4,6 +4,10 @@
 
 **A little home for everything you saved.**
 
+[![A saved post gets lost in a phone's saved grid, then turns up again in Little Archive](docs/assets/little-archive-film.gif)](docs/assets/little-archive-film.mp4)
+
+*A 22-second look: [watch it with sound](docs/assets/little-archive-film.mp4), or [try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/). The phone app and every post in the film are made up; Little Archive is not affiliated with Instagram or TikTok.*
+
 Little Archive is an open-source, self-hosted library for saved posts, videos, and links. Keep your original collections, add your own tags and notes, and rediscover things you meant to return to—all in a warm, uncluttered gallery.
 
 Run one private instance on your Mac, Linux machine, or server. There is no project-operated account service, analytics endpoint, or required AI subscription.
@@ -17,6 +21,10 @@ The public demo uses synthetic content and temporary page memory. Your private l
 The first v1 foundation batch passed all 12 acceptance jobs on [`505b93b0`](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844): 117 Python tests, 65 extension/web tests, 3 harness tests, 39 authenticated browser cases, 11 cases using the built extension ZIP, real-model integration, native Mac/Linux recovery, both container architectures, and update/rollback. This batch adds browsing continuity, isolated contributor setup, redacted operator diagnostics, and protocol compatibility. The broader [v1 plan](docs/v1-product-plan.md) still includes product and public-project work plus direct live-account and Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence and limits.
 
 ![Little Archive gallery with original synthetic saved-content examples](docs/assets/gallery-current.jpg)
+
+| A closer look | Dark theme |
+| --- | --- |
+| ![The detail panel for one save, with notes and topics](docs/assets/detail-current.jpg) | ![The same detail panel in the dark theme](docs/assets/detail-dark.jpg) |
 
 *The interface shown above uses synthetic demo content. Read the [verification results and limits](docs/verification.md) for the tested release scope.*
 
