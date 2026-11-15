@@ -13,17 +13,17 @@ import rawConfig from '../app.config.json';
 import { createTransport } from '../../web/transport.js';
 import { validateConfig } from './config.js';
 import { createCredentials } from './credentials.js';
-import { discover } from './discovery.js';
 import { createFileSaver } from './files.js';
 import { createNativeHttp } from './native-http.js';
 import { hostName } from './server-url.js';
-import { checkServer, deviceName, hostedAddress, hostedClient, serverRecord, signInSelfHosted } from './setup.js';
+import { hostedClient } from './setup.js';
+import { createOnboarding } from './onboarding.js';
 import { createBridge } from './bridge.js';
 import { createPurchases } from './purchases.js';
 import { createShareInbox } from './share.js';
-import { createSocialSignIn } from './social.js';
+import { interruptedSignIn } from './social.js';
 import { createStore, secureBackend } from './store.js';
-import { BACK, createUi } from './ui.js';
+import { createUi } from './ui.js';
 
 const ShareInbox = registerPlugin('ShareInbox');
 const StorePurchases = registerPlugin('StorePurchases');
@@ -64,83 +64,9 @@ async function main() {
   const inbox = createShareInbox({ plugin: ShareInbox, App });
   const initialShare = await inbox.initial(); // shared from another app before this one was open
 
-  // First launch, or signed out: choose a server and sign in. Returns the record that is now stored.
-  async function connectToHostedService(address, notice) {
-    for (;;) {
-      ui.working('Connecting…');
-      let found;
-      try { found = await discover(http, address, config); }
-      catch (error) {
-        const choice = await ui.problem({ title: 'Could not connect', message: error.message, actions: [{ label: 'Try again', value: 'retry', primary: true }, { label: 'Back', value: 'back' }] });
-        if (choice === 'back') return null;
-        continue;
-      }
-      return hostedSignIn(found, notice);
-    }
-  }
-
-  async function hostedSignIn(found, notice) {
-    const supabase = hostedClient({ http, config });
-    // Only here, after discover() confirmed that this server names the pinned sign-in service, are Apple and Google offered. Their
-    // addresses are built from the same pinned supabaseUrl as the email sign-in's.
-    const social = createSocialSignIn({ supabase, plugin: SocialSignIn, platform });
-    const result = await ui.account({
-      host: hostName(found.url), notice,
-      providers: social.available,
-      social: async provider => { const credential = await social[provider](); return credential ? { credential } : null; },
-      signIn: async (email, password) => ({ credential: await supabase.signIn(email, password) }),
-      signUp: async (email, password) => { const made = await supabase.signUp(email, password); return made.session ? { credential: made.session } : { confirmationSent: true }; },
-    });
-    if (result === BACK) return null;
-    const record = serverRecord(found, result.credential);
-    await store.save(record);
-    return record;
-  }
-
-  async function selfHostedSignIn(found, notice) {
-    const credential = await ui.password({ host: hostName(found.url), notice, submit: password => signInSelfHosted({ http, address: found.url, password, deviceName: deviceName(platform) }) });
-    if (credential === BACK) return null;
-    const record = serverRecord(found, credential);
-    await store.save(record);
-    return record;
-  }
-
-  async function ownServer() {
-    let typed = '';
-    for (;;) {
-      const found = await ui.server({ value: typed, submit: async text => { typed = text; return checkServer({ http, config, input: text }); } });
-      if (found === BACK) return null;
-      const record = await (found.mode === 'hosted' ? hostedSignIn(found, '') : selfHostedSignIn(found, ''));
-      if (record) return record;
-    }
-  }
-
-  async function firstLaunch(notice) {
-    for (;;) {
-      const choice = await ui.choose({ notice });
-      notice = '';
-      const record = choice === 'hosted' ? await connectToHostedService(hostedAddress(config), '') : await ownServer();
-      if (record) return record;
-    }
-  }
-
-  // A server is chosen but there is no credential (signed out, or the sign-in ended).
-  async function signInAgain(record, notice) {
-    for (;;) {
-      ui.working('Connecting…');
-      let found;
-      try { found = await discover(http, record.server.url, config); }
-      catch (error) {
-        const choice = await ui.problem({ title: 'Could not connect', message: error.message, actions: [{ label: 'Try again', value: 'retry', primary: true }, { label: 'Use a different server', value: 'switch' }] });
-        if (choice === 'switch') { await store.forget(); return null; }
-        continue;
-      }
-      const signedIn = await (found.mode === 'hosted' ? hostedSignIn(found, notice) : selfHostedSignIn(found, notice));
-      if (signedIn) return signedIn;
-      await store.forget(); // "Back" from here means: not this server
-      return null;
-    }
-  }
+  // First launch, or signed out: choose a server and sign in (onboarding.js, which keeps the order: ask the server what it is,
+  // and only then offer a sign-in).
+  const { firstLaunch, signInAgain } = createOnboarding({ http, config, ui, store, platform, plugin: SocialSignIn });
 
   async function whoAmI(transport) {
     const response = await transport.fetch('/api/auth/me', { headers: { Accept: 'application/json' } });
@@ -151,7 +77,7 @@ async function main() {
 
   // Loops until there is a signed-in record that the server accepts.
   let record = await store.load();
-  let notice = takeNotice();
+  let notice = takeNotice() || await interruptedSignIn({ platform, App, storage: sessionStorage });
   let session;
   while (!session) {
     if (!record) { record = await firstLaunch(notice); notice = ''; continue; }

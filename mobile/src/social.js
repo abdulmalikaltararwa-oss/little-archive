@@ -13,9 +13,17 @@
 // it against the challenge of the attempt that made it.
 //
 // The native side (SocialSignIn: Swift with AuthenticationServices, Java with Custom Tabs) only shows the sheet or the browser
-// and hands back what came out of it. It never sees the verifier or the raw nonce, and it answers a call only while that call is
-// waiting: there is no listener here for an address that arrives from anywhere else. Neither secret is written to storage or to
+// and hands back what came out of it. It never sees the verifier or the raw nonce. Neither secret is written to storage or to
 // any log, and both are gone when the attempt ends, whatever way it ends.
+//
+// Who can deliver a callback. The page has no listener of its own for opened addresses; an address reaches this module only as
+// the answer to the plugin call that is waiting. On iOS that answer comes from the authentication session's own completion
+// handler, so an address opened by another app never gets here. On Android the callback is an ordinary intent
+// (AndroidManifest.xml), and any app on the phone can send littlearchive://auth-callback?code=… while a sign-in is waiting. The
+// plugin cannot tell that from the browser's own redirect, so it hands it over and the attempt ends with it. What it cannot do
+// is sign anyone in: a code is traded together with this attempt's verifier, and the project refuses a code that was not made
+// for this attempt's challenge. So another app can make one attempt fail ("That sign-in did not finish. Try again."), and
+// nothing more. With no sign-in waiting, such an intent is dropped.
 import { AppError } from './discovery.js';
 import { callbackProblem } from './supabase.js';
 
@@ -43,6 +51,35 @@ export function parseCallback(address) {
   if (get('error') || get('error_code') || get('error_description')) return { kind: 'error', errorCode: String(get('error_code') || '') };
   const code = query.get('code');
   return code && code.length <= 512 && !/\s/.test(code) ? { kind: 'code', code } : { kind: 'invalid' };
+}
+
+/** Shown on the first screen when the app was started by the callback address with no sign-in waiting for it (see below). */
+export const INTERRUPTED = 'Sign-in was interrupted. Try again.';
+const LAUNCH_CHECKED = 'la-launch-checked';
+
+/**
+ * Android may end the app's process while the browser for "Continue with Google" is in front. The redirect then starts the app
+ * afresh with littlearchive://auth-callback as its launch address: the verifier is gone with the old process, so the code is of
+ * no use, and without a word the person would be looking at the first screen wondering what happened. This returns the sentence
+ * to show them, or ''. It reads the address the app was launched with and nothing from it: the code is never used.
+ *
+ * Android only (on iOS the callback never arrives as a launch address). Asked once per process: the launch address stays the
+ * same when the page reloads after a sign-out, so `storage` (sessionStorage, which a new process starts without) remembers
+ * that it was looked at. Another app that starts this one with the same address gets the same harmless sentence.
+ *
+ * @param {object} options
+ * @param {string} options.platform
+ * @param {{getLaunchUrl(): Promise<{url?: string}|undefined>}} options.App  @capacitor/app
+ * @param {{getItem(key: string): string|null, setItem(key: string, value: string): void}} options.storage
+ */
+export async function interruptedSignIn({ platform, App, storage }) {
+  if (platform !== 'android') return '';
+  try {
+    if (storage.getItem(LAUNCH_CHECKED)) return '';
+    storage.setItem(LAUNCH_CHECKED, '1');
+    const launch = await App.getLaunchUrl();
+    return /^littlearchive:\/\/auth-callback(?:[/?#]|$)/i.test(String(launch?.url || '')) ? INTERRUPTED : '';
+  } catch { return ''; } // a courtesy: never a reason not to start
 }
 
 /** Plain words for a failure of the native side. Its own sentences are fit to show; anything else is not. */
@@ -79,8 +116,12 @@ export function createSocialSignIn({ supabase, plugin, platform, subtle = global
   return {
     available,
 
-    /** @returns {Promise<object|null>} the session, or null when the person closed the sheet */
-    apple: () => exclusive('apple', async () => {
+    /**
+     * `onStage('signing-in')` is called once the sheet or the browser has closed with something to trade, just before the request
+     * to the project, so the screen can stop saying that it is opening Apple or Google.
+     * @returns {Promise<object|null>} the session, or null when the person closed the sheet
+     */
+    apple: ({ onStage } = {}) => exclusive('apple', async () => {
       const nonce = secret(32); // raw: for the project only
       const hashed = hex(await sha256(nonce)); // lower case hex: what Apple signs into the token
       let answer;
@@ -89,11 +130,12 @@ export function createSocialSignIn({ supabase, plugin, platform, subtle = global
       if (answer?.status === 'cancelled') return null;
       const token = answer?.identityToken;
       if (answer?.status !== 'signed_in' || typeof token !== 'string' || token.split('.').length !== 3) throw new AppError('Apple did not send back a sign-in. Try again.');
+      onStage?.('signing-in');
       return supabase.signInWithIdToken({ provider: 'apple', idToken: token, nonce, label: LABEL.apple });
     }),
 
     /** @returns {Promise<object|null>} the session, or null when the person closed the browser */
-    google: () => exclusive('google', async () => {
+    google: ({ onStage } = {}) => exclusive('google', async () => {
       const verifier = secret(48); // 64 characters; Supabase accepts 43 to 128
       const challenge = base64url(await sha256(verifier));
       await supabase.providerReady({ provider: 'google', label: LABEL.google });
@@ -104,6 +146,7 @@ export function createSocialSignIn({ supabase, plugin, platform, subtle = global
       const back = answer?.status === 'returned' ? parseCallback(answer.url) : { kind: 'invalid' };
       if (back.kind === 'error') throw callbackProblem(back.errorCode, LABEL.google);
       if (back.kind !== 'code') throw new AppError('Google sign-in did not come back the way it should. Try again.');
+      onStage?.('signing-in');
       return supabase.exchangeCode({ authCode: back.code, codeVerifier: verifier, label: LABEL.google });
     }),
   };

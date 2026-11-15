@@ -5,7 +5,7 @@ import { AppError } from '../src/discovery.js';
 import { createCredentials } from '../src/credentials.js';
 import { createStore, memoryBackend } from '../src/store.js';
 import { createSupabase, sessionFrom } from '../src/supabase.js';
-import { CALLBACK_URL, createSocialSignIn, parseCallback } from '../src/social.js';
+import { CALLBACK_URL, INTERRUPTED, createSocialSignIn, interruptedSignIn, parseCallback } from '../src/social.js';
 import { CONFIG, bytes, fakeHttp, fakeJwt, reply } from './helpers.mjs';
 
 const BASE = CONFIG.supabaseUrl;
@@ -331,4 +331,54 @@ test('a session from either provider is refreshed and ended exactly like an emai
   const credentials = createCredentials({ record, store, supabase: createSupabase({ url: BASE, publishableKey: CONFIG.supabasePublishableKey, http, now: () => NOW }), now: () => NOW });
   assert.ok(await credentials.get(), 'an expired token is traded for a new one');
   assert.equal((await store.load()).credential.refreshToken, 'refresh-2');
+});
+
+test('the screen is told when the sheet or the browser is done and the session is being fetched, and only then', async () => {
+  const order = [];
+  const google = rig({
+    plugin: { browser: async () => { order.push('browser'); return { status: 'returned', url: 'littlearchive://auth-callback?code=abc' }; } },
+    routes: { [`GET ${SETTINGS}`]: switchedOn, [PKCE]: () => { order.push('exchange'); return reply(200, session()); } },
+  });
+  await google.social.google({ onStage: stage => order.push(stage) });
+  assert.deepEqual(order, ['browser', 'signing-in', 'exchange']);
+
+  order.length = 0;
+  const apple = rig({
+    plugin: { apple: async options => { order.push('sheet'); return { status: 'signed_in', identityToken: appleToken(options.nonce) }; } },
+    routes: { [ID_TOKEN]: () => { order.push('grant'); return reply(200, session()); } },
+  });
+  await apple.social.apple({ onStage: stage => order.push(stage) });
+  assert.deepEqual(order, ['sheet', 'signing-in', 'grant']);
+
+  // Closed, or come back with an error: there is no session to fetch, so nothing says "signing in".
+  const stages = [];
+  const onStage = stage => stages.push(stage);
+  assert.equal(await rig({ plugin: fakePlugin({ browser: { status: 'cancelled' } }), routes: { [`GET ${SETTINGS}`]: switchedOn } }).social.google({ onStage }), null);
+  await refusal(rig({ plugin: fakePlugin({ browser: { status: 'returned', url: 'littlearchive://auth-callback?error=access_denied' } }), routes: { [`GET ${SETTINGS}`]: switchedOn } }).social.google({ onStage }));
+  assert.equal(await rig({ plugin: fakePlugin({ apple: { status: 'cancelled' } }) }).social.apple({ onStage }), null);
+  assert.deepEqual(stages, []);
+});
+
+test('Android, the app started by the callback address with no sign-in waiting: one plain notice, once per process, and the code is never used', async () => {
+  const memory = () => { const map = new Map(); return { map, getItem: key => (map.has(key) ? map.get(key) : null), setItem: (key, value) => { map.set(key, String(value)); } }; };
+  const launchedWith = url => ({ asked: 0, async getLaunchUrl() { this.asked += 1; return url === undefined ? undefined : { url }; } });
+  const storage = memory();
+  const App = launchedWith('littlearchive://auth-callback?code=a-code-from-the-old-process');
+  assert.equal(INTERRUPTED, 'Sign-in was interrupted. Try again.');
+  assert.equal(await interruptedSignIn({ platform: 'android', App, storage }), INTERRUPTED);
+  // The page reloads after a sign-out and the launch address is still the same: it is not said again.
+  assert.equal(await interruptedSignIn({ platform: 'android', App, storage }), '');
+  assert.equal(App.asked, 1);
+  assert.deepEqual([...storage.map.values()], ['1'], 'nothing of the address is kept, only that it was looked at');
+  // An error callback, or a bare one, is the same interruption.
+  for (const url of ['littlearchive://auth-callback?error=access_denied', 'littlearchive://auth-callback', 'LittleArchive://Auth-Callback/#x']) assert.equal(await interruptedSignIn({ platform: 'android', App: launchedWith(url), storage: memory() }), INTERRUPTED, url);
+  // An ordinary start, a share, another host, and anything unreadable say nothing.
+  for (const url of [undefined, '', 'littlearchive://share', 'littlearchive://auth-callback.example.com?code=x', 'littlearchive://auth-callbackx', 'https://auth-callback/?code=x', 42]) assert.equal(await interruptedSignIn({ platform: 'android', App: launchedWith(url), storage: memory() }), '', String(url));
+  // iOS never gets the callback as a launch address, so it is not even asked.
+  const ios = launchedWith('littlearchive://auth-callback?code=x');
+  assert.equal(await interruptedSignIn({ platform: 'ios', App: ios, storage: memory() }), '');
+  assert.equal(ios.asked, 0);
+  // A plugin or a storage that fails is not a reason to stop the app from starting.
+  assert.equal(await interruptedSignIn({ platform: 'android', App: { getLaunchUrl: async () => { throw new Error('no plugin'); } }, storage: memory() }), '');
+  assert.equal(await interruptedSignIn({ platform: 'android', App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), '');
 });
