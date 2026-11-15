@@ -96,7 +96,7 @@ export function createSocialSignIn({ supabase, plugin, platform, subtle = global
     google: () => exclusive('google', async () => {
       const verifier = secret(48); // 64 characters; Supabase accepts 43 to 128
       const challenge = base64url(await sha256(verifier));
-      await supabase.providerReady({ provider: 'google', redirectTo: CALLBACK_URL, label: LABEL.google });
+      await supabase.providerReady({ provider: 'google', label: LABEL.google });
       let answer;
       try { answer = await plugin.browser({ url: supabase.authorizeUrl({ provider: 'google', redirectTo: CALLBACK_URL, codeChallenge: challenge }) }); }
       catch (error) { throw nativeProblem(error, 'Could not open the browser for Google. Try again.'); }

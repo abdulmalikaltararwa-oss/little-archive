@@ -32,7 +32,7 @@ For "Continue with Google" and "Continue with Apple" (see docs/mobile-app.md):
     STUB_APPLE_CLIENT_IDS  comma list of bundle ids the Apple settings accept (default app.littlearchive.mobile)
     STUB_CODE_TTL          seconds a PKCE code lasts (default 300, Supabase's five minutes)
 
-Routes: signup, token (password, refresh_token, pkce and id_token grants), authorize (with a stand-in Google), logout, an empty
+Routes: signup, token (password, refresh_token, pkce and id_token grants), settings, authorize (with a stand-in Google), logout, an empty
 key set, and the admin call that deletes a user (`DELETE /auth/v1/admin/users/<id>`, which needs the secret key in the `apikey`
 header). The routes the real service answers to a browser (authorize and the stand-in Google's own pages) need no key; the
 others require the publishable key in the `apikey` header, as the real service does.
@@ -56,7 +56,7 @@ from uuid import uuid4
 
 USERS = {}      # key -> {"id", "password", "email"}: the key is the email of a password account, "google:<sub>" or "apple:<sub>" otherwise
 REFRESH = {}    # refresh token -> key
-FLOWS = {}      # state -> {"redirect", "challenge", "method"}: a browser sign-in that has started
+FLOWS = {}      # state -> {"redirect", "challenge", "method", "prompt"}: a browser sign-in that has started
 CODES = {}      # auth code -> {"key", "challenge", "method", "made"}: one that Google approved and that waits to be traded
 
 
@@ -133,10 +133,14 @@ class Handler(BaseHTTPRequestHandler):
         return key
 
     def redirect(self, location):
+        """A 302 with the small HTML body the real service sends with it (Go's http.Redirect writes one for a GET)."""
+        data = f'<a href="{escape(location)}">Found</a>.\n\n'.encode()
         self.send_response(302)
         self.send_header("Location", location)
-        self.send_header("Content-Length", "0")
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
         self.end_headers()
+        self.wfile.write(data)
 
     def page(self, html):
         data = html.encode()
@@ -205,7 +209,8 @@ class Handler(BaseHTTPRequestHandler):
         wanted = query.get("redirect_to", [""])[0]
         redirect = wanted if wanted in self.redirect_allow else self.site_url
         state = uuid4().hex
-        FLOWS[state] = {"redirect": redirect, "challenge": challenge, "method": method.lower()}
+        # Query parameters the project does not own (prompt=select_account) are passed on to the provider, so the stand-in Google sees them.
+        FLOWS[state] = {"redirect": redirect, "challenge": challenge, "method": method.lower(), "prompt": query.get("prompt", [""])[0]}
         if not challenge:
             return self.redirect(f"https://accounts.google.test/o/oauth2/v2/auth?state={state}")
         if self.google_mode == "approve":
@@ -219,13 +224,22 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
         if url.path == "/auth/v1/.well-known/jwks.json":
             return self.send(200, {"keys": []})
+        if url.path == "/auth/v1/settings":
+            # What the project has switched on (internal/api/settings.go). The auth server asks for no sign-in here; the key is
+            # what the hosted gateway in front of it wants on every /auth/v1 route that is not opened by a browser.
+            if not self.authorised():
+                return
+            external = {name: name not in self.providers_off for name in ("apple", "google", "email")}
+            return self.send(200, {"external": external, "disable_signup": False, "mailer_autoconfirm": not self.confirm})
         if url.path == "/auth/v1/authorize":
             return self.authorize(query)
         if url.path == "/stand-in-google":
             state = escape(query.get("state", [""])[0])
+            chooser = "<h2>Choose an account</h2>" if FLOWS.get(query.get("state", [""])[0], {}).get("prompt") == "select_account" else ""
             return self.page(
                 "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Stand-in Google</title>"
                 "<body style='font:17px system-ui;margin:2rem'><h1>Stand-in Google</h1><p>Development only. No real Google account is involved.</p>"
+                f"{chooser}"
                 f"<p><a href='/stand-in-google/approve?state={state}' style='font-size:22px'>Continue as {escape(self.google_email)}</a></p>"
                 f"<p><a href='/stand-in-google/deny?state={state}' style='font-size:22px'>Cancel</a></p>")
         if url.path in ("/stand-in-google/approve", "/stand-in-google/deny"):

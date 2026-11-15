@@ -123,6 +123,33 @@ class GoogleThroughTheBrowser(StubCase):
         self.assertNotIn(CALLBACK, headers["Location"])
         self.assertEqual(self.stub.CODES, {})
 
+    def test_a_redirect_carries_the_small_html_body_the_real_service_sends(self):
+        status, headers, body = self.authorize(challenge=False)
+        self.assertEqual(status, 302)
+        self.assertIn("text/html", headers["Content-Type"])
+        self.assertGreater(int(headers["Content-Length"]), 0)
+        self.assertIn("Found", body)
+        self.assertIn(headers["Location"].replace("&", "&amp;"), body)
+
+    def test_settings_lists_which_providers_are_on_wants_the_key_and_starts_no_sign_in(self):
+        status, _, body = self.call("GET", "/auth/v1/settings")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["external"], {"apple": True, "google": True, "email": True})
+        self.assertEqual(self.stub.FLOWS, {}, "asking leaves nothing behind")
+        self.stub.Handler.providers_off = {"google"}
+        self.addCleanup(setattr, self.stub.Handler, "providers_off", set())
+        self.assertEqual(self.call("GET", "/auth/v1/settings")[2]["external"], {"apple": True, "google": False, "email": True})
+        self.assertEqual(self.call("GET", "/auth/v1/settings", key=None)[0], 401)
+        self.assertEqual(self.call("GET", "/auth/v1/settings", key="sb_publishable_another0value0")[0], 401)
+
+    def test_the_account_chooser_parameter_reaches_the_stand_in_google_and_only_when_it_is_sent(self):
+        base = f"provider=google&redirect_to={quote(CALLBACK, safe='')}&code_challenge={RFC_CHALLENGE}&code_challenge_method=s256"
+        status, headers, _ = self.call("GET", f"/auth/v1/authorize?{base}&prompt=select_account", key=None)
+        self.assertEqual(status, 302)
+        self.assertIn("Choose an account", self.call("GET", headers["Location"], key=None)[2])
+        _, headers, _ = self.call("GET", f"/auth/v1/authorize?{base}", key=None)
+        self.assertNotIn("Choose an account", self.call("GET", headers["Location"], key=None)[2])
+
     def test_a_provider_that_is_switched_off_answers_the_400_the_real_service_gives(self):
         self.stub.Handler.providers_off = {"google"}
         status, _, body = self.authorize()

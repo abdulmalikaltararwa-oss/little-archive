@@ -5,6 +5,7 @@
 //   POST /auth/v1/token?grant_type=refresh_token  trade a refresh token for new tokens
 //   POST /auth/v1/logout?scope=local            end this device's session
 //   POST /auth/v1/token?grant_type=id_token     sign in with an Apple identity token (the native sheet), see social.js
+//   GET  /auth/v1/settings                      which providers the project has switched on (asked before the browser opens)
 //   GET  /auth/v1/authorize?provider=google&…   the address the system browser opens for Google (PKCE), see social.js
 //   POST /auth/v1/token?grant_type=pkce         trade the code that came back for a session
 //
@@ -102,7 +103,10 @@ export function createSupabase({ url, publishableKey, http, now = Date.now }) {
   // by Supabase's redirect, never by an address the app was handed.
   function authorizeUrl({ provider, redirectTo, codeChallenge }) {
     if (provider !== 'google') throw new Error(`No browser sign-in for ${provider}.`);
-    const query = new URLSearchParams({ provider, redirect_to: redirectTo });
+    // prompt=select_account: Google shows its account chooser every time, so signing in again after signing out does not silently
+    // reuse the Google account the browser remembers. The project passes query parameters it does not own on to the provider
+    // (internal/api/external.go; `prompt` is not in its reserved list).
+    const query = new URLSearchParams({ provider, redirect_to: redirectTo, prompt: 'select_account' });
     // Supabase's documented spelling is lower case: auth-js sends code_challenge_method=s256.
     if (codeChallenge) { query.set('code_challenge', codeChallenge); query.set('code_challenge_method', 's256'); }
     return `${base}/auth/v1/authorize?${query}`;
@@ -112,15 +116,20 @@ export function createSupabase({ url, publishableKey, http, now = Date.now }) {
     authorizeUrl,
     /**
      * Is the provider switched on? Supabase answers a switched-off provider's authorize address with a 400 page that the system
-     * browser would show as raw text and the app would never hear about. So the address is asked once first, without following
-     * where it leads (a 302 to the provider means yes), with no PKCE values, since it never trades a code. (The server records a short-lived row for any authorize request, so the check costs one.)
+     * browser would show as raw text and the app would never hear about. So the project's public settings are read first
+     * (GET /auth/v1/settings lists `external.<provider>` as true or false, needs no sign-in and records nothing on the project).
+     *
+     * The sign-in is refused only when the answer says the provider is off, or when the service cannot be reached. Any other
+     * answer (a rate limit, an error page, a shape this app does not know) lets the browser open: this check exists to turn one
+     * known dead end into a sentence, not to stand between a person and a sign-in that may well work.
      */
-    async providerReady({ provider, redirectTo, label }) {
+    async providerReady({ provider, label }) {
       let reply;
-      try { reply = await http({ url: authorizeUrl({ provider, redirectTo }), method: 'GET', headers: { apikey: publishableKey, Accept: 'application/json' } }); }
+      try { reply = await http({ url: `${base}/auth/v1/settings`, method: 'GET', headers: { apikey: publishableKey, Accept: 'application/json' } }); }
       catch (error) { throw new AppError('Could not reach the sign-in service. Check your connection and try again.', { cause: error }); }
-      if (reply.status >= 300 && reply.status < 400) return;
-      throw problem(reply, label);
+      const body = bodyJson(reply);
+      const off = reply.status === 200 ? body?.external?.[provider] === false : providerIsOff(body);
+      if (off) throw new AppError(`${label} sign-in is not switched on yet. Use your email and password for now.`);
     },
     /** The code a browser sign-in came back with, for a session. `codeVerifier` is the secret half of the PKCE pair. */
     async exchangeCode({ authCode, codeVerifier, label }) {
