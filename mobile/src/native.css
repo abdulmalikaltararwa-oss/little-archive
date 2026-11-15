@@ -89,6 +89,10 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-social:disabled { opacity: .55; cursor: not-allowed; }
 .native-social[aria-busy="true"] { cursor: progress; }
 .native-social:focus-visible { outline: 2px solid var(--sage); outline-offset: 3px; }
+/* Focus that the page moved after a touch (ui.js, focusQuietly): the ring is for the keyboard, so none is drawn. A heading or a
+   notice that takes focus when its view appears is not a control and never draws one. */
+.native-screen .native-quiet:focus, .native-screen .native-quiet:focus-visible { outline: none; }
+.native-screen h1:focus, .native-screen .notice:focus { outline: none; }
 /* Apple: black with a white logo; white with a black logo where the background is dark. System font, as Apple asks. */
 .native-social-apple { background: #000; color: #fff; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; }
 :root[data-theme='dark'] .native-social-apple { background: #fff; color: #000; }
