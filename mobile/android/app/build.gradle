@@ -38,6 +38,8 @@ dependencies {
     implementation project(':capacitor-android')
     // The one-time unlock (StorePurchasesPlugin). Google's own library, nothing else: no purchase service, no ads.
     implementation "com.android.billingclient:billing:$billingVersion"
+    // Custom Tabs (SocialSignInPlugin). AndroidX's own library, nothing else: no Google sign-in SDK.
+    implementation "androidx.browser:browser:$androidxBrowserVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

@@ -33,6 +33,16 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
+            <!-- Where Supabase sends the system browser back to after "Continue with Google": littlearchive://auth-callback, and only
+                 that (this host; the iOS share extension's littlearchive://share is not matched). SocialSignInPlugin accepts it only
+                 while a sign-in this app started is waiting. The same address must be on the Supabase project's redirect allow-list. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="littlearchive" android:host="auth-callback" />
+            </intent-filter>
+
         </activity>
 
         <provider
