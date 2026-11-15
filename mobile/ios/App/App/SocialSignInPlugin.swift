@@ -5,8 +5,9 @@ import UIKit
 /// "Continue with Apple" and "Continue with Google": the two system sheets, and nothing else.
 ///
 /// This class only shows a sheet and hands back what came out of it; mobile/src/social.js decides everything else. It never sees
-/// the code verifier or the raw nonce (the page keeps those), and it holds a call only while that call's sheet is open, so an
-/// address that arrives from anywhere else has nowhere to go. Every answer is `{ status, ... }`:
+/// the code verifier or the raw nonce (the page keeps those), and it holds a call only while that call's sheet is open. On iOS
+/// an address that arrives any other way has nowhere to go (see the last paragraph; Android is different, and
+/// SocialSignInPlugin.java says how). Every answer is `{ status, ... }`:
 ///
 ///   apple({ nonce })  nonce is the SHA-256 of the page's raw nonce, as lower case hex, which Apple signs into the identity token.
 ///                     { status: "signed_in", identityToken } | { status: "cancelled" }
@@ -32,6 +33,10 @@ public class SocialSignInPlugin: CAPPlugin, CAPBridgedPlugin {
     private var appleSheet: AppleSheet?
     private var browserSheet: BrowserSheet?
 
+    /// Said when there is no window to show a sheet over (the app is not on screen yet, or is leaving it). Not the same thing as
+    /// another sign-in being open, and the page shows this sentence as it is.
+    static let noWindow = "The sign-in could not be shown just now. Bring Little Archive to the front and try again."
+
     /// The window a sheet is shown over.
     private func anchor() -> ASPresentationAnchor? {
         bridge?.viewController?.view.window
@@ -45,8 +50,12 @@ public class SocialSignInPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         DispatchQueue.main.async {
-            guard self.appleSheet == nil, self.browserSheet == nil, let anchor = self.anchor() else {
+            guard self.appleSheet == nil, self.browserSheet == nil else {
                 call.reject("Another sign-in is already open.", "BUSY")
+                return
+            }
+            guard let anchor = self.anchor() else {
+                call.reject(SocialSignInPlugin.noWindow, "NO_WINDOW")
                 return
             }
             let sheet = AppleSheet(anchor: anchor, nonce: hashedNonce) { [weak self] outcome in
@@ -71,8 +80,12 @@ public class SocialSignInPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         DispatchQueue.main.async {
-            guard self.appleSheet == nil, self.browserSheet == nil, let anchor = self.anchor() else {
+            guard self.appleSheet == nil, self.browserSheet == nil else {
                 call.reject("Another sign-in is already open.", "BUSY")
+                return
+            }
+            guard let anchor = self.anchor() else {
+                call.reject(SocialSignInPlugin.noWindow, "NO_WINDOW")
                 return
             }
             let sheet = BrowserSheet(anchor: anchor, url: url, scheme: SocialSignInPlugin.callbackScheme) { [weak self] outcome in

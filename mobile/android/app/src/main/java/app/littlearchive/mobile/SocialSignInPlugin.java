@@ -17,15 +17,25 @@ import java.util.Locale;
  * apple() here and the page never calls one on Android.
  *
  * This class only opens the browser and hands back where it ended up; mobile/src/social.js decides everything else. It never
- * sees the PKCE code verifier (the page keeps it), and it answers a call only while that call is waiting.
+ * sees the PKCE code verifier (the page keeps it).
  *
  *   browser({ url })  opens `url` (the project's authorize address) in a Custom Tab. The tab ends when the page it shows redirects
  *                     to littlearchive://auth-callback, which the intent filter in AndroidManifest.xml sends to MainActivity.
  *                     { status: "returned", url } | { status: "cancelled" }
  *
  * Android gives no signal when someone closes a Custom Tab, so a resume with the call still waiting and no callback means the tab
- * was closed. A callback arrives (onNewIntent) before the resume that follows it. A callback that arrives when nothing is waiting
- * (another app sent the intent, or the app was restarted since the tab opened and the page's verifier is gone) is dropped.
+ * was closed. A callback arrives (onNewIntent) before the resume that follows it.
+ *
+ * Who can send the callback. The intent filter is exported and browsable, as it must be for the browser to reach it, so any app
+ * on the phone can send littlearchive://auth-callback?... too. This class cannot tell such an intent from the browser's own
+ * redirect:
+ *   - While a call is waiting, whichever arrives first is handed to the page as the answer, and the attempt ends with it. It
+ *     cannot sign anyone in: the page trades the code together with its own verifier, and the project refuses a code that was
+ *     not made for that attempt's challenge (an error in the address is shown as a failed sign-in). So the most another app can
+ *     do is make one attempt fail, and the person tries again.
+ *   - With no call waiting, the intent is dropped here. If it started the app in a new process (Android ended the old one while
+ *     the tab was open, or another app sent it), the page sees it as the launch address and says "Sign-in was interrupted. Try
+ *     again." (interruptedSignIn in social.js); the code in it is never used, since the verifier went with the old process.
  */
 @CapacitorPlugin(name = "SocialSignIn")
 public class SocialSignInPlugin extends Plugin {
@@ -81,7 +91,10 @@ public class SocialSignInPlugin extends Plugin {
             waiting = null;
             opened = false;
         }
+        // Nothing is waiting: dropped (see the class comment).
         if (call == null) return;
+        // Something is waiting. This may be the browser's redirect or any other app's intent; the page and the project decide
+        // what the address is worth, not this class.
         JSObject result = new JSObject();
         result.put("status", "returned");
         result.put("url", data.toString());
