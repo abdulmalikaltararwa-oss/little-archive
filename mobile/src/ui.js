@@ -201,7 +201,8 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
                 providerError.hidden = false;
                 providerError.scrollIntoView({ block: 'nearest' });
               }
-              lock(false); button.removeAttribute('aria-busy'); text.textContent = brand[name].label;
+              // Closed or failed: the screen is usable again, and focus (lost when the button was disabled) comes back to it.
+              lock(false); button.removeAttribute('aria-busy'); text.textContent = brand[name].label; button.focus();
             } }, brand[name].logo, text);
             return button;
           };
