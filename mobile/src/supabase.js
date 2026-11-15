@@ -113,7 +113,7 @@ export function createSupabase({ url, publishableKey, http, now = Date.now }) {
     /**
      * Is the provider switched on? Supabase answers a switched-off provider's authorize address with a 400 page that the system
      * browser would show as raw text and the app would never hear about. So the address is asked once first, without following
-     * where it leads (a 302 to the provider means yes), with no PKCE values so that nothing is stored on the project.
+     * where it leads (a 302 to the provider means yes), with no PKCE values, since it never trades a code. (The server records a short-lived row for any authorize request, so the check costs one.)
      */
     async providerReady({ provider, redirectTo, label }) {
       let reply;

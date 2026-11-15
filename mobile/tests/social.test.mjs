@@ -92,7 +92,7 @@ test('Google: the browser is sent to the pinned project with the SHA-256 of a ve
   // The three requests: the check that the provider is on (no PKCE values), the browser's address, the exchange. All to the pinned project.
   assert.deepEqual(calls.map(call => `${call.method} ${call.url.split('?')[0]}`), [`GET ${BASE}/auth/v1/authorize`, `POST ${BASE}/auth/v1/token`]);
   for (const call of calls) assert.ok(call.url.startsWith(`${BASE}/`), call.url);
-  assert.ok(!calls[0].url.includes('code_challenge'), 'the check stores nothing on the project');
+  assert.ok(!calls[0].url.includes('code_challenge'), 'the check carries no PKCE values: it never trades a code');
   assert.ok(!JSON.stringify(calls[0]).includes(verifier) && !plugin.asked.browser[0].url.includes(verifier), 'the verifier is in no request but the exchange');
 });
 
