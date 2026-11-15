@@ -78,3 +78,22 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-tabs .btn { flex: 1; }
 .native-screen .native-tabs .btn[aria-pressed="true"] { background: var(--sage-pale); border-color: transparent; color: var(--sage); }
 :root[data-theme='dark'] .native-screen .native-tabs .btn[aria-pressed="true"] { color: var(--sage-deep); }
+
+/* "Continue with Apple" and "Continue with Google" (ui.js, the account screen), above the email form. Each follows its own
+   brand's button rules, so the colours and the logos are theirs, not the app's. Finger sized (48px), and drawn as pills like the
+   app's other buttons, which both brands allow. The words are the brands' own wording for a button that signs in or signs up. */
+.native-socials { display: flex; flex-direction: column; gap: 12px; margin-bottom: 4px; }
+.native-social { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid transparent; font-family: inherit; font-size: 1rem; font-weight: 500; line-height: 1.25; -webkit-tap-highlight-color: transparent; transition: transform var(--dur-1, 120ms) ease, opacity var(--dur-2, 200ms) ease; }
+.native-social svg { flex: none; }
+.native-social:active { transform: scale(.98); }
+.native-social:disabled { opacity: .55; cursor: not-allowed; }
+.native-social[aria-busy="true"] { cursor: progress; }
+.native-social:focus-visible { outline: 2px solid var(--sage); outline-offset: 3px; }
+/* Apple: black with a white logo; white with a black logo where the background is dark. System font, as Apple asks. */
+.native-social-apple { background: #000; color: #fff; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; }
+:root[data-theme='dark'] .native-social-apple { background: #fff; color: #000; }
+/* Google: white with a 1px #747775 stroke and #1F1F1F text; #131314 with an #8E918F stroke and #E3E3E3 text on dark. The G keeps its colours. */
+.native-social-google { background: #fff; border-color: #747775; color: #1f1f1f; font-family: Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+:root[data-theme='dark'] .native-social-google { background: #131314; border-color: #8e918f; color: #e3e3e3; }
+.native-divider { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; color: var(--ink-soft); font-size: .8125rem; line-height: 1.4; }
+.native-divider::before, .native-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }

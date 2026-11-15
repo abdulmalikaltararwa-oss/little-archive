@@ -21,11 +21,13 @@ import { checkServer, deviceName, hostedAddress, hostedClient, serverRecord, sig
 import { createBridge } from './bridge.js';
 import { createPurchases } from './purchases.js';
 import { createShareInbox } from './share.js';
+import { createSocialSignIn } from './social.js';
 import { createStore, secureBackend } from './store.js';
 import { BACK, createUi } from './ui.js';
 
 const ShareInbox = registerPlugin('ShareInbox');
 const StorePurchases = registerPlugin('StorePurchases');
+const SocialSignIn = registerPlugin('SocialSignIn');
 const ui = createUi(document.getElementById('app'));
 
 const NOTICE = 'la-notice';
@@ -79,8 +81,13 @@ async function main() {
 
   async function hostedSignIn(found, notice) {
     const supabase = hostedClient({ http, config });
+    // Only here, after discover() confirmed that this server names the pinned sign-in service, are Apple and Google offered. Their
+    // addresses are built from the same pinned supabaseUrl as the email sign-in's.
+    const social = createSocialSignIn({ supabase, plugin: SocialSignIn, platform });
     const result = await ui.account({
       host: hostName(found.url), notice,
+      providers: social.available,
+      social: async provider => { const credential = await social[provider](); return credential ? { credential } : null; },
       signIn: async (email, password) => ({ credential: await supabase.signIn(email, password) }),
       signUp: async (email, password) => { const made = await supabase.signUp(email, password); return made.session ? { credential: made.session } : { confirmationSent: true }; },
     });
