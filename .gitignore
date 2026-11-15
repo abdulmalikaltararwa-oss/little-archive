@@ -1,9 +1,8 @@
 .env
 .env.*
 !.env.example
-data/
-# The React interface's data layer lives in ui/src/data; the rule above is for runtime data directories.
-!/ui/src/data/
+# Runtime data at the top of the checkout only. Source folders named data (ui/src/data) are not ignored.
+/data/
 restored-data/
 backups/
 *.sqlite*
@@ -27,6 +26,3 @@ work/
 /blob-report/
 /dist-mac/
 /.mac-build/
-
-# ui/src/data is source (the React data layer), not runtime data
-!ui/src/data/

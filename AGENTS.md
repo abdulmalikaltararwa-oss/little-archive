@@ -73,6 +73,49 @@ or browser profile. Release validation also exercises native Mac/Linux,
 containers, real model integration, and upgrade/recovery. Keep actual results
 separate from test definitions and planned acceptance.
 
+## Working rules for builders and reviewers
+
+These hold for every change, whoever makes it.
+
+**Done means the gate passed.** `scripts/gate.sh` checks out a commit into a fresh temporary worktree, installs
+from the lock files, builds the interface and runs every suite, including the browser tests in Chromium, Firefox
+and WebKit. It needs `.venv` (Python 3.12 with `requirements-lock.txt` installed) and Node 22 or newer. Run it on
+the merged commit, never judge a change by tests run in the folder it was written in: files that were never
+committed make those pass. Paste the gate's PASS/FAIL lines in the report.
+
+**Never push `main` directly.** Release validation (three browsers, containers, native installs, upgrade) runs
+on GitHub only. Push the candidate as `candidate/<topic>`, start it with
+`gh workflow run release-validation.yml --ref candidate/<topic>`, wait for green, then fast-forward `main` to that
+commit and push. Pushing anything needs the owner's yes each time.
+
+**Proof steps are quoted, not remembered.** Every expected result written into a handoff, a deployment request or
+a report ("this address answers 200", "this page shows sign-in") names the doc line or test that states it. If
+none exists, say the result is unverified. Example: hosted mode serves no web interface and `/` answers 404
+([hosted mode](docs/hosted-mode.md), "What a hosted server does not offer").
+
+**Task sheet for delegated work.** One sheet per builder:
+
+```
+Task: <one result a person or a test can see>
+Start from: <commit or branch>
+Write only: <paths>
+Read: AGENTS.md, docs/STATUS.md, <other paths>
+Done when: <tests or gate steps, with the output pasted>
+Ask before: pushing, deploying, real accounts or services, production data, spending, deleting
+Hand back: PASS, ISSUES (each with evidence) or BLOCKED; changed paths; for anything a person sees,
+           screenshots at phone width (390px), light and dark; what was run versus only read; up to 3 questions
+```
+
+**A fresh reviewer for risky or visible changes.** Sign-in, payments, data storage and anything a person sees
+are reviewed by someone who did not write them and who is given the diff and the screenshots, not the
+builder's report. The reviewer changes nothing and reports findings with file and line.
+
+**Commits.** Small, in the imperative style already in the log (`area: what changed`). No attribution lines and no
+mention of the tools or assistants used to write the change, in messages, code, comments or docs.
+
+**Where things stand** is in [docs/STATUS.md](docs/STATUS.md): decided, built, running, waiting on the owner.
+Read it before starting and update it when one of those changes.
+
 ## Data, compatibility, and scope
 
 Keep source facts, owner edits, and model suggestions separate. A missing
