@@ -89,6 +89,7 @@ A request that fails any check gets `401` with `WWW-Authenticate: Bearer` and no
 
 - **Session revocation.** The server does not ask Supabase whether a session was signed out. A token stays valid here until it expires. Keep access-token lifetimes short in the Supabase project.
 - **Email confirmation, MFA level, bans.** Whatever Supabase requires before it issues a token is all that is required. No `aal`, `amr` or `email_verified` claim is inspected.
+- **How the person signed in.** Email and password, Google and Apple all end in the same kind of access token, and the server verifies that and nothing about which provider made it. It does not read `app_metadata`, the provider or the email, so [Continue with Google and Apple](mobile-app.md#continue-with-google-and-apple) needed no server change.
 - **Authorization inside Supabase.** Row-level security, database roles and app metadata play no part. The Supabase database is not used at all.
 - **The identity behind the account id.** The server stores no email address or name. It cannot tell two accounts belong to one person.
 
