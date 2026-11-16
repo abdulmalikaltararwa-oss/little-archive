@@ -8,7 +8,8 @@ import { ApiError } from '@/data/client';
 import type { Features, Item, Settings } from '@/data/types';
 import { AiPermissionHost } from '@/features/ai-permission/host';
 import type { Recipe, RecipeResponse } from './api';
-import { RecipeEntry } from './detail-entry';
+import { CookBar, RecipeEntry, RecipeSection } from './detail-entry';
+import { useSaveRecipe } from './use-save-recipe';
 
 // The motion library and the ASCII spinner ask whether motion is reduced; jsdom has no matchMedia.
 beforeAll(() => {
@@ -45,9 +46,20 @@ const answer = (status: RecipeResponse['status'], card: Recipe | null): RecipeRe
   item_id: 'item-1', status, edited: false, recipe: card, extracted: card, extraction: card ? { method: 'rules', at: '2026-11-14T10:00:00+00:00', stale: false } : null, edited_at: null, available: { jsonld: false, rules: true, ai: false },
 });
 
-interface Setup { features: Features | null; settings?: Partial<Settings>; known?: boolean; get?: () => Promise<unknown>; post?: () => Promise<unknown>; leave?: boolean }
+interface Setup { pinned?: boolean; features: Features | null; settings?: Partial<Settings>; known?: boolean; get?: () => Promise<unknown>; post?: () => Promise<unknown>; leave?: boolean }
 
-function view({ features: flags, settings, known = true, get = async () => answer('none', null), post, leave = true }: Setup) {
+/** The section and the pinned bar the way the save's detail holds them: one answer, shared. */
+function Pinned() {
+  const state = useSaveRecipe(ITEM.id);
+  return (
+    <>
+      <RecipeSection item={ITEM} state={state} pinned />
+      <footer><CookBar item={ITEM} state={state} /></footer>
+    </>
+  );
+}
+
+function view({ pinned = false, features: flags, settings, known = true, get = async () => answer('none', null), post, leave = true }: Setup) {
   const request = vi.fn(async (_path: string, options?: { method?: string }) => {
     if (_path === '/enrichment/status') return {};
     if (options?.method === 'POST') return post ? post() : answer('none', null);
@@ -56,7 +68,7 @@ function view({ features: flags, settings, known = true, get = async () => answe
   const closeItem = vi.fn(async () => leave);
   const goScreen = vi.fn();
   const archive = { store: createStore(() => ({ features: flags, featuresKnown: known, settings })), api: { request }, closeItem, goScreen } as unknown as Archive;
-  const result = render(<ArchiveProvider archive={archive}><RecipeEntry item={ITEM} /><AiPermissionHost /></ArchiveProvider>);
+  const result = render(<ArchiveProvider archive={archive}>{pinned ? <Pinned /> : <RecipeEntry item={ITEM} />}<AiPermissionHost /></ArchiveProvider>);
   return { ...result, request, closeItem, goScreen };
 }
 
@@ -163,5 +175,85 @@ describe('a save’s recipe section', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(request.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
+  });
+});
+
+describe('the way into cook mode pinned to a save’s detail', () => {
+  const timed = recipe({
+    time: { total_seconds: 4800, active_seconds: null, prep_seconds: null, cook_seconds: null },
+    steps: [
+      { text: 'Boil it.', timer_seconds: 540, ingredient_refs: [0], source: 'caption', section: null },
+      { text: 'Toss it.', timer_seconds: null, ingredient_refs: [], source: 'caption', section: null },
+    ],
+  });
+
+  it('offers Start cooking for a save with a recipe, with what the cooking takes, and asks about the save once', async () => {
+    const { request } = view({ pinned: true, features: features({}), get: async () => answer('extracted', timed) });
+    expect(await screen.findByRole('button', { name: 'Start cooking' })).toBeEnabled();
+    expect(screen.getByTestId('cook-facts')).toHaveTextContent('1 h 20 min total2 steps1 timer');
+    // The card keeps its way to the recipe and leaves cooking to the bar.
+    expect(screen.getByRole('button', { name: 'Open recipe card' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cook' })).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens cook mode at its own address, through the save’s own way out', async () => {
+    const { goScreen, closeItem } = view({ pinned: true, features: features({}), get: async () => answer('extracted', recipe()) });
+    await userEvent.click(await screen.findByRole('button', { name: 'Start cooking' }));
+    await waitFor(() => expect(goScreen).toHaveBeenCalledWith('recipes', 'item-1/cook'));
+    expect(closeItem).toHaveBeenCalled();
+  });
+
+  it('stays in the save when unsaved edits are kept', async () => {
+    const { goScreen, closeItem } = view({ pinned: true, features: features({}), get: async () => answer('extracted', recipe()), leave: false });
+    await userEvent.click(await screen.findByRole('button', { name: 'Start cooking' }));
+    await waitFor(() => expect(closeItem).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(goScreen).not.toHaveBeenCalled();
+  });
+
+  it('is not shown for a save with no recipe, and appears once one is found', async () => {
+    const post = async () => ({ ...answer('extracted', recipe()), extraction_result: { found: true, method: 'rules', tried: ['rules'], ai_available: false, is_recipe: true } });
+    view({ pinned: true, features: features({}), post });
+    const look = await screen.findByRole('button', { name: 'Look for a recipe' });
+    expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull();
+    expect(screen.queryByTestId('cook-facts')).toBeNull();
+    await userEvent.click(look);
+    expect(await screen.findByRole('button', { name: 'Start cooking' })).toBeInTheDocument();
+  });
+
+  it('is not shown for a save marked as not a recipe', async () => {
+    view({ pinned: true, features: features({}), get: async () => ({ ...answer('not_a_recipe', recipe({ is_recipe: false, reason: 'not_a_recipe' })), edited: true }) });
+    expect(await screen.findByText(/You marked this save as not a recipe/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull();
+  });
+
+  it('is not shown for a card with no steps; the card says why it cannot be cooked from', async () => {
+    view({ pinned: true, features: features({}), get: async () => answer('extracted', recipe({ steps: [], incomplete: ['steps'] })) });
+    expect(await screen.findByRole('button', { name: 'Cook' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull();
+  });
+
+  it('is not shown while the answer is on its way, or where recipes are not offered', () => {
+    view({ pinned: true, features: features({}), get: () => new Promise(() => {}) });
+    expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull();
+    cleanup();
+    const { container } = view({ pinned: true, features: features({ available: false }) });
+    expect(container.querySelector('footer')).toBeEmptyDOMElement();
+  });
+
+  it('gives a locked account no Start button and asks nothing: the line leads to the unlock', async () => {
+    const { request, goScreen } = view({ pinned: true, features: features({ locked: true }) });
+    expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull();
+    expect(screen.getByText(/part of the one-time unlock/)).toBeInTheDocument();
+    expect(request).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'About the unlock' }));
+    await waitFor(() => expect(goScreen).toHaveBeenCalledWith('unlock', ''));
+  });
+
+  it('gives no Start button when the server answers that the account is locked', async () => {
+    view({ pinned: true, features: features({}), get: async () => { throw new ApiError('This comes with the full unlock.', 402, 'unlock_required'); } });
+    expect(await screen.findByText(/part of the one-time unlock/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull();
   });
 });

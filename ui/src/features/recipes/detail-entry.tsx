@@ -1,8 +1,11 @@
 // A save's recipe, from inside the save's detail: a small section that says whether the save has a recipe
 // card, opens it, starts cook mode, or looks for one in the save's text. It shows nothing at all while the
 // recipes feature is not on this server, and a quiet locked line when this account has not unlocked it.
-import { useEffect, useState } from 'react';
-import { errorMessage } from '@web/utils.js';
+//
+// The detail panel also pins a way into cook mode to its footer (CookBar). Both read one answer about the save
+// (useSaveRecipe), so the bar appears the moment a card is found and never without one. Cook mode is part of the
+// unlock: a locked account is never asked about the save, so it gets no bar, only the line that leads to the unlock.
+import { useState } from 'react';
 import { Lock, Play, Sparkles } from 'lucide-react';
 import { useArchive, useBusy } from '@/app/archive-context';
 import { toast } from '@/app/ui-state';
@@ -10,18 +13,12 @@ import { allowAi } from '@/features/ai-permission/gate';
 import { Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { Button } from '@/components/ui/button';
-import { isLocked } from '@/data/client';
 import type { Archive } from '@/data/archive';
 import type { SeamScreen } from '@/data/location';
 import type { Item } from '@/data/types';
-import { useFeature } from '../feature-kit';
-import { extractRecipe, getRecipe, type RecipeResponse } from './api';
-import { cardRest, cookRest, countOf, formatServings, noRecipeSentence, readingLabel } from './model';
-
-type Known =
-  | { id: string; phase: 'ready'; response: RecipeResponse }
-  | { id: string; phase: 'locked' }
-  | { id: string; phase: 'error'; message: string };
+import { extractRecipe } from './api';
+import { cardRest, cookRest, countOf, formatDuration, formatServings, noRecipeSentence, readingLabel } from './model';
+import { canCook, useSaveRecipe, type SaveRecipe } from './use-save-recipe';
 
 /**
  * Closes the open save, asking about unsaved edits first, and then opens a recipe page. Closing a save that
@@ -38,30 +35,40 @@ async function leaveTo(archive: Archive, screen: SeamScreen, rest = '') {
   archive.goScreen(screen, rest);
 }
 
-export function RecipeEntry({ item }: { item: Item }) {
+/**
+ * The way into cook mode that the save's detail pins to its footer: what the cooking takes, and one button. It is
+ * drawn only for a save whose recipe can be cooked from (canCook); it leaves through the same door as every other
+ * way out of the save, so unsaved edits are asked about first. `quiet` hands the footer's one strong button to Save.
+ */
+export function CookBar({ item, state, quiet = false }: { item: Pick<Item, 'id'>; state: SaveRecipe; quiet?: boolean }) {
   const archive = useArchive();
-  const feature = useFeature('recipes');
-  const [known, setKnown] = useState<Known | null>(null);
-  const [reload, setReload] = useState(0);
+  const recipe = state.recipe;
+  if (!recipe || !canCook(state)) return null;
+  const timers = recipe.steps.filter(step => step.timer_seconds).length;
+  return (
+    <>
+      <p data-testid="cook-facts" className="order-first flex basis-full flex-wrap gap-x-3.5 gap-y-0.5 text-sm text-ink-soft">
+        {recipe.time.total_seconds ? <span><span className="num font-medium text-ink">{formatDuration(recipe.time.total_seconds)}</span> total</span> : null}
+        <span><span className="num font-medium text-ink">{recipe.steps.length}</span> {recipe.steps.length === 1 ? 'step' : 'steps'}</span>
+        {timers ? <span><span className="num font-medium text-ink">{timers}</span> {timers === 1 ? 'timer' : 'timers'}</span> : null}
+      </p>
+      <Button variant={quiet ? 'outline' : 'primary'} className="max-sm:flex-1" onClick={() => void leaveTo(archive, 'recipes', cookRest(item.id))}><Play className="fill-current" />Start cooking</Button>
+    </>
+  );
+}
+
+export function RecipeEntry({ item }: { item: Item }) {
+  return <RecipeSection item={item} state={useSaveRecipe(item.id)} />;
+}
+
+/** The recipe section itself. `pinned` says a CookBar is on show beside it, so the card does not offer cook mode twice. */
+export function RecipeSection({ item, state, pinned = false }: { item: Item; state: SaveRecipe; pinned?: boolean }) {
+  const archive = useArchive();
+  const { feature, current, locked, response, recipe, setKnown } = state;
   const [lookBusy, runLook] = useBusy();
   const [note, setNote] = useState('');
 
-  useEffect(() => {
-    if (feature !== 'available') return;
-    let stale = false;
-    getRecipe(archive, item.id).then(
-      response => { if (!stale) setKnown({ id: item.id, phase: 'ready', response }); },
-      (error: unknown) => { if (!stale) setKnown(isLocked(error) ? { id: item.id, phase: 'locked' } : { id: item.id, phase: 'error', message: errorMessage(error) }); },
-    );
-    return () => { stale = true; };
-  }, [archive, feature, item.id, reload]);
-
   if (feature === 'loading' || feature === 'unavailable') return null;
-
-  const current = known && known.id === item.id ? known : null;
-  const locked = feature === 'locked' || current?.phase === 'locked';
-  const response = current?.phase === 'ready' ? current.response : null;
-  const recipe = response?.recipe && response.recipe.is_recipe && (response.status === 'extracted' || response.status === 'edited') ? response.recipe : null;
 
   const look = async () => {
     if (!(await allowAi(archive, 'recipe'))) return;
@@ -92,7 +99,7 @@ export function RecipeEntry({ item }: { item: Item }) {
       ) : current.phase === 'error' ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-soft">
           <span role="alert">{current.message}</span>
-          <Button size="sm" onClick={() => setReload(count => count + 1)}>Try again</Button>
+          <Button size="sm" onClick={state.retry}>Try again</Button>
         </div>
       ) : recipe ? (
         <div className="rounded-lg bg-sage-pale/60 p-4">
@@ -103,7 +110,9 @@ export function RecipeEntry({ item }: { item: Item }) {
           </p>
           <div className="mt-3.5 flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => void leaveTo(archive, 'recipes', cardRest(item.id))}>Open recipe card</Button>
-            <Button variant="primary" size="sm" disabled={recipe.steps.length === 0} title={recipe.steps.length ? undefined : 'This card has no steps to cook from'} onClick={() => void leaveTo(archive, 'recipes', cookRest(item.id))}><Play className="fill-current" />Cook</Button>
+            {pinned && canCook(state) ? null : (
+              <Button variant="primary" size="sm" disabled={recipe.steps.length === 0} title={recipe.steps.length ? undefined : 'This card has no steps to cook from'} onClick={() => void leaveTo(archive, 'recipes', cookRest(item.id))}><Play className="fill-current" />Cook</Button>
+            )}
           </div>
         </div>
       ) : response?.status === 'not_a_recipe' ? (

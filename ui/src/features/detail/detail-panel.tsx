@@ -24,7 +24,8 @@ import { canMorph, COVER_TRANSITION } from '@/lib/transition';
 import { copyText, openReview } from '../actions';
 import { Cover } from '../library/cover';
 import { PlacesEntry } from '../places/detail-entry';
-import { RecipeEntry } from '../recipes/detail-entry';
+import { CookBar, RecipeSection } from '../recipes/detail-entry';
+import { canCook, useSaveRecipe, type SaveRecipe } from '../recipes/use-save-recipe';
 
 const STATUS_OPTIONS = (Object.entries(STATUS_NAMES) as [Status, string][]).map(([value, label]) => ({ value, label }));
 
@@ -77,7 +78,7 @@ function Transcript({ text }: { text: string }) {
   );
 }
 
-function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { item: Item; version: number; setItem(next: Item, focus?: string): void; dirty: boolean; setDirty(value: boolean): void; formId: string; panel: React.RefObject<HTMLDivElement | null> }) {
+function Content({ item, version, setItem, dirty, setDirty, formId, panel, recipe }: { item: Item; version: number; setItem(next: Item, focus?: string): void; dirty: boolean; setDirty(value: boolean): void; formId: string; panel: React.RefObject<HTMLDivElement | null>; recipe: SaveRecipe }) {
   const archive = useArchive();
   const demo = archive.backend.kind === 'demo';
   const settings = useArchiveState(state => state.settings);
@@ -284,7 +285,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
       {spoken ? <div className="mt-5"><Transcript text={spoken.text} /></div> : null}
 
       {/* What else this save holds: a recipe to cook from, places it names. Each shows nothing where the server has no such feature. */}
-      <RecipeEntry item={item} />
+      <RecipeSection item={item} state={recipe} pinned />
       <PlacesEntry item={item} allowLeave={allowLeave} />
 
       <form id={formId} onSubmit={event => void submit(event)} className="mt-5 flex flex-col gap-4 border-t border-line pt-5">
@@ -451,6 +452,9 @@ export function DetailPanel() {
 
   const current = loaded.id === viewId ? loaded : null;
   const item = current?.item ?? known ?? null;
+  // Whether this save has a recipe to cook from. Asked once, for the section in the body and the bar in the footer.
+  const recipe = useSaveRecipe(item?.id ?? '');
+  const cook = canCook(recipe);
   const error = current?.error ?? '';
   const version = current?.version ?? 0;
 
@@ -482,7 +486,9 @@ export function DetailPanel() {
       footer={item ? (
         <>
           <span role="status" className={dirty ? 'label-mono me-auto' : 'sr-only'}>{dirty ? '· unsaved changes' : ''}</span>
-          <Button type="submit" form={formId} variant="primary" data-detail-focus="save" className="min-w-40 max-sm:flex-1"><Check />Save changes</Button>
+          {/* One strong button at a time: Start cooking while the form is clean, Save once there is something to save. */}
+          <Button type="submit" form={formId} variant={cook && !dirty ? 'outline' : 'primary'} data-detail-focus="save" className={cook ? undefined : 'min-w-40 max-sm:flex-1'}><Check />Save changes</Button>
+          <CookBar item={item} state={recipe} quiet={dirty} />
         </>
       ) : undefined}
     >
@@ -494,7 +500,7 @@ export function DetailPanel() {
             </div>
             <div className="px-5 pt-5 pb-8 sm:px-7">
               {error ? <div className="mb-4"><FormError message={error} /></div> : null}
-              <Content key={item.id} item={item} version={version} setItem={setItem} dirty={dirty} setDirty={setDirty} formId={formId} panel={panel} />
+              <Content key={item.id} item={item} version={version} setItem={setItem} dirty={dirty} setDirty={setDirty} formId={formId} panel={panel} recipe={recipe} />
             </div>
           </>
         ) : error ? (
