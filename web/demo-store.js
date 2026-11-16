@@ -164,8 +164,11 @@ export function createDemoAPI(fixtures, { clock = () => new Date().toISOString()
         const identity = canonical(body.url); const existing = [...items.values()].find(i => i.source_account === 'default' && i.platform === identity.platform && i.source_key === identity.key);
         const id = existing?.id || nextID('item'); const stamp = clock();
         const item = existing || { id, ...identity, source_key: identity.key, source_account: 'default', title: body.title?.trim() || 'A new demo save', creator: '', caption: '', summary: '', notes: '', content_type: identity.content_type, preview_url: null, thumbnail_url: null, tags: [], collections: [], favorite: false, status: 'inbox', needs_review: true, saved_at: null, created_at: stamp, updated_at: stamp, last_seen_at: stamp, evidence: [], ai: null };
-        const patch = Object.fromEntries(['title', 'summary', 'notes', 'tags', 'collection_ids'].filter(k => body[k] != null && !(k === 'title' && !body[k].trim())).map(k => [k, body[k]]));
-        const updated = edit(item, patch); items.set(id, updated); return json(clone(updated));
+        // As on a server, a link saved again keeps what the first save has: only what the form filled in is written, and topics are added to.
+        const filled = k => (Array.isArray(body[k]) ? body[k].length > 0 : typeof body[k] === 'string' ? Boolean(body[k].trim()) : body[k] != null);
+        const patch = Object.fromEntries(['title', 'summary', 'notes', 'tags', 'collection_ids'].filter(k => (existing ? filled(k) : body[k] != null && !(k === 'title' && !body[k].trim()))).map(k => [k, existing && k === 'tags' ? [...existing.tags, ...body.tags.filter(tag => !existing.tags.includes(tag))] : body[k]]));
+        // As on a server: a link that was already saved answers with the first save, seen again now.
+        const updated = edit(item, patch); updated.last_seen_at = stamp; items.set(id, updated); return json(clone(updated));
       }
       if (route === '/api/items/bulk' && method === 'POST') {
         if ((body.ids == null) === (body.filters == null)) throw new Error('Choose selected IDs or a library filter.');

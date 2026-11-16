@@ -125,3 +125,25 @@ test('unsafe links and invalid fields cannot create executable demo content', as
   assert.equal(addition.data.title, '<script>literal text</script>');
   assert.equal(addition.data.preview_url, null);
 });
+
+test('a link saved again answers with the first save, seen again, and keeps what it has', async () => {
+  let tick = 0;
+  const api = createDemoAPI(SYNTHETIC_RECORDS, { clock: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString() });
+  const shelf = (await call(api, '/api/collections', 'POST', { name: 'Kept twice', color: '#94a98b' })).data;
+  const first = (await call(api, '/api/items', 'POST', { url: 'https://example.com/kept-twice', title: 'Kept twice', notes: 'First words', tags: ['design'], collection_ids: [shelf.id] })).data;
+  // A new save has one timestamp for when it was made and when it was last seen.
+  assert.equal(first.created_at, first.last_seen_at);
+  const again = (await call(api, '/api/items', 'POST', { url: 'https://example.com/kept-twice', title: '', notes: '', tags: [], collection_ids: [] })).data;
+  assert.equal(again.id, first.id);
+  assert.equal(again.created_at, first.created_at);
+  assert.notEqual(again.last_seen_at, again.created_at);
+  assert.equal(again.title, 'Kept twice');
+  assert.equal(again.notes, 'First words');
+  assert.deepEqual(again.tags, ['design']);
+  assert.deepEqual(again.collections.map(collection => collection.id), [shelf.id]);
+  // What the form does fill in is put on the first save; topics are added to, not replaced.
+  const more = (await call(api, '/api/items', 'POST', { url: 'https://example.com/kept-twice', notes: 'Second words', tags: ['food'] })).data;
+  assert.equal(more.notes, 'Second words');
+  assert.deepEqual(more.tags, ['design', 'food']);
+  assert.equal((await call(api, '/api/items?q=Kept%20twice')).data.total, 1);
+});

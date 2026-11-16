@@ -120,7 +120,9 @@ test('a link is saved only when Save is pressed, then opens', async ({ page }) =
   await dialog.getByLabel('Title').fill('A new discovery <b>not markup</b>');
   await dialog.getByLabel('Topics').fill('smoke, test');
   await dialog.getByRole('button', { name: 'Save to archive' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'A little discovery, safely kept.' })).toBeVisible();
+  const tray = page.getByRole('region', { name: 'Just saved' });
+  await expect(tray.getByRole('status')).toContainText('Kept in your archive.');
+  await tray.getByRole('button', { name: 'Open it' }).click();
   const detail = page.getByTestId('detail');
   await expect(detail.getByRole('heading', { level: 2, name: 'A new discovery <b>not markup</b>' })).toBeVisible();
   await expect(detail.locator('b')).toHaveCount(0);

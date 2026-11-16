@@ -6,6 +6,9 @@ import { cn } from 'cn';
 import { Bookmark, Trash2 } from 'lucide-react';
 import { useArchive, useArchiveState } from '@/app/archive-context';
 import { confirm, toast, type OpenDialog } from '@/app/ui-state';
+import { restoreFocus } from '@/lib/focus';
+import { SAVE_TRAY_ID, showSaveMoment } from '../save-moment/store';
+import { alreadyKept } from '../save-moment/words';
 import { CheckRow, Field, FormError, Notice } from '@/components/field';
 import { Modal } from '@/components/modal';
 import { Pick } from '@/components/pick';
@@ -58,12 +61,13 @@ export function SaveLinkDialog({ spec, close }: DialogProps<'save-link'>) {
     setSaving(true);
     try {
       if (!safeURL(url)) throw new Error('Enter a complete HTTP or HTTPS link.');
-      const item = await archive.api.createItem({ url: url.trim(), title: title.trim(), notes, tags: parseTags(tags), collection_ids: collections });
+      const topics = parseTags(tags);
+      const item = await archive.api.createItem({ url: url.trim(), title: title.trim(), notes, tags: topics, collection_ids: collections });
       dismiss();
-      archive.markSaved(item.id);
+      if (!alreadyKept(item)) archive.markSaved(item.id);
+      // The tray says it was kept and offers where to file it. The save is not opened: it is one tap away in the tray.
+      showSaveMoment(item, { carried: Boolean(title.trim() || notes.trim() || topics.length || collections.length) });
       await archive.refreshLibrary();
-      toast('A little discovery, safely kept.', { tone: 'saved' });
-      void archive.openItem(item.id);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -78,6 +82,12 @@ export function SaveLinkDialog({ spec, close }: DialogProps<'save-link'>) {
       title="Save a little discovery"
       description="Keep a post, article, video, or any link worth coming back to."
       opener={spec.opener}
+      // After a save the tray is the next thing to act on, so focus goes to it; otherwise back to what opened the dialog.
+      closeFocus={() => {
+        const tray = document.getElementById(SAVE_TRAY_ID);
+        if (tray) tray.focus({ preventScroll: true });
+        else restoreFocus(spec.opener);
+      }}
       // A link that arrived ready to review keeps the on-screen keyboard closed, so Save stays in view.
       initialFocus={share?.url ? 'content' : urlInput}
       footer={
@@ -232,7 +242,7 @@ export function BulkDialog({ spec, close }: DialogProps<'bulk'>) {
       title={topic ? 'Add a topic to your selection' : 'Collect your selection'}
       opener={spec.opener}
       initialFocus={topic ? input : undefined}
-      footer={empty ? <Button onClick={close}>Close</Button> : <Button type="submit" form="bulk-form" variant="primary" aria-busy={saving || undefined} disabled={saving}>Update {spec.ids.length} saves</Button>}
+      footer={empty ? <Button onClick={close}>Close</Button> : <Button type="submit" form="bulk-form" variant="primary" aria-busy={saving || undefined} disabled={saving}>Update {countLabel(spec.ids.length, 'save')}</Button>}
     >
       {empty ? (
         <p className="text-sm text-ink-soft">Create a local collection first, then add your selection to it.</p>

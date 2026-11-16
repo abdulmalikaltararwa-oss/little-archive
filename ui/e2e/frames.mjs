@@ -41,7 +41,7 @@ for (const [label, viewport] of [['desktop', { width: 1440, height: 900 }], ['ph
   await sequence(page, `close-${label}`, 8);
   await close;
 
-  // 3. Saving a link: the flower opens in the island, then the island says what happened.
+  // 3. Saving a link: the tray rises above the dock and the flower opens in it.
   await page.waitForTimeout(600);
   if (label === 'desktop') await page.getByRole('button', { name: 'Save a link', exact: true }).click();
   else await page.getByRole('navigation', { name: 'Quick actions' }).getByRole('button', { name: 'Save a link' }).click();
@@ -49,7 +49,7 @@ for (const [label, viewport] of [['desktop', { width: 1440, height: 900 }], ['ph
   await dialog.getByLabel('Link').fill('https://example.com/a-frame-by-frame-save');
   await dialog.getByLabel('Title').fill('A save, frame by frame');
   const save = dialog.getByRole('button', { name: 'Save to archive' }).click();
-  await sequence(page, `saved-${label}`, 16, { clip: { x: 0, y: 0, width: viewport.width, height: 150 } });
+  await sequence(page, `saved-${label}`, 16);
   await save;
   await context.close();
 }

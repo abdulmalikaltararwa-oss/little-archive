@@ -9,6 +9,7 @@ import { BootScreen, LoginScreen } from '@/features/auth/screens';
 import { DetailPanel } from '@/features/detail/detail-panel';
 import { DialogHost } from '@/features/dialogs/host';
 import { LibraryScreen, SEARCH_INPUT_ID } from '@/features/library/library-screen';
+import { SaveTray } from '@/features/save-moment/tray';
 import { FeatureScreen } from '@/features/screens';
 import { Shell } from '@/features/shell/shell';
 import { cspNonce } from '@/lib/nonce';
@@ -87,6 +88,7 @@ export function App({ archive }: { archive: Archive }) {
             <Shell demo={demo}>{screen === 'library' ? <LibraryScreen demo={demo} /> : <FeatureScreen screen={screen} demo={demo} rest={rest} />}</Shell>
             <DetailPanel />
             <DialogHost />
+            <SaveTray />
           </>
         ) : null}
         <AiPermissionHost />

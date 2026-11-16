@@ -1,4 +1,4 @@
-import { test, expect, apiAction, cards, detailPanel, login, navigation, saveButton, saveCount, searchBox, uniqueName, waitForItems } from './fixtures.mjs';
+import { test, expect, apiAction, cards, detailPanel, login, navigation, saveButton, saveCount, saveTray, searchBox, uniqueName, waitForItems } from './fixtures.mjs';
 
 // Installable app, share target and phone layout. Everything runs against the real server and the real interface;
 // no /api response is replaced. Share links are plain GET navigations, exactly what Android's share sheet opens.
@@ -142,8 +142,12 @@ test.describe('installable app', () => {
     const response = await apiAction(page, 'POST', '/api/items', () => dialog.getByRole('button', { name: 'Save to archive', exact: true }).click());
     const item = await response.json();
     expect(item).toMatchObject({ url: `https://example.com/e2e/${key}/pasta`, title, notes: 'Worth a look!' });
-    await expect(detailPanel(page)).toBeVisible();
+    // The tray says it was kept and names it; the save itself is opened from there.
+    await expect(saveTray(page).getByRole('status')).toContainText('Kept in your archive.');
+    await expect(saveTray(page).getByRole('status')).toContainText(`${title} · Web`);
     await expect.poll(() => pathAndSearch(page)).toBe('/');
+    await saveTray(page).getByRole('button', { name: 'Open it', exact: true }).click();
+    await expect(detailPanel(page)).toBeVisible();
     // The address now names the open save, so a reload comes back to it. (The share link itself is gone from the address.)
     await expect(page).toHaveURL(new RegExp(`#/\\?item=${item.id}$`));
     await page.reload();

@@ -73,6 +73,8 @@
   --animate-shimmer: shimmer 2.4s linear infinite;
   --animate-caret: caret 1s steps(1) infinite;
   --animate-welcome: welcome 2.2s ease-out 1;
+  /* As long as the save tray stays (TRAY_MS in features/save-moment/words.ts). */
+  --animate-tray-countdown: tray-countdown 5s linear forwards;
 
   @keyframes bob {
     50% { transform: translateY(-6px) rotate(-4deg); }
@@ -91,6 +93,10 @@
   }
   @keyframes caret {
     50% { opacity: 0; }
+  }
+  @keyframes tray-countdown {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
   }
   @keyframes welcome {
     0% { box-shadow: 0 0 0 0 var(--petal); }

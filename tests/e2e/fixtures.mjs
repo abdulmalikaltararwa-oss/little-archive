@@ -66,6 +66,8 @@ export const cards = page => page.locator('article[data-item-id]');
 export const cardTitles = page => page.locator('article[data-item-id] h3');
 export const searchBox = page => page.getByRole('searchbox', { name: 'Search titles, captions, tags, and notes' });
 export const detailPanel = page => page.getByRole('dialog', { name: 'A closer look', exact: true });
+/** The tray that answers a save: "Kept in your archive." with places to file it, or "You already kept this." */
+export const saveTray = page => page.locator('#save-tray');
 
 export async function waitForItems(page) {
   await expect(saveCount(page)).toHaveText(/^(?:\d[\d,]* of )?\d[\d,]* saves?$/);
@@ -188,6 +190,8 @@ export async function saveLink(page, { title, url, notes = '', topics = '', coll
   const response = await apiAction(page, 'POST', '/api/items', () => add.getByRole('button', { name: 'Save to archive', exact: true }).click());
   const item = await response.json();
   await expect(add).not.toBeVisible();
+  // A save is answered by the tray, not by opening it; the save is one tap away there.
+  await saveTray(page).getByRole('button', { name: 'Open it', exact: true }).click();
   const detail = detailPanel(page);
   await expect(detail.getByLabel('Title', { exact: true })).toHaveValue(title);
   return { item, detail };

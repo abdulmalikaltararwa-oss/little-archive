@@ -28,7 +28,7 @@ nothing competing with the content. Spectacle is saved for moments:
 | --- | --- |
 | First paint, sign-in, the home hero | The flower field: mono characters arrive as noise and settle into the mark; they ripple under the pointer and are otherwise still |
 | Opening a save | The card's cover moves into the detail's cover (a browser view transition) |
-| Saving a link | The island shows the flower opening petal by petal, then widens to say it is kept; the new card gets a one-off ring when you return to the wall |
+| Saving a link | The save tray opens the flower petal by petal beside "Kept in your archive."; the new card gets a one-off ring when you return to the wall from the save |
 | Counts | Numbers in the hero and in an import result count up once |
 | Import, AI jobs | An ASCII progress bar that is also a real `progressbar` |
 | Nothing to show | A small ASCII drawing above the words. A library with no saves at all shows how to save instead: three steps, worded for where it is open (`emptyLibraryWords`) |
@@ -117,6 +117,12 @@ has `dir="auto"`.
 - **The detail's footer** holds Save changes, and for a save with a recipe to cook from, Start cooking beside it
   with a line of what the cooking takes. One of the two is the strong button: Start cooking while the form is clean,
   Save once there is something to save.
+- **The save tray** (`features/save-moment/`) answers a saved link: an island-coloured card above the dock (bottom
+  end corner on a wide screen) that says the link was kept and offers up to two of the person's own collections,
+  the fullest first, and "To revisit" as chips. A chosen chip carries a tick as well as the petal colour. It
+  leaves after five seconds unless it is touched or a key is pressed in it, then stays until Done or Escape; it
+  steps aside for any dialog, an opened save or another view. A link that was already in the library gets the
+  same card with when and where the first copy is, and no countdown. It is never drawn over a dialog.
 - **The wall** is a shortest-column masonry computed from data (`features/library/masonry.ts`). A card's
   height is known before it is drawn, so nothing shifts and only the cards near the screen exist in the page.
 - **RTL-safe.** Use logical utilities only: `ps-`/`pe-`, `ms-`/`me-`, `start-`/`end-`, `text-start`,
@@ -152,6 +158,7 @@ Use these before writing something new.
 | An action that may send saved content to an AI service | `await allowAi(archive, action)` from `features/ai-permission/gate.ts`, before the call; stop on false |
 | A link to the privacy policy or the terms | `components/legal-links.tsx` (addresses come from `lib/site.ts`) |
 | Feedback after an action | `toast(text)`, `toast(text, { error: true })`, `toast(text, { tone: 'saved' })` |
+| The answer to a saved link | `showSaveMoment(item)` from `features/save-moment/store.ts` (the tray, not a toast) |
 | A button that runs something async | `useBusy()` from `app/archive-context.tsx` with `aria-busy` |
 | Buttons | `components/ui/button.tsx`: `primary`, `soft`, `outline` (default), `ghost`, `danger`, `danger-ghost` |
 | A labelled field, form error, notice, section | `components/field.tsx` |
