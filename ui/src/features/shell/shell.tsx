@@ -1,7 +1,7 @@
 // The frame around every screen: sidebar on a wide screen, a floating dock on a phone, the top bar, and the
 // demo's banner. The dock replaces the buildless interface's hamburger: the four things a thumb reaches for
 // (library, search, save, browse) are one tap away, with Save in the middle.
-import { useRef, type ReactNode } from 'react';
+import { useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { cn } from 'cn';
 import { FolderHeart, House, Plus, RotateCcw, Search, Settings, Sparkles, Upload } from 'lucide-react';
 import { useArchive, useArchiveState } from '@/app/archive-context';
@@ -81,7 +81,24 @@ function DockButton({ label, onClick, active, children, primary }: { label: stri
   );
 }
 
-/** The phone's navigation. Hidden while a selection is being made: the bulk bar takes its place. */
+/**
+ * Whether the phone app says its keyboard is up. On iOS the app ends the page at the top of the keyboard and marks the root
+ * element with `data-keyboard` for as long (mobile/ios/App/App/MainViewController.swift). Nothing sets it in a browser or on
+ * Android, where this is always false.
+ */
+function watchKeyboard(changed: () => void) {
+  const observer = new MutationObserver(changed);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard'] });
+  return () => observer.disconnect();
+}
+export function useKeyboardUp() {
+  return useSyncExternalStore(watchKeyboard, () => document.documentElement.hasAttribute('data-keyboard'), () => false);
+}
+
+/**
+ * The phone's navigation. Hidden while a selection is being made: the bulk bar takes its place. Hidden too while the phone
+ * app's keyboard is up: fixed to the bottom of a page that ends at the keyboard, it would sit over what is being typed about.
+ */
 function Dock({ hidden }: { hidden: boolean }) {
   const archive = useArchive();
   const home = useArchiveState(state => state.loc.screen === 'library' && state.loc.view === 'all');
@@ -126,6 +143,7 @@ export function BrowseSheet({ spec, close }: { spec: OpenDialog; close(): void }
 
 export function Shell({ children, demo }: { children: ReactNode; demo: boolean }) {
   const selecting = useArchiveState(state => state.selected.size > 0);
+  const keyboardUp = useKeyboardUp();
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[var(--sidebar)_minmax(0,1fr)]">
       <aside aria-label="Library navigation" className="sticky top-0 hidden h-dvh flex-col gap-7 overflow-y-auto overscroll-contain border-e border-line bg-paper-deep/80 px-4 pt-7 pb-5 lg:flex">
@@ -142,7 +160,7 @@ export function Shell({ children, demo }: { children: ReactNode; demo: boolean }
           {children}
         </main>
       </div>
-      <Dock hidden={selecting} />
+      <Dock hidden={selecting || keyboardUp} />
     </div>
   );
 }
