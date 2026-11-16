@@ -65,7 +65,7 @@ test('whatever arrives is parsed by the same function as a browser share, so hos
 test('the shipped config is valid and holds only public values', () => {
   const shipped = JSON.parse(readFileSync(new URL('../app.config.json', import.meta.url), 'utf8'));
   const config = validateConfig(shipped);
-  assert.equal(config.hostedServerUrl, 'https://app.little-archive.example');
+  assert.equal(config.hostedServerUrl, 'https://little-archive.altararwah.com');
   assert.match(config.supabasePublishableKey, /^sb_publishable_/);
   assert.deepEqual(Object.keys(shipped).sort(), ['hostedServerUrl', 'supabasePublishableKey', 'supabaseUrl']);
 });
