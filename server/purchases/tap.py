@@ -15,8 +15,9 @@ Shapes follow Tap's API reference (developers.tap.company: Create a Charge, Retr
 `POST /v2/charges` with a Bearer key; `amount` is a JSON number in the currency's own decimals (three for KWD), not a string and not
 fils; only the status `CAPTURED` is paid; the webhook carries a `hashstring` header, an HMAC-SHA256 in hex, keyed with the secret
 key, over `x_id`, `x_amount`, `x_currency`, `x_gateway_reference`, `x_payment_reference`, `x_status`, `x_created` joined with no
-separator. UNVERIFIED (Tap's pages do not state it): that Retrieve a Charge returns `metadata` exactly as Create does, and the
-complete list of hosts a hosted page may be on. Exercised only against stand-ins: no charge was ever created at Tap by this code.
+separator. UNVERIFIED (Tap's pages do not state it): that Retrieve a Charge returns `metadata` exactly as Create does (if it does not, no
+payment ever settles), the complete list of hosts a hosted page may be on (if it is short, starting a payment answers 503), and
+what characters a secret key may hold. Exercised only against stand-ins: no charge was ever created at Tap by this code.
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ DECIMALS = {"KWD": 3, "BHD": 3, "OMR": 3, "JOD": 3, "SAR": 2, "AED": 2, "QAR": 2
 PAID, OPEN = "CAPTURED", "INITIATED"
 STATUSES = frozenset({"INITIATED", "CAPTURED", "ABANDONED", "CANCELLED", "FAILED", "DECLINED", "RESTRICTED", "VOID", "TIMEDOUT", "UNKNOWN"})
 CHARGE_ID = re.compile(r"chg_[A-Za-z0-9_]{6,100}")
-KEY = re.compile(r"sk_(test|live)_[A-Za-z0-9]{8,200}")
+KEY = re.compile(r"sk_(test|live)_[!-~]{8,200}")  # Tap does not publish what follows the prefix, so only whitespace and control characters are refused
 RESPONSE_BYTES = 64 * 1024
 
 
@@ -78,6 +79,7 @@ class TapCharge:
     live_mode: bool
     order: str = ""              # reference.order: the reference this server made for the attempt
     account: str = ""            # metadata.account_id: the account the charge was started for
+    metadata_order: str = ""     # metadata.order: the same reference again, beside the account it belongs to
     url: str = ""                # transaction.url: Tap's hosted page, while the charge is open
     gateway_reference: str = ""
     payment_reference: str = ""
@@ -97,7 +99,7 @@ def parse_charge(body):
         if body.get("object", "charge") != "charge" or not CHARGE_ID.fullmatch(body["id"]) or amount is None or not isinstance(body["status"], str) or not isinstance(body["live_mode"], bool):
             raise TapError("invalid")
         return TapCharge(id=body["id"], status=body["status"][:40], amount=amount, currency=currency, live_mode=body["live_mode"], order=_text(reference.get("order")),
-                         account=_text(metadata.get("account_id")), url=_text(transaction.get("url"), 2048), gateway_reference=_text(reference.get("gateway")),
+                         account=_text(metadata.get("account_id")), metadata_order=_text(metadata.get("order")), url=_text(transaction.get("url"), 2048), gateway_reference=_text(reference.get("gateway")),
                          payment_reference=_text(reference.get("payment")), created=_text(transaction.get("created")))
     except (KeyError, TypeError, AttributeError):
         raise TapError("invalid") from None
@@ -179,7 +181,7 @@ class HttpTapClient(TapClient):
 
     def create_charge(self, amount, currency, *, order, idempotent, account, name, email, redirect_url, post_url=""):
         body = {"amount": "__AMOUNT__", "currency": currency, "customer_initiated": True, "threeDSecure": True, "save_card": False, "description": "Little Archive unlock",
-                "source": {"id": "src_all"}, "reference": {"order": order, "transaction": order, "idempotent": idempotent}, "metadata": {"account_id": account},
+                "source": {"id": "src_all"}, "reference": {"order": order, "transaction": order, "idempotent": idempotent}, "metadata": {"account_id": account, "order": order},
                 "customer": {"first_name": name, "email": email}, "redirect": {"url": redirect_url}}
         if post_url:
             body["post"] = {"url": post_url}

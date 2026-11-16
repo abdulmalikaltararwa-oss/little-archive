@@ -232,7 +232,7 @@ class PurchaseService:
             return unlocked
         price = amount_text(self.tap_amount, self.tap_currency)
         last = self.store.tap_latest(user_id)
-        if last and last["status"] == OPEN:
+        if last and last["status"] in {OPEN, PAID}:
             # Asking twice must not make two charges a person could pay twice. The last payment is looked at first: if it was paid
             # after all, that is the answer; if its page is still fresh and open at Tap, that page is given again.
             try:
@@ -241,7 +241,7 @@ class PurchaseService:
                 if (last["amount"], last["currency"]) == (price, self.tap_currency) and self.store.clock() - last["created_at"] < TAP_REUSE_SECONDS:
                     return {"unlocked": False, "provider": "tap", "status": "pending", "url": last["url"]}
             except Refusal as refusal:
-                if refusal.code not in {"purchase_not_paid", "purchase_invalid"}:  # that payment ended unpaid: start another
+                if refusal.code not in {"purchase_not_paid", "purchase_invalid", "purchase_revoked"}:  # that payment ended unpaid or was taken back: start another
                     raise
         order, idempotent = "la_" + secrets.token_hex(12), secrets.token_hex(16)
         self.store.tap_begin(order, idempotent, user_id, price, self.tap_currency, tap.live)
@@ -271,12 +271,14 @@ class PurchaseService:
         if held is not None:  # settled before: the answer is on file and stays the same however often it is asked
             if held[1] == "revoked":
                 raise self._refuse("revoked")
+            self._unlock(user_id, "tap")  # the purchase and the unlock are two writes: one that was stopped between them is finished here
             return {"unlocked": True, "provider": "tap", "status": "active", "restored": True}
         charge = self._ask_tap(tap.retrieve_charge, charge_id)
-        # The amount and currency are the ones written down when the payment was started (the configured price at that moment), so
-        # a price changed while a buyer is on Tap's page does not strand a payment made at the price they were shown.
-        same = (charge.id == charge_id and charge.currency == attempt["currency"] and amount_text(charge.amount, charge.currency) == attempt["amount"]
-                and charge.live_mode == tap.live == bool(attempt["live"]) and charge.order == attempt["order_ref"] and charge.account == user_id)
+        # The amount and currency must be both the ones written down when the payment was started and the ones configured now. A
+        # charge made at a price the operator has since changed is not settled by itself; that one is for an operator's hand.
+        price = (amount_text(self.tap_amount, self.tap_currency), self.tap_currency)
+        same = (charge.id == charge_id and (amount_text(charge.amount, charge.currency), charge.currency) == price == (attempt["amount"], attempt["currency"])
+                and charge.live_mode == tap.live == bool(attempt["live"]) and charge.order == charge.metadata_order == attempt["order_ref"] and charge.account == user_id)
         if not same:
             log.warning("A Tap charge does not match the payment that was started for it; nothing was unlocked.")
             raise self._refuse("invalid")

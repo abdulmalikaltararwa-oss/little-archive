@@ -45,7 +45,7 @@ class FakeTap(TapClient):
         charge_id = "chg_TS" + uuid4().hex
         self.created.append({"id": charge_id, "amount": amount, "currency": currency, "order": order, "idempotent": idempotent, "account": account, "name": name, "email": email,
                              "redirect_url": redirect_url, "post_url": post_url})
-        self.charges[charge_id] = TapCharge(id=charge_id, status="INITIATED", amount=amount, currency=currency, live_mode=self.live, order=order, account=account,
+        self.charges[charge_id] = TapCharge(id=charge_id, status="INITIATED", amount=amount, currency=currency, live_mode=self.live, order=order, account=account, metadata_order=order,
                                             url="https://sandbox.payments.tap.company/pay/" + charge_id, payment_reference="pay_" + charge_id[-8:], created="1763300000000")
         return self.charges[charge_id]
 
@@ -68,7 +68,7 @@ class FakeTap(TapClient):
         charge = replace(self.charges[charge_id], **claimed)
         body = {"object": "charge", "id": charge.id, "status": charge.status, "amount": float(charge.amount), "currency": charge.currency, "live_mode": charge.live_mode,
                 "reference": {"order": charge.order, "gateway": charge.gateway_reference, "payment": charge.payment_reference}, "transaction": {"created": charge.created},
-                "metadata": {"account_id": charge.account}}
+                "metadata": {"account_id": charge.account, "order": charge.metadata_order}}
         return json.dumps(body).encode(), {"hashstring": hashstring(key or self.key, charge), "content-type": "application/json"}
 
 
@@ -233,7 +233,7 @@ class SettleTests(TapCase):
     def test_a_charge_for_another_amount_currency_account_order_or_mode_unlocks_nobody(self):
         other, o = self.account()
         for wrong in ({"amount": Decimal("0.100")}, {"amount": Decimal("2.501")}, {"currency": "USD", "amount": Decimal("2.50")}, {"currency": "BHD"}, {"account": other}, {"account": ""},
-                      {"order": "la_" + "0" * 24}, {"live_mode": True}, {"id": "chg_TS" + "f" * 32}):
+                      {"order": "la_" + "0" * 24}, {"metadata_order": "la_" + "0" * 24}, {"metadata_order": ""}, {"live_mode": True}, {"id": "chg_TS" + "f" * 32}):
             user, auth = self.account()
             charge = self.started(auth)
             self.tap.change(charge, status="CAPTURED", **wrong)
@@ -314,15 +314,27 @@ class SettleTests(TapCase):
         self.assertEqual(self.notify(charge).json(), {"received": True, "action": "unlocked"})
         self.assertTrue(self.summary(auth)["unlocked"])
 
-    def test_a_price_changed_while_the_buyer_is_paying_does_not_strand_what_they_paid(self):
+    def test_a_charge_at_a_price_that_is_no_longer_the_configured_one_unlocks_nothing(self):
         user, auth = self.account()
         charge = self.started(auth)
         self.build(tap_price="3.000")
         self.tap.change(charge, status="CAPTURED")
-        self.assertEqual(self.confirm(auth, charge).status_code, 200, "the charge is for the price written down when the payment was started")
+        with self.assertLogs("little_archive", "WARNING"):
+            self.refused(self.confirm(auth, charge), 400, "purchase_invalid")
+            self.assertIn("Payment not found", self.back(charge).text)
+        self.assertFalse(self.summary(auth)["unlocked"], "the amount must be the configured one, as well as the one the payment was started with")
         other, o = self.account()
         self.start(o)
         self.assertEqual(self.tap.created[-1]["amount"], Decimal("3.000"), "a new payment is at the new price")
+
+    def test_an_unlock_that_was_stopped_half_way_is_finished_the_next_time_the_charge_is_seen(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        self.tap.change(charge, status="CAPTURED")
+        self.confirm(auth, charge)
+        self.app.state.entitlements.set_unlocked(user, False)  # as if the server stopped after recording the purchase and before unlocking
+        self.assertEqual(self.start(auth).json()["unlocked"], True, "and no second charge is made for what was already paid")
+        self.assertEqual((self.summary(auth)["unlocked_via"], len(self.tap.created), len(self.rows())), ("tap", 1, 1))
 
     def test_when_tap_cannot_be_asked_nothing_is_decided(self):
         user, auth = self.account()
@@ -483,7 +495,7 @@ class SecretTests(TapCase):
         self.assertNotIn(KEY, printed)
         self.assertNotIn("2.500", printed)
         with patch("httpx.Client", side_effect=AssertionError("Network was not requested")):
-            bad = json.dumps(diagnose(env_file=self.root / "absent.env", environment={**environment, "LA_TAP_SECRET_KEY": KEY + "!", "LA_TAP_PRICE": "2.500"}))
+            bad = json.dumps(diagnose(env_file=self.root / "absent.env", environment={**environment, "LA_TAP_SECRET_KEY": KEY + " x", "LA_TAP_PRICE": "2.500"}))
         self.assertNotIn(KEY, bad)
 
 
@@ -498,7 +510,7 @@ class FakeTapApi:
         if self.raw is not None:
             return httpx.Response(self.status, content=self.raw)
         charge = {"object": "charge", "id": "chg_TS0123456789abcdef", "status": "INITIATED", "amount": 2.5, "currency": "KWD", "live_mode": False, "threeDSecure": True,
-                  "reference": {"order": "la_order", "transaction": "la_order", "idempotent": "idem", "gateway": "", "payment": "4516251234"}, "metadata": {"account_id": "account-1"},
+                  "reference": {"order": "la_order", "transaction": "la_order", "idempotent": "idem", "gateway": "", "payment": "4516251234"}, "metadata": {"account_id": "account-1", "order": "la_order"},
                   "transaction": {"created": "1763300000000", "url": "https://sandbox.payments.tap.company/pay/chg_TS0123456789abcdef", "expiry": {"period": 30, "type": "MINUTE"}},
                   "customer": {"first_name": "Synthetic", "email": "buyer@example.test"}, "source": {"object": "source", "id": "src_all"}, **self.changes}
         return httpx.Response(self.status, json=charge)
@@ -516,14 +528,15 @@ class HttpTapClientTests(unittest.TestCase):
 
     def test_a_charge_is_created_on_taps_hosted_page_with_every_method_and_the_amount_as_a_number(self):
         charge = self.create()
-        self.assertEqual((charge.id, charge.status, charge.amount, charge.currency, charge.live_mode, charge.order, charge.account), ("chg_TS0123456789abcdef", "INITIATED", PRICE, "KWD", False, "la_order", "account-1"))
+        self.assertEqual((charge.id, charge.status, charge.amount, charge.currency, charge.live_mode, charge.order, charge.account, charge.metadata_order),
+                         ("chg_TS0123456789abcdef", "INITIATED", PRICE, "KWD", False, "la_order", "account-1", "la_order"))
         self.assertEqual(charge.url, "https://sandbox.payments.tap.company/pay/chg_TS0123456789abcdef")
         sent = self.api.requests[0]
         self.assertEqual((sent.method, str(sent.url), sent.headers["authorization"], sent.headers["content-type"]), ("POST", "https://api.tap.company/v2/charges", "Bearer " + KEY, "application/json"))
         self.assertIn(b'"amount": 2.500,', sent.content, "three decimals for KWD, as a JSON number")
         body = json.loads(sent.content)
         self.assertEqual(body, {"amount": 2.5, "currency": "KWD", "customer_initiated": True, "threeDSecure": True, "save_card": False, "description": "Little Archive unlock", "source": {"id": "src_all"},
-                                "reference": {"order": "la_order", "transaction": "la_order", "idempotent": "idem"}, "metadata": {"account_id": "account-1"},
+                                "reference": {"order": "la_order", "transaction": "la_order", "idempotent": "idem"}, "metadata": {"account_id": "account-1", "order": "la_order"},
                                 "customer": {"first_name": "Synthetic", "email": "buyer@example.test"}, "redirect": {"url": "https://archive.example/api/purchases/tap/return"},
                                 "post": {"url": "https://archive.example/api/purchases/tap/notifications"}})
 
