@@ -12,6 +12,8 @@
 // somewhere on purpose: the heading or the notice of the new view, or back on the button when its action ends. The focus ring
 // is for the keyboard, so a control that is focused by script after a touch is focused quietly (no ring; see focusQuietly).
 
+import { garden } from './garden.js';
+
 export const BACK = Symbol('back');
 
 // The guide for running a server of your own. The project publishes its guides in its public repository (README.md), so this
@@ -124,15 +126,26 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
     };
   }
 
-  /** Draws a screen in place of whatever was there, and returns its node. */
-  function frame(...content) {
-    const view = h('main', { class: 'native-screen', id: 'main' },
-      h('div', { class: 'native-brand' }, h('img', { src: iconUrl, alt: '', width: 38, height: 38 }), h('span', {}, 'little archive')),
+  /**
+   * Draws a screen in place of whatever was there, and returns its node.
+   *
+   * `band` puts the logo on the hero's paper with a bed of flowers along its foot (garden.js): 'tall' on first launch, with
+   * the line under the logo and a full row of flowers, or 'compact' on the screens with a form, where the band takes exactly
+   * the room the logo and the space under it took before, so no field moves down. Without it (a problem, a stop, the wait)
+   * the logo stands on the plain paper. The bed is decoration: hidden from a screen reader, and the screen's one <h1> is
+   * still the screen's own title.
+   */
+  function draw(band, content) {
+    const brand = h('div', { class: 'native-brand' }, h('img', { src: iconUrl, alt: '', width: 38, height: 38 }), h('span', {}, 'little archive'));
+    const view = h('main', { class: band ? `native-screen native-has-band native-band-${band}` : 'native-screen', id: 'main' },
+      band ? h('div', { class: 'native-band' }, brand, band === 'tall' && h('p', { class: 'native-tagline' }, 'Good things, kept close.'), garden(band)) : brand,
       ...content);
     root.replaceChildren(view);
     document.title = 'Little Archive';
     return view;
   }
+  const frame = (...content) => draw(null, content);
+  const heroFrame = (...content) => draw('compact', content);
 
   // An input with its label, hint and error. The error is linked to the field only while it is showing.
   function field({ label, hint, name, ...input }) {
@@ -219,14 +232,14 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
     choose({ notice } = {}) {
       return new Promise(done => {
         const option = (value, title, text) => h('button', { type: 'button', class: 'native-choice', onClick: () => done(value) }, h('strong', {}, title), h('span', {}, text));
-        frame(
+        draw('tall', [
           h('p', { class: 'native-whisper' }, 'welcome home'),
           h('h1', {}, 'Where is your library?'),
           h('p', { class: 'native-lede' }, 'Little Archive keeps what you save in one place you control. Choose where that is.'),
           notice && h('div', { class: 'notice', role: 'status' }, notice),
           h('div', { class: 'native-choices' },
             option('hosted', 'Little Archive account', 'Sign up or sign in. Your library is kept for you.'),
-            option('own', 'My own server', 'Connect to a Little Archive that you run yourself.')));
+            option('own', 'My own server', 'Connect to a Little Archive that you run yourself.'))]);
       });
     },
 
@@ -243,7 +256,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
         const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser, for example https://archive.example.com. It must start with https://.' });
         const guideId = nextId('native-guide');
         const heading = landing(h('h1', {}, 'Connect to your server'));
-        frame(
+        heroFrame(
           h('p', { class: 'native-whisper' }, 'your own server'),
           heading,
           h('p', { class: 'native-lede' }, 'Type the address of the Little Archive you run. The app asks it what it is before you enter a password.'),
@@ -262,7 +275,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
     password({ host, notice, submit }) {
       return new Promise(done => {
         const password = passwordField({ label: 'Owner password', name: 'password', autocomplete: 'current-password', enterkeyhint: 'go', hint: undefined });
-        frame(
+        heroFrame(
           h('p', { class: 'native-whisper' }, 'owner sign-in'),
           h('h1', {}, 'Sign in'),
           h('p', { class: 'native-lede' }, `Connected to ${host}.`),
@@ -335,7 +348,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
           };
           const heading = landing(h('h1', {}, creating ? 'Create your account' : 'Welcome back'));
           const said = message && landing(h('div', { class: 'notice', role: 'status' }, message));
-          lock.over(frame(
+          lock.over(heroFrame(
             h('p', { class: 'native-whisper' }, 'a little archive account'),
             heading,
             h('p', { class: 'native-lede' }, creating ? 'A library of your own, kept on your account.' : `Sign in to your account on ${host}.`),
@@ -370,7 +383,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       return new Promise(done => {
         const address = field({ label: 'Email', name: 'email', type: 'email', inputmode: 'email', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'send', required: true, value: email });
         const heading = landing(h('h1', {}, 'Reset your password'));
-        frame(
+        heroFrame(
           h('p', { class: 'native-whisper' }, 'a little archive account'),
           heading,
           h('p', { class: 'native-lede' }, `Enter the email of your account on ${host}. If it has an account, we send it a link that lets you choose a new password.`),
@@ -392,7 +405,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
         const password = passwordField({ label: 'New password', name: 'password', autocomplete: 'new-password', enterkeyhint: 'next', minlength: 8, hint: rule });
         const confirm = passwordField({ label: 'New password, again', name: 'confirm', autocomplete: 'new-password', enterkeyhint: 'go', hint: undefined });
         const heading = landing(h('h1', {}, 'Choose a new password'));
-        frame(
+        heroFrame(
           h('p', { class: 'native-whisper' }, 'a little archive account'),
           heading,
           h('p', { class: 'native-lede' }, email ? `For ${email}. When it is saved you are signed in.` : 'When it is saved you are signed in.'),
