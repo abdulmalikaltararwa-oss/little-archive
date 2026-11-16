@@ -22,7 +22,7 @@ const kinds = () => useDialogs.getState().stack.map(dialog => dialog.kind);
 describe('an empty library', () => {
   it('teaches the share sheet inside the phone app', () => {
     view('native');
-    expect(screen.getByRole('heading', { level: 2, name: 'Save from the app you are already in.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Save from any app with Share.' })).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getByRole('heading', { level: 3, name: 'Choose Little Archive' })).toBeInTheDocument();
     expect(screen.getByText(/Nothing is kept until you tap Save/)).toBeInTheDocument();

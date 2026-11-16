@@ -61,7 +61,7 @@ export interface EmptyLibraryWords {
 export function emptyLibraryWords(kind: BackendKind): EmptyLibraryWords {
   if (kind === 'native') {
     return {
-      title: 'Save from the app you are already in.',
+      title: 'Save from any app with Share.',
       steps: [
         { title: 'Tap Share on a post, a video or a page', body: 'In your browser, or in any app that can share a link.', picture: 'share' },
         { title: 'Choose Little Archive', body: 'It is in the row of apps. The first time, it may be near the end of the row.', picture: 'apps' },
