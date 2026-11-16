@@ -49,7 +49,9 @@ export function App({ archive }: { archive: Archive }) {
 
   useEffect(() => {
     const focusSearch = () => {
-      if (archive.store.getState().loc.screen !== 'library') archive.goView('all');
+      // Only the wall has the search box; a feature screen and the review queue do not.
+      const { screen, view } = archive.store.getState().loc;
+      if (screen !== 'library' || view === 'review') archive.goView('all');
       requestAnimationFrame(() => {
         const input = document.getElementById(SEARCH_INPUT_ID) as HTMLInputElement | null;
         input?.focus();

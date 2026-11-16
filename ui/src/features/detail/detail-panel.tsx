@@ -18,28 +18,17 @@ import { Pick } from '@/components/pick';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { AiSuggestion, Item, Status } from '@/data/types';
+import type { Item, Status } from '@/data/types';
 import { rememberFocus, type FocusMemory } from '@/lib/focus';
 import { canMorph, COVER_TRANSITION } from '@/lib/transition';
 import { copyText, openReview } from '../actions';
 import { Cover } from '../library/cover';
 import { PlacesEntry } from '../places/detail-entry';
 import { CookBar, RecipeSection } from '../recipes/detail-entry';
+import { evidenceLabel } from '../review/queue';
 import { canCook, useSaveRecipe, type SaveRecipe } from '../recipes/use-save-recipe';
 
 const STATUS_OPTIONS = (Object.entries(STATUS_NAMES) as [Status, string][]).map(([value, label]) => ({ value, label }));
-
-// What an AI suggestion rests on, in plain words. The level comes from the server, computed from the input
-// it was given, never from the model's answer.
-const EVIDENCE_LABELS: Record<string, string> = {
-  'text-only': 'From the title and link only',
-  'caption-based': 'From the caption',
-  'transcript-based': 'From what is said',
-};
-
-function evidenceLabel(ai: AiSuggestion) {
-  return EVIDENCE_LABELS[String(ai.evidence_level)] ?? `From ${String(ai.evidence_level || 'available text').replaceAll('-', ' ')}`;
-}
 
 function SectionTitle({ children }: { children: string }) {
   return <h3 className="mb-3"><Whisper>{children}</Whisper></h3>;

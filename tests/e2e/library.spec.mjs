@@ -68,9 +68,12 @@ test('links, notes, topics, favorites, progress and collections survive editing 
   await chooseView(page, 'To revisit', 'A little later');
   await search(page, key);
   await expect(cardTitles(page)).toHaveText(title);
-  await chooseView(page, 'Needs review', 'Needs a little review');
-  await search(page, key);
-  await expect(cardTitles(page)).toHaveText(secondTitle);
+  // Needs review is a queue, one save at a time (review.spec.mjs); the address narrows it as it narrows a wall.
+  await (await navigation(page)).getByRole('button', { name: /^Needs review(?:\s|$)/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Needs review', exact: true })).toBeVisible();
+  await page.goto(`/#/review?q=${key}`);
+  await expect(page.getByTestId('review-position')).toHaveText('1 of 1');
+  await expect(page.getByRole('heading', { level: 2, name: secondTitle, exact: true })).toBeVisible();
   const nav = await navigation(page);
   await collectionButton(nav, collectionName).click();
   await expect(page.getByRole('heading', { level: 1, name: collectionName, exact: true })).toBeVisible();

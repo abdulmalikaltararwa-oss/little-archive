@@ -5,16 +5,7 @@ import { cn } from 'cn';
 import { Bookmark, Play } from 'lucide-react';
 import { useArchive } from '@/app/archive-context';
 import type { Item } from '@/data/types';
-
-// Six papers. Each pairs a pale ground with an ink that passes AA on it (checked in tokens.test.ts).
-const PAPERS = [
-  'bg-sage-pale text-sage dark:text-sage-deep',
-  'bg-petal-pale text-petal-ink',
-  'bg-butter-pale text-butter-ink',
-  'bg-sky-pale text-sky-ink',
-  'bg-clay-pale text-clay-ink',
-  'bg-lilac-pale text-lilac-ink',
-];
+import { PAPERS } from './papers';
 
 // The ASCII accent on a paper cover: a quiet pattern in one corner, different for each paper.
 const ORNAMENTS = [

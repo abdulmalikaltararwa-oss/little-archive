@@ -17,6 +17,7 @@ import { viewTitle, withPlatform } from '@/data/location';
 import type { BulkAction, Platform, Sort } from '@/data/types';
 import { VIEW_TITLE_ID } from '@/lib/focus';
 import { StateCard } from '../feature-kit';
+import { ReviewScreen } from '../review/review-screen';
 import { EmptyLibrary } from './empty-library';
 import { Gallery } from './gallery';
 import { useShownItems } from './held-deletes';
@@ -218,7 +219,13 @@ const LAYOUTS = [
   { value: 'list', label: <span className="sr-only">List</span>, icon: <List aria-hidden="true" /> },
 ] as const;
 
+/** The library's views. Needs review is a queue of its own; every other view is the wall (or the list). */
 export function LibraryScreen({ demo }: { demo: boolean }) {
+  const review = useArchiveState(state => state.loc.view === 'review');
+  return review ? <ReviewScreen demo={demo} /> : <LibraryWall demo={demo} />;
+}
+
+function LibraryWall({ demo }: { demo: boolean }) {
   const archive = useArchive();
   const loc = useArchiveState(state => state.loc);
   const filters = useArchiveState(state => state.filters);

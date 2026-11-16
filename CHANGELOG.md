@@ -11,6 +11,7 @@ The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e
 ### Tidying the library
 
 - **A list beside the wall, with swipe actions.** The library can be shown as a list, one save to a line. On a touch screen a row swipes towards the end of the line for Done and File and towards the start for Delete (mirrored right to left); every row also has a ··· menu with the same actions and favorites, for a mouse, a keyboard or a screen reader. A delete from the list leaves at once and can be undone from the island for eight seconds; the server is told only after that.
+- **Needs review is a queue.** One save at a time: what its suggestion would change, the words it rests on, and two answers, Keep as it is and Accept (a save with no suggestion has one, Mark as reviewed). The queue moves on at once and the last answer can be undone from the island for eight seconds; the server is told only after that, and if it refuses, the save comes back saying nothing changed. A progress strip counts down, and the end says what was decided.
 
 ### Permission before anything is sent to an AI service
 
