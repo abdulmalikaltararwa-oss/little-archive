@@ -9,9 +9,15 @@
 //
 // Why PKCE, when the email sign-up has none. Without a challenge the project puts the session itself in the address it sends
 // the browser to (#access_token=…). Any app on the phone can open littlearchive://auth-callback…, so an address that carried a
-// session could sign this phone in to an account someone else chose, and a session in an address can be read on its way. The app
-// therefore never takes a session from an address: only a code, which is of no use without the verifier this phone kept, or an
-// error. parseCallback (social.js) already reads nothing else.
+// session could sign this phone in to an account someone else chose. The app therefore never takes a session from an address:
+// only a code, or an error. parseCallback (social.js) already reads nothing else.
+//
+// What PKCE protects, and what it does not. It protects a reset that this phone asked for: the code in that link can be traded
+// only with the verifier kept here, so another app that gets hold of the address gets nothing it can use. It does nothing for a
+// reset that someone else asked for. Anyone who knows an email address can ask the project for a reset from their own machine,
+// without a challenge, and that link redirects with the session in the address. This app refuses such an address, but if
+// another app on the phone has claimed the littlearchive scheme and the person taps that link, that app receives the session.
+// Nothing in this app can prevent that; it is listed in the guide's risks (docs/mobile-app.md).
 //
 // What that costs. The verifier has to outlive the app's process (the person leaves for their mail app, and the phone may end
 // the app meanwhile), so unlike a Google sign-in's it is written down: one record in the phone's secure storage, beside the
@@ -158,9 +164,11 @@ export async function launchCallback({ platform, plugin, App, storage }) {
  * waiting; `appUrlOpen` is not listened to there, because it could also carry the callback of a Google sign-in that is waiting.
  * Any app can cause either, so what arrives is only ever read as a code to trade with a kept verifier, or as an error.
  *
- * On Android an address that arrives while the app is running is taken only when this phone is waiting on a reset link (or the
- * address says an emailed link ran out). Otherwise it is dropped, as it always was: it is a stray or another app's doing, and
- * redrawing the screen someone is typing on would be the only effect. `backend` is the secure storage the request is kept in.
+ * On both platforms an address that arrives while the app is running is taken only when this phone is waiting on a reset link.
+ * Otherwise it is dropped: it is a stray or another app's doing, nobody here asked for it, and taking it would redraw the screen
+ * someone is typing on and ask a server a question for nothing. `backend` is the secure storage the request is kept in; without
+ * it nothing that arrives is taken. (`push`, which boot.js uses for the address the app was started by, does not ask: at a
+ * start there is no screen to lose, and onboarding.js decides what that address is.)
  */
 export function createLinkInbox({ platform, plugin, App, backend, now = Date.now }) {
   let open = true;
@@ -179,13 +187,14 @@ export function createLinkInbox({ platform, plugin, App, backend, now = Date.now
     queued = address;
     wake();
   }
+  const heard = event => {
+    const address = event?.url;
+    if (typeof address !== 'string' || !IS_CALLBACK.test(address) || !backend) return;
+    pendingReset(backend).then(waiting => { if (waiting) push(address); }, () => {});
+  };
   try {
-    if (platform === 'android') plugin?.addListener?.('callback', event => {
-      const address = event?.url;
-      if (typeof address !== 'string') return;
-      Promise.resolve(saysLinkEnded(address) || (backend ? pendingReset(backend).then(Boolean) : false)).then(wanted => { if (wanted) push(address); }, () => {});
-    });
-    else App?.addListener?.('appUrlOpen', event => push(event?.url));
+    if (platform === 'android') plugin?.addListener?.('callback', heard);
+    else App?.addListener?.('appUrlOpen', heard);
   } catch { /* without a listener, a link is still found at the next start */ }
   return {
     push,

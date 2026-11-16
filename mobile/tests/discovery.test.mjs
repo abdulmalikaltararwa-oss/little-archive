@@ -21,16 +21,42 @@ test('a self-hosted server is recognised, asked without credentials, and reporte
 });
 
 test('a hosted server is accepted only when it names the one sign-in service this app trusts', async () => {
-  const good = fakeHttp({ [URL]: reply(200, hostedInfo()) });
-  assert.deepEqual(await discover(good.http, ADDRESS, CONFIG), { mode: 'hosted', url: ADDRESS, version: '0.1.0', supabaseUrl: CONFIG.supabaseUrl });
+  const HOME = CONFIG.hostedServerUrl;
+  const good = fakeHttp({ [`${HOME}/api/discovery`]: reply(200, hostedInfo()) });
+  assert.deepEqual(await discover(good.http, HOME, CONFIG), { mode: 'hosted', url: HOME, version: '0.1.0', supabaseUrl: CONFIG.supabaseUrl });
   // The same project written with a trailing slash is the same project.
-  assert.equal((await discover(fakeHttp({ [URL]: reply(200, hostedInfo(`${CONFIG.supabaseUrl}/`)) }).http, ADDRESS, CONFIG)).mode, 'hosted');
+  assert.equal((await discover(fakeHttp({ [`${HOME}/api/discovery`]: reply(200, hostedInfo(`${CONFIG.supabaseUrl}/`)) }).http, HOME, CONFIG)).mode, 'hosted');
   for (const other of ['https://evil.example', 'https://abcdefgh.supabase.co.evil.example', 'http://abcdefgh.supabase.co', 'https://other.supabase.co', '', null]) {
     const message = await failure(discover(fakeHttp({ [URL]: reply(200, hostedInfo(other)) }).http, ADDRESS, CONFIG));
     assert.match(message, /does not trust/, String(other));
   }
   const missing = { ...hostedInfo(), auth: {} };
   assert.match(await failure(discover(fakeHttp({ [URL]: reply(200, missing) }).http, ADDRESS, CONFIG)), /does not trust/);
+});
+
+test('a hosted server is accepted only at the address this build was made for, however rightly it names the sign-in service', async () => {
+  // Anyone can run a server that names the real sign-in service. Signing in there would hand that server a token that is good
+  // at the real one.
+  const elsewhere = ['https://archive.example.com', 'https://evil.example', `${CONFIG.hostedServerUrl}.evil.example`, CONFIG.hostedServerUrl.replace('https://app.', 'https://www.'), `${CONFIG.hostedServerUrl}/other`, `${CONFIG.hostedServerUrl}:8443`];
+  for (const address of elsewhere) {
+    const { http, calls } = fakeHttp({ [`${address}/api/discovery`]: reply(200, hostedInfo()) });
+    let refusal;
+    try { await discover(http, address, CONFIG); } catch (error) { refusal = error; }
+    assert.ok(refusal instanceof AppError, address);
+    assert.equal(refusal.code, 'other-hosted', address);
+    assert.equal(refusal.field, 'server');
+    assert.match(refusal.message, /not the one this app was built for/, address);
+    assert.equal(calls.length, 1);
+  }
+  // A build made for another service (staging, with LA_APP_CONFIG) accepts that one, and not production.
+  const staging = { ...CONFIG, hostedServerUrl: 'https://staging.little-archive.example' };
+  const at = address => discover(fakeHttp({ [`${address}/api/discovery`]: reply(200, hostedInfo()) }).http, address, staging);
+  assert.equal((await at('https://staging.little-archive.example')).mode, 'hosted');
+  assert.match(await failure(at(CONFIG.hostedServerUrl)), /not the one this app was built for/);
+  // A config with no usable address accepts no hosted server at all.
+  assert.match(await failure(discover(fakeHttp({ [URL]: reply(200, hostedInfo()) }).http, ADDRESS, { ...CONFIG, hostedServerUrl: undefined })), /not the one this app was built for/);
+  // Self-hosted servers are untouched by this: they are anywhere.
+  assert.equal((await discover(fakeHttp({ [URL]: reply(200, selfHostedInfo) }).http, ADDRESS, CONFIG)).mode, 'self-hosted');
 });
 
 test('every way this can go wrong is explained in words, naming the server', async () => {
@@ -93,6 +119,10 @@ test('for a server someone typed, the common failures are said in setup words, e
   assert.match(hosted.message, /runs in hosted mode/);
   assert.match(hosted.message, /does not trust/);
   assert.match(hosted.message, /self-hosted mode/);
+  // A hosted-mode server that names the right sign-in service but is not the service this app was built for.
+  const other = await typed(ADDRESS, reply(200, hostedInfo()));
+  assert.equal(other.code, 'other-hosted');
+  assert.equal(other.message, 'archive.example.com is a hosted Little Archive service, but not the one this app was built for, so the app will not sign you in there or send it anything of your account. For a Little Archive account, go back and choose "Little Archive account". A server of your own has to run in self-hosted mode to work with this app.');
   // Everything else keeps the sentence discovery wrote.
   assert.match((await typed(ADDRESS, text(400, 'Invalid host header'))).message, /LA_PUBLIC_URL/);
   assert.match((await typed(ADDRESS, reply(302, {}))).message, /does not follow redirects/);

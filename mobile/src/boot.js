@@ -16,7 +16,7 @@ import { createCredentials } from './credentials.js';
 import { createFileSaver } from './files.js';
 import { createNativeHttp } from './native-http.js';
 import { hostName } from './server-url.js';
-import { hostedClient } from './setup.js';
+import { hostedAddress, hostedClient } from './setup.js';
 import { createOnboarding } from './onboarding.js';
 import { createBridge } from './bridge.js';
 import { createPurchases } from './purchases.js';
@@ -90,6 +90,9 @@ async function main() {
       continue;
     }
     const hosted = record.server.kind === 'hosted';
+    // A hosted sign-in is only ever with the service this build was made for. One kept for another address (made by an earlier
+    // build that allowed it, or by a build for another service) is not used: its token would go to that address.
+    if (hosted && record.server.url !== hostedAddress(config)) { await store.forget(); record = null; continue; }
     const supabase = hosted ? hostedClient({ http, config }) : null;
     const credentials = createCredentials({ record, store, supabase });
     const transport = createTransport({ baseUrl: record.server.url, http, credential: credentials });

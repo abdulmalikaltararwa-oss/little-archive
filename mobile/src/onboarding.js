@@ -12,8 +12,13 @@
 // The link itself opens the app from outside (recovery.js), possibly with the app not running and nothing on screen yet: then
 // the server the link was asked for is asked what it is first, and only when it names the pinned service is the link's code
 // traded and a new password set (openLink below).
+//
+// Which server. Naming the pinned sign-in service is something any server can do, and after a sign-in the server is sent the
+// account's access token and, for Apple, Apple's authorization code. So a hosted sign-in is only ever with the one address this
+// build was made for (hostedServerUrl in app.config.json): discover refuses a hosted server at any other address, and `trusted`
+// below checks it again.
 import { AppError, discover } from './discovery.js';
-import { LINK_UNREADABLE, RESET_SENT, createRecovery, saysLinkEnded } from './recovery.js';
+import { LINK_ENDED, LINK_UNREADABLE, RESET_SENT, createRecovery, saysLinkEnded } from './recovery.js';
 import { hostName, normalizeAddress } from './server-url.js';
 import { checkServer, deviceName, hostedAddress, hostedClient, serverRecord, signInSelfHosted } from './setup.js';
 import { INTERRUPTED, createSocialSignIn } from './social.js';
@@ -21,6 +26,9 @@ import { BACK } from './ui.js';
 
 /** A callback address arrived while a screen was up, or before the first one: the flow that was running steps aside for it. */
 class LinkOpened extends Error {}
+
+/** What recovery.finish says when the link itself is of no use (recovery.js). Any other failure leaves the link as good as it was. */
+const REFUSED = new Set(['link-ended', 'link-unreadable', 'link-not-asked']);
 
 /**
  * @param {object} options
@@ -35,7 +43,8 @@ class LinkOpened extends Error {}
  * @param {ReturnType<import('./recovery.js').createLinkInbox>} [options.links]  callback addresses that opened the app
  */
 export function createOnboarding({ http, config, ui, store, platform, plugin, backend, links }) {
-  const trusted = found => found?.mode === 'hosted' && Boolean(found.supabaseUrl) && found.supabaseUrl === normalizeAddress(config.supabaseUrl);
+  const same = (one, other) => { try { return normalizeAddress(one) === normalizeAddress(other); } catch { return false; } };
+  const trusted = found => found?.mode === 'hosted' && Boolean(found.supabaseUrl) && same(found.supabaseUrl, config.supabaseUrl) && same(found.url, config.hostedServerUrl);
   // Every request this makes goes to config.supabaseUrl. It is built here and used only after a discovery that names that service.
   const recoveryFor = supabase => (backend ? createRecovery({ supabase, backend }) : null);
 
@@ -98,37 +107,53 @@ export function createOnboarding({ http, config, ui, store, platform, plugin, ba
     const supabase = hostedClient({ http, config });
     const recovery = recoveryFor(supabase);
     const waiting = recovery ? await recovery.pending() : null;
-    // On Android the same address is also what a Google sign-in's redirect looks like when it reaches a process that no longer
-    // has the attempt (social.js, INTERRUPTED). A reset is known by the request this phone kept, or by the project saying that
-    // an emailed link is too old; anything else there is the interrupted sign-in.
-    if (!waiting && !saysLinkEnded(address) && platform === 'android') return { notice: INTERRUPTED };
-    if (!recovery) return { notice: '' };
+    // This phone is not waiting on a reset, so the address is not something it asked for: no server is asked anything. It can
+    // only have got here as the address the app was started by (one that arrives while the app is running is dropped by the
+    // inbox), so all that is left is what to say on the first screen. The project's own "this emailed link ran out" is said.
+    // On Android the address is otherwise what a Google sign-in's redirect looks like when it reaches a process that no longer
+    // has the attempt (social.js, INTERRUPTED). On iOS that cannot happen, and a stray address says nothing.
+    if (!waiting) return { notice: recovery && saysLinkEnded(address) ? LINK_ENDED : platform === 'android' ? INTERRUPTED : '' };
+    // From here the link has the screens to itself (ui, not show): another callback, such as a second tap on the same email
+    // link, which comes back as "already used", must not throw the person off the screen they are on while the first is still
+    // good. Whatever arrived meanwhile is discarded when this is over.
+    const done = outcome => { links?.take(); return outcome; };
     // The link was asked for on the account screen of one server. That server is asked what it is before anything is traded.
-    const server = waiting?.server || hostedAddress(config);
     let found;
     while (!found) {
       ui.working('Opening your reset link…');
-      try { found = await discover(http, server, config); }
+      try { found = await discover(http, waiting.server, config); }
       catch (error) {
-        const choice = await show('problem', { title: 'Could not connect', message: error.message, actions: [{ label: 'Try again', value: 'retry', primary: true }, { label: 'Back', value: 'back' }] });
-        if (choice === 'back') return { notice: '' };
+        const choice = await ui.problem({ title: 'Could not connect', message: error.message, actions: [{ label: 'Try again', value: 'retry', primary: true }, { label: 'Back', value: 'back' }] });
+        if (choice === 'back') return done({ notice: '' });
       }
     }
-    if (!trusted(found)) return { notice: LINK_UNREADABLE }; // the server no longer has accounts: there is nothing to reset on it
+    if (!trusted(found)) return done({ notice: LINK_UNREADABLE }); // the server no longer has accounts: there is nothing to reset on it
     let session;
-    try { session = await recovery.finish(address); }
-    catch (error) {
-      if (!(error instanceof AppError)) throw error;
-      const choice = await show('problem', { title: 'That reset link did not work', message: error.message, actions: [{ label: 'Ask for a new link', value: 'again', primary: true }, { label: 'Back', value: 'back' }] });
-      if (choice !== 'again') return { notice: '' };
-      return { record: await hostedSignIn(found, await forgotPassword(found, recovery, '')), notice: '' };
+    while (!session) {
+      ui.working('Opening your reset link…');
+      try { session = await recovery.finish(address); }
+      catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        if (REFUSED.has(error.code)) {
+          // The project, or the address itself, says this link is of no use: only a new one helps.
+          const choice = await ui.problem({ title: 'That reset link did not work', message: error.message, actions: [{ label: 'Ask for a new link', value: 'again', primary: true }, { label: 'Back', value: 'back' }] });
+          done();
+          if (choice !== 'again') return { notice: '' };
+          return { record: await hostedSignIn(found, await forgotPassword(found, recovery, '')), notice: '' };
+        }
+        // Anything else (no connection, the service in trouble, too many requests) says nothing about the link. Its code and the
+        // verifier are still held, so the same exchange can be tried again; asking for another link would be refused for a
+        // minute by the project while the app said one was on its way.
+        const choice = await ui.problem({ title: 'Could not open the reset link', message: `${error.message} Try again from here: the link in the email cannot be opened a second time.`, actions: [{ label: 'Try again', value: 'retry', primary: true }, { label: 'Back', value: 'back' }] });
+        if (choice === 'back') return done({ notice: '' });
+      }
     }
     // The session is held here and nowhere else until the new password is set; only then is it the phone's sign-in.
-    const answer = await show('newPassword', { email: session.email, submit: password => supabase.setPassword({ accessToken: session.accessToken, password }) });
-    if (answer === BACK) { await supabase.signOut(session.accessToken); return { notice: '' }; }
+    const answer = await ui.newPassword({ email: session.email, submit: password => supabase.setPassword({ accessToken: session.accessToken, password }) });
+    if (answer === BACK) { await supabase.signOut(session.accessToken); return done({ notice: '' }); }
     const record = serverRecord(found, session);
     await store.save(record);
-    return { record };
+    return done({ record });
   }
 
   /**

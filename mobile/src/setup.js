@@ -26,6 +26,7 @@ function ownServerProblem(error, address) {
       : `Could not reach ${name}. Check the address, that the server is running, and that this phone is on a network that can reach it: a server at home answers only on its own Wi-Fi unless you gave it a public address. The phone also refuses a certificate it does not trust, such as a self-signed one.`,
     'not-archive': `${name} answered, but not as a Little Archive server. Use the address you open Little Archive at in a browser, with its port if it has one. If that is the address, the server is older than this app needs: update it.`,
     'untrusted-service': `${name} runs in hosted mode: it signs people in with accounts, through a sign-in service that this app does not trust, so the app will not send your email or password there. A server of your own has to run in self-hosted mode to work with this app.`,
+    'other-hosted': `${name} is a hosted Little Archive service, but not the one this app was built for, so the app will not sign you in there or send it anything of your account. For a Little Archive account, go back and choose "Little Archive account". A server of your own has to run in self-hosted mode to work with this app.`,
   }[error?.code];
   return words ? new AppError(words, { field: 'server', code: error.code, cause: error }) : error;
 }

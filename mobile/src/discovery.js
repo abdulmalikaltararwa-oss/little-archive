@@ -37,6 +37,12 @@ export async function discover(http, address, config) {
     try { pinned = normalizeAddress(advertised); } catch { pinned = ''; }
     // The email and password go to the sign-in service this server names. The app only sends them to the one it was built for.
     if (!pinned || pinned !== normalizeAddress(config.supabaseUrl)) throw new AppError(`${name} uses a sign-in service that this app does not trust, so it will not send your email or password there.`, { field: 'server', code: 'untrusted-service' });
+    // Naming the right sign-in service is not enough: anyone can run a server that names it. After a sign-in the app sends this
+    // server the account's access token (and Apple's authorization code), which are good at the real service. So a hosted
+    // sign-in happens only with the one address this build was made for (hostedServerUrl in app.config.json).
+    let home;
+    try { home = normalizeAddress(config.hostedServerUrl); } catch { home = ''; }
+    if (!home || normalizeAddress(address) !== home) throw new AppError(`${name} is a hosted Little Archive service, but not the one this app was built for, so the app will not sign you in there.`, { field: 'server', code: 'other-hosted' });
     return { mode: 'hosted', url: address, version, supabaseUrl: pinned };
   }
   if (info.mode === 'self-hosted') {

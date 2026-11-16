@@ -220,7 +220,9 @@ test('the inbox on iOS: an opened callback address waits to be taken, once; a sh
   const App = emitter();
   const plugin = emitter();
   const clock = { now: 1_800_000_000_000 };
-  const links = createLinkInbox({ platform: 'ios', plugin, App, now: () => clock.now });
+  const backend = memoryBackend();
+  await backend.set('recovery', { v: 1, verifier: 'v'.repeat(64), server: SERVER, madeAt: Date.now() });
+  const links = createLinkInbox({ platform: 'ios', plugin, App, backend, now: () => clock.now });
   assert.equal(plugin.handlers.callback, undefined);
   assert.equal(links.waiting, false);
   assert.equal(links.take(), '');
@@ -253,7 +255,33 @@ test('the inbox on iOS: an opened callback address waits to be taken, once; a sh
   // Closed, once someone is signed in: nothing is kept.
   links.close();
   App.emit('appUrlOpen', { url: 'littlearchive://auth-callback?code=three' });
+  await tick();
   assert.equal(links.waiting, false);
+});
+
+test('the inbox, either platform: with no reset waiting on this phone, an address that arrives while the app is running is dropped', async () => {
+  for (const [platform, event] of [['ios', 'appUrlOpen'], ['android', 'callback']]) {
+    const source = emitter();
+    const backend = memoryBackend();
+    const links = createLinkInbox({ platform, plugin: source, App: source, backend });
+    let woke = false;
+    links.arrival().then(() => { woke = true; });
+    for (const url of ['littlearchive://auth-callback?code=stray', 'littlearchive://auth-callback?error=access_denied&error_code=otp_expired', 'littlearchive://auth-callback#access_token=a&refresh_token=b&type=recovery']) source.emit(event, { url });
+    await tick();
+    assert.equal(links.waiting, false, platform);
+    assert.equal(woke, false, `${platform}: no screen is disturbed`);
+    // A request that is too old is no longer waiting.
+    await backend.set('recovery', { v: 1, verifier: 'v'.repeat(64), server: SERVER, madeAt: Date.now() - MAX_AGE_MS });
+    source.emit(event, { url: 'littlearchive://auth-callback?code=late' });
+    await tick();
+    assert.equal(links.waiting, false, platform);
+    // And without the phone's secure storage nothing is taken at all.
+    const bare = emitter();
+    const none = createLinkInbox({ platform, plugin: bare, App: bare });
+    bare.emit(event, { url: 'littlearchive://auth-callback?code=x' });
+    await tick();
+    assert.equal(none.waiting, false, platform);
+  }
 });
 
 test('the inbox on Android: only the plugin\'s event, and while the app is running only when this phone is waiting on a link', async () => {
@@ -266,10 +294,6 @@ test('the inbox on Android: only the plugin\'s event, and while the app is runni
   plugin.emit('callback', { url: 'littlearchive://auth-callback?code=stray' });
   await tick();
   assert.equal(links.waiting, false);
-  // The project saying that an emailed link ran out is about a reset whatever this phone remembers.
-  plugin.emit('callback', { url: 'littlearchive://auth-callback?error=access_denied&error_code=otp_expired' });
-  await tick();
-  assert.match(links.take(), /otp_expired/);
   // Waiting on a link: the callback is taken.
   await backend.set('recovery', { v: 1, verifier: 'v'.repeat(64), server: SERVER, madeAt: Date.now() });
   plugin.emit('callback', { url: 'littlearchive://auth-callback?code=the-link' });

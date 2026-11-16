@@ -5,11 +5,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createOnboarding } from '../src/onboarding.js';
-import { LINK_ENDED, LINK_NOT_ASKED, RESET_SENT, createLinkInbox } from '../src/recovery.js';
+import { LINK_ENDED, RESET_SENT, createLinkInbox } from '../src/recovery.js';
 import { INTERRUPTED } from '../src/social.js';
 import { createStore, memoryBackend } from '../src/store.js';
 import { BACK } from '../src/ui.js';
-import { CONFIG, fakeHttp, fakeJwt, hostedInfo, reply } from './helpers.mjs';
+import { CONFIG, fakeHttp, fakeJwt, hostedInfo, reply, selfHostedInfo } from './helpers.mjs';
 
 const HOSTED = `${CONFIG.hostedServerUrl}/api/discovery`;
 const PINNED = new URL(CONFIG.supabaseUrl).host;
@@ -44,13 +44,13 @@ function plugin() {
 }
 
 /** `reset` gives the flow the phone's secure storage and an inbox for links, as boot.js does; without it there is no password reset. */
-function rig({ routes, ui = screens(), platform = 'ios', reset = false } = {}) {
+function rig({ routes, ui = screens(), platform = 'ios', reset = false, config = CONFIG } = {}) {
   const fake = fakeHttp(routes);
   const native = plugin();
   const backend = memoryBackend();
   const store = createStore(backend);
   const links = reset ? createLinkInbox({ platform, plugin: native, App: {}, backend }) : undefined;
-  const onboarding = createOnboarding({ http: fake.http, config: CONFIG, ui, store, platform, plugin: native, ...(reset ? { backend, links } : {}) });
+  const onboarding = createOnboarding({ http: fake.http, config, ui, store, platform, plugin: native, ...(reset ? { backend, links } : {}) });
   const toSignInService = () => fake.calls.filter(call => /supabase|\/auth\/v1\//.test(call.url));
   return { ...fake, ui, native, store, backend, links, onboarding, toSignInService };
 }
@@ -252,7 +252,7 @@ test('the reset link opens the app: the server is asked first, then the code is 
   await waitingOn(r.backend);
   r.links.push(LINK); // what boot.js does with the address the app was started by
   const record = await r.onboarding.firstLaunch('');
-  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'newPassword'], 'no first screen in between');
+  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'working', 'newPassword'], 'no first screen in between');
   assert.equal(shown(r.ui, 'working')[0].message, 'Opening your reset link…');
   assert.equal(shown(r.ui, 'newPassword')[0].email, 'reader@example.com');
   assert.deepEqual(atNewPassword, [`GET ${HOSTED}`, TRADE]);
@@ -282,11 +282,10 @@ test('a reset link is held to the same order as a sign-in: before the server has
   }
 });
 
-test('a link that ran out, was used, or was not asked for on this phone gets a plain sentence and a way to ask again', async () => {
+test('a link that ran out or was used gets a plain sentence and a way to ask again', async () => {
   const cases = [
     { name: 'the project says the emailed link ran out', link: EXPIRED, waiting: true, routes: {}, message: LINK_ENDED },
     { name: 'the project refuses the code', link: LINK, waiting: true, routes: { [TRADE]: reply(422, { error_code: 'flow_state_expired' }) }, message: LINK_ENDED },
-    { name: 'nothing was asked for on this phone', link: LINK, waiting: false, routes: {}, message: LINK_NOT_ASKED },
   ];
   for (const { name, link, waiting, routes, message } of cases) {
     let visits = 0;
@@ -318,7 +317,7 @@ test('cancelling on the new-password screen ends the link\'s session and keeps n
   assert.deepEqual(sent(r.calls), [`GET ${HOSTED}`, TRADE, SIGN_OUT]);
   assert.equal(r.calls[2].headers.Authorization, `Bearer ${session.access_token}`);
   assert.equal(await r.store.load(), null);
-  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'newPassword', 'choose', 'server', 'choose']);
+  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'working', 'newPassword', 'choose', 'server', 'choose']);
   assert.equal(shown(r.ui, 'choose')[0].notice, '');
 });
 
@@ -332,7 +331,7 @@ test('a link that arrives while a sign-in screen is up takes over from it', asyn
   await waitingOn(r.backend);
   const record = await r.onboarding.signInAgain({ v: 1, server: { kind: 'hosted', url: CONFIG.hostedServerUrl }, credential: null }, 'Your sign-in ended.');
   assert.equal(record.credential.email, 'reader@example.com');
-  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'account', 'working', 'newPassword']);
+  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'account', 'working', 'working', 'newPassword']);
 });
 
 test('Android, no reset asked for: a callback that reached a fresh process is the interrupted Google sign-in, said once, and its code is never used', async () => {
@@ -347,4 +346,153 @@ test('Android, no reset asked for: a callback that reached a fresh process is th
   await waitingOn(waiting.backend);
   waiting.links.push(LINK);
   assert.equal((await waiting.onboarding.firstLaunch('')).credential.email, 'reader@example.com');
+});
+
+// Which server a hosted sign-in may be with ------------------------------------------------------------------------------------
+
+test('a server that names the real sign-in service but is not the service this build was made for gets no sign-in, no token and no Apple code', async () => {
+  const ROGUE = 'https://evil.example';
+  const all = { [`${ROGUE}/api/discovery`]: reply(200, hostedInfo()) }; // it names the pinned project, correctly
+  // Typed under "My own server": refused on the address field.
+  let refusal;
+  const typed = rig({ reset: true, routes: all, ui: screens({ choices: ['own'], server: async ({ submit }) => { try { await submit(ROGUE); } catch (error) { refusal = error; } return BACK; } }) });
+  await assert.rejects(typed.onboarding.firstLaunch(''), Stop);
+  assert.equal(refusal.field, 'server');
+  assert.match(refusal.message, /not the one this app was built for/);
+  assert.equal(shown(typed.ui, 'account').length, 0, 'no account screen: no email form and no "Continue with" button');
+  assert.deepEqual(sent(typed.calls), [`GET ${ROGUE}/api/discovery`], 'the one request is the question, which carries nothing');
+  assert.deepEqual(Object.keys(typed.calls[0].headers), ['Accept']);
+  assert.equal(typed.toSignInService().length, 0);
+  assert.equal(typed.native.asked.length, 0);
+  assert.equal(await typed.store.load(), null);
+  // Remembered from a build that allowed it: signing in again is refused the same way.
+  const again = rig({ reset: true, routes: all, ui: screens({ problem: 'switch' }) });
+  assert.equal(await again.onboarding.signInAgain({ v: 1, server: { kind: 'hosted', url: ROGUE }, credential: null }, ''), null);
+  assert.match(shown(again.ui, 'problem')[0].message, /not the one this app was built for/);
+  assert.equal(shown(again.ui, 'account').length, 0);
+  assert.equal(again.toSignInService().length, 0);
+  assert.equal(again.calls.length, 1);
+  // A reset that was asked for there (by such a build) is not finished there either: the code is never traded.
+  const link = rig({ reset: true, routes: all, ui: screens({ choices: ['own'] }) });
+  await link.backend.set('recovery', { v: 1, verifier: 'v'.repeat(64), server: ROGUE, madeAt: Date.now() });
+  link.links.push(LINK);
+  await assert.rejects(link.onboarding.firstLaunch(''), Stop);
+  assert.equal(shown(link.ui, 'newPassword').length, 0);
+  assert.equal(link.toSignInService().length, 0);
+});
+
+test('a build made for another service (staging) signs in at that address, and not at the production one', async () => {
+  const staging = { ...CONFIG, hostedServerUrl: 'https://staging.little-archive.example' };
+  const routes = {
+    'https://staging.little-archive.example/api/discovery': reply(200, hostedInfo()),
+    [HOSTED]: reply(200, hostedInfo()),
+    [`POST ${CONFIG.supabaseUrl}/auth/v1/token?grant_type=password`]: reply(200, session),
+  };
+  const r = rig({ config: staging, routes, ui: screens({ account: async options => options.signIn('reader@example.com', 'a long password') }) });
+  const record = await r.onboarding.firstLaunch('');
+  assert.equal(record.server.url, 'https://staging.little-archive.example');
+  assert.equal(r.calls[0].url, 'https://staging.little-archive.example/api/discovery');
+  // The production address, typed into the staging build, is another service to it.
+  let refusal;
+  const typed = rig({ config: staging, routes, ui: screens({ choices: ['own'], server: async ({ submit }) => { try { await submit(CONFIG.hostedServerUrl); } catch (error) { refusal = error; } return BACK; } }) });
+  await assert.rejects(typed.onboarding.firstLaunch(''), Stop);
+  assert.match(refusal.message, /not the one this app was built for/);
+  assert.equal(shown(typed.ui, 'account').length, 0);
+});
+
+// A reset link, the states it must not get stuck in ------------------------------------------------------------------------------
+
+test('once "Choose a new password" is up, tapping the email link again changes nothing: the screen stays and the first link still works', async () => {
+  let r;
+  const ui = screens({ choices: ['own'], newPassword: async ({ submit }) => {
+    // The second tap comes back from the project as "already used", and a third as a stray code.
+    r.links.push(EXPIRED);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    r.links.push('littlearchive://auth-callback?code=another');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await submit('a brand new password');
+    return 'saved';
+  } });
+  r = rig({ reset: true, ui, routes: { [HOSTED]: reply(200, hostedInfo()), [TRADE]: reply(200, session), [NEW_PASSWORD]: reply(200, {}) } });
+  await waitingOn(r.backend);
+  r.links.push(LINK);
+  const record = await r.onboarding.firstLaunch('');
+  assert.equal(record.credential.email, 'reader@example.com');
+  assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['working', 'working', 'newPassword'], 'no problem screen, no second new-password screen');
+  assert.deepEqual(sent(r.calls), [`GET ${HOSTED}`, TRADE, NEW_PASSWORD]);
+  assert.equal(r.links.waiting, false, 'what arrived meanwhile is discarded, not kept for the next screen');
+  // The same when the person cancels: the second tap does not come back as a "ran out" screen afterwards.
+  let c;
+  const cancelling = screens({ choices: ['own'], newPassword: async () => { c.links.push(EXPIRED); return BACK; } });
+  c = rig({ reset: true, ui: cancelling, routes: { [HOSTED]: reply(200, hostedInfo()), [TRADE]: reply(200, session), [SIGN_OUT]: reply(204, {}) } });
+  await waitingOn(c.backend);
+  c.links.push(LINK);
+  await assert.rejects(c.onboarding.firstLaunch(''), Stop);
+  assert.equal(shown(c.ui, 'problem').length, 0);
+});
+
+test('a failure that says nothing about the link (no connection, the service in trouble) offers Try again, which trades the same code with the kept verifier', async () => {
+  for (const [name, failure] of Object.entries({ 'no connection': new Error('offline'), 'the service is in trouble': reply(503, {}), 'too many requests': reply(429, {}) })) {
+    let attempts = 0;
+    const r = rig({ reset: true, routes: { [HOSTED]: reply(200, hostedInfo()), [TRADE]: () => { attempts += 1; return attempts < 3 ? failure : reply(200, session); }, [NEW_PASSWORD]: reply(200, {}) }, ui: screens({
+      problem: 'retry', newPassword: async ({ submit }) => { await submit('a brand new password'); return 'saved'; },
+    }) });
+    await waitingOn(r.backend);
+    r.links.push(LINK);
+    const record = await r.onboarding.firstLaunch('');
+    assert.equal(record.credential.refreshToken, 'refresh-1', name);
+    const problems = shown(r.ui, 'problem');
+    assert.equal(problems.length, 2, name);
+    for (const problem of problems) {
+      assert.equal(problem.title, 'Could not open the reset link', name);
+      assert.deepEqual(problem.actions.map(action => action.label), ['Try again', 'Back'], `${name}: no "Ask for a new link", which the project would refuse for a minute`);
+      assert.ok(problem.message.endsWith(' Try again from here: the link in the email cannot be opened a second time.'), name);
+    }
+    const trades = r.calls.filter(call => call.url.endsWith('grant_type=pkce'));
+    assert.equal(trades.length, 3, name);
+    assert.deepEqual(new Set(trades.map(call => call.body)).size, 1, `${name}: the same code and the same verifier each time`);
+    assert.equal(shown(r.ui, 'forgot').length, 0, name);
+    assert.equal(r.calls.filter(call => call.url.includes('/recover')).length, 0, name);
+  }
+  // Back keeps the verifier (the link may yet be traded), signs nobody in, and asks for nothing.
+  const back = rig({ reset: true, routes: { [HOSTED]: reply(200, hostedInfo()), [TRADE]: new Error('offline') }, ui: screens({ choices: ['own'], problem: 'back' }) });
+  await waitingOn(back.backend);
+  back.links.push(LINK);
+  await assert.rejects(back.onboarding.firstLaunch(''), Stop);
+  assert.ok(await back.backend.get('recovery'));
+  assert.equal(await back.store.load(), null);
+});
+
+test('a callback this phone did not ask for is dropped: no server is asked anything, and on iOS nothing is said', async () => {
+  // As the address the app was started by (boot.js pushes it whatever the phone remembers).
+  for (const address of [LINK, 'littlearchive://auth-callback', `littlearchive://auth-callback#access_token=${session.access_token}&refresh_token=x&type=recovery`]) {
+    const r = rig({ reset: true, routes: {}, ui: screens({ choices: ['own'] }) });
+    r.links.push(address);
+    await assert.rejects(r.onboarding.firstLaunch(''), Stop);
+    assert.equal(r.calls.length, 0, address);
+    assert.deepEqual(r.ui.drawn.map(entry => entry.screen), ['choose', 'server', 'choose'], address);
+    assert.equal(shown(r.ui, 'choose')[0].notice, '', address);
+  }
+  // The project's own "this emailed link ran out" is said on the first screen, on either platform, still with no request.
+  for (const platform of ['ios', 'android']) {
+    const r = rig({ reset: true, platform, routes: {}, ui: screens({ choices: ['own'] }) });
+    r.links.push(EXPIRED);
+    await assert.rejects(r.onboarding.firstLaunch(''), Stop);
+    assert.equal(r.calls.length, 0, platform);
+    assert.equal(shown(r.ui, 'choose')[0].notice, LINK_ENDED, platform);
+    assert.equal(shown(r.ui, 'problem').length, 0, platform);
+  }
+  // While a screen is up (the way an address arrives from outside on iOS): the screen is not replaced, and what was typed stays.
+  const source = { handlers: {}, addListener(name, handler) { this.handlers[name] = handler; } };
+  const backend = memoryBackend();
+  const links = createLinkInbox({ platform: 'ios', plugin: {}, App: source, backend });
+  const fake = fakeHttp({ 'https://archive.example.com/api/discovery': reply(200, selfHostedInfo) });
+  let passwordScreens = 0;
+  const ui = { ...screens({ choices: ['own'], server: (() => { let asked = false; return async ({ submit }) => { if (asked) return BACK; asked = true; return submit('https://archive.example.com'); }; })() }),
+    password: async () => { passwordScreens += 1; source.handlers.appUrlOpen({ url: LINK }); await new Promise(resolve => setTimeout(resolve, 10)); return BACK; } };
+  const onboarding = createOnboarding({ http: fake.http, config: CONFIG, ui, store: createStore(backend), platform: 'ios', plugin: plugin(), backend, links });
+  await assert.rejects(onboarding.firstLaunch(''), Stop);
+  assert.equal(passwordScreens, 1, 'the owner-password screen was drawn once and left by its own Back');
+  assert.deepEqual(sent(fake.calls), ['GET https://archive.example.com/api/discovery']);
+  assert.equal(links.waiting, false);
 });
