@@ -381,6 +381,8 @@ class PurchaseService:
         it does not count: an account that only such a purchase holds open is locked again. Nothing is deleted, so going back
         to a test key, or allowing test purchases, opens it again.
         """
+        if self.tap is None:
+            return  # Tap is not configured here at all: nothing is decided about what was bought through it
         for user_id in self.store.tap_test_holders():
             if self.tap_allow_test:
                 self._unlock(user_id, "tap")

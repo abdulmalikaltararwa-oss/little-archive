@@ -23,6 +23,7 @@ characters a secret key may hold, and how long after a buyer leaves its page Tap
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as TookTooLong
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -163,10 +164,21 @@ class HttpTapClient(TapClient):
         return f"HttpTapClient({'live' if self.live else 'test'} key)"
 
     def _call(self, method, url, content=None):
+        # The time allowed is for the whole exchange: connecting, waiting for the answer to begin, and reading it. The exchange
+        # runs beside this call so that the caller is let go at the limit even if the connection is still waiting.
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tap")
+        try:
+            return pool.submit(self._exchange, method, url, content).result(self._timeout + 0.5)
+        except TookTooLong:
+            raise TapError("unavailable") from None
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    def _exchange(self, method, url, content=None):
         headers = {"Authorization": "Bearer " + self._key, "Accept": "application/json", "lang_code": "en"}
         if content is not None:
             headers["Content-Type"] = "application/json"
-        deadline = self._clock() + self._timeout  # for the whole answer: a server that keeps sending a little is cut off too
+        deadline = self._clock() + self._timeout  # a server that keeps sending a little is cut off too, and its connection closed
         try:
             with httpx.Client(transport=self._transport, timeout=httpx.Timeout(self._timeout, connect=min(5.0, self._timeout)), follow_redirects=False, trust_env=False) as client:
                 with client.stream(method, url, headers=headers, content=content) as response:

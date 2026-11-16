@@ -16,6 +16,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import time
 from threading import Event, Thread
 import unittest
 from unittest.mock import patch
@@ -913,6 +914,11 @@ class TestKeyTests(TapCase):
         self.build()
         self.assertEqual(self.summary(auth)["unlocked_via"], "tap", "back on a test key the test purchase counts again")
 
+    def test_a_server_started_without_a_tap_key_leaves_test_purchases_alone(self):
+        user, auth, charge = self.paid()
+        self.build(clients={}, tap_secret_key="", tap_price="")
+        self.assertEqual(self.summary(auth)["unlocked_via"], "tap", "taking the key away decides nothing about what was bought")
+
     def test_a_live_purchase_is_recorded_as_one_and_a_payment_started_with_the_other_key_is_not_asked_about(self):
         user, auth = self.account()
         open_test = self.started(auth)
@@ -981,6 +987,21 @@ class TapsOwnExamplesTests(TapCase):
 
 
 class HttpTapClientLimitsTests(unittest.TestCase):
+    def test_a_server_that_never_answers_is_given_up_on_at_the_time_allowed(self):
+        release = Event()
+        self.addCleanup(release.set)
+
+        def silent(request):
+            release.wait(5)  # no headers, no body: nothing for a per-read limit to notice in a stand-in transport
+            return httpx.Response(200, content=(FIXTURES / "retrieve-a-charge.json").read_bytes())
+
+        client = HttpTapClient(KEY, transport=httpx.MockTransport(silent), timeout=0.2)
+        began = time.monotonic()
+        with self.assertRaises(TapError) as caught:
+            client.retrieve_charge("chg_TS050120220958Bk240709704")
+        self.assertEqual(caught.exception.kind, "unavailable")
+        self.assertLess(time.monotonic() - began, 2.0, "the caller is let go at the limit, whatever the connection is doing")
+
     def test_a_redirect_is_never_followed(self):
         captured = (FIXTURES / "retrieve-a-charge.json").read_bytes()
         seen = []
