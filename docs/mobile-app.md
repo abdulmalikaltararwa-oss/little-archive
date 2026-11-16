@@ -6,7 +6,7 @@ The app is the React interface in `ui/` in a native shell ([Capacitor](https://c
 
 ## What it does
 
-1. **Choose a server on first launch.** *Little Archive account* (the hosted service) or *My own server* (you type its address). The app asks the server what it is (`GET /api/discovery`, which needs no credentials) before sending anything secret, and explains in words what went wrong if it cannot connect.
+1. **Choose a server on first launch.** *Little Archive account* (the hosted service) or *My own server* (you type its address). The app asks the server what it is (`GET /api/discovery`, which needs no credentials) before sending anything secret, and explains in words what went wrong if it cannot connect. The own-server screen carries short guidance; see [Connecting to your own server](#connecting-to-your-own-server).
 2. **Sign in.**
    - *Own server:* the owner password goes once to `POST /api/auth/devices` and is exchanged for a revocable `lad_…` device token. The password is never stored.
    - *Hosted account:* **Continue with Apple** (iOS) and **Continue with Google** (iOS and Android), and under them email and password, all against Supabase Auth's REST routes (sign-up, sign-in, the Apple and Google grants, refresh, sign-out), with the token refreshed before it expires. See [Continue with Google and Apple](#continue-with-google-and-apple).
@@ -137,6 +137,30 @@ A development config goes through the same validation as the real one. Do not co
 - **`hostedServerUrl` is a placeholder** (`.example` never resolves). Choosing *Little Archive account* says so ("Could not reach app.little-archive.example") until it is replaced.
 - The publishable key and Supabase URL are public by design. **No other key or secret may be in the repository or the bundle.** `validateConfig` refuses unknown settings and anything shaped like a secret key, JWT or private key; `build-web.mjs` scans every file it writes for the same and for any `sb_…` key that is not the configured one; `mobile/tests/build.test.mjs` runs both.
 - **The sign-in service is pinned.** The app sends an email and password, an Apple identity token, or a Google sign-in's code and verifier only to `supabaseUrl` from this file, opens Google's sign-in only through `<supabaseUrl>/auth/v1/authorize`, and does all of it only after `GET /api/discovery` shows that the server names the same Supabase URL. A server that names another one (a compromised or malicious server, or someone's own hosted deployment) is refused: "this app does not trust it, so it will not send your email or password there." Typing a hosted server's address under *My own server* works only when it passes this check, and the "Continue with" buttons are drawn only after it has.
+
+## Connecting to your own server
+
+The *My own server* screen (`server` in `mobile/src/ui.js`) asks for one thing, the address, and says what the address has to be:
+
+- The field's hint: "The address you open Little Archive at in a browser, for example https://archive.example.com. It must start with https://."
+- Under the form, "before you connect": the phone has to be able to reach the server (a public https address from anywhere, a home-network address only on the same Wi-Fi), and plain http is refused on a home network too.
+- A link, "Self-hosting guide (opens in your browser)", to [`docs/self-hosting.md`](self-hosting.md) in the project's public repository (`SELF_HOSTING_GUIDE` in `ui.js`). The project has no separate documentation site; the address is the repository's, from the README, with the guide's path on `main`. The link has `target="_blank"`, which leaves the web view for the phone's browser, the same way "Open original" does in the interface.
+
+Focus arrives on the heading, not the field, so the keyboard does not cover the guidance.
+
+What a typed address can run into, and what the screen says on the address field (`ownServerProblem` and `checkServer` in `mobile/src/setup.js`; `discover` keeps its shorter sentences for the hosted service, where Wi-Fi and certificates would be out of place):
+
+| What happened | What it says |
+| --- | --- |
+| The address is `http://` and not this device | It is not encrypted, use an https address, and the guide covers this under "Reverse proxy". Nothing is sent. |
+| Nothing answered (no route, server stopped, a certificate the phone refuses) | Could not reach it: check the address, that the server is running, and the network (a home server answers only on its own Wi-Fi); a certificate the phone does not trust is refused. The native client reports all of these the same way, so the sentence names each. |
+| `localhost` or `127.0.0.1` did not answer | On a phone, that address is the phone itself. |
+| Something answered that is not Little Archive (a 404, another site's page, other JSON) | It answered, but not as a Little Archive server: use the address you open in a browser, with its port; if that is the address, the server needs an update. |
+| A redirect | The app does not follow redirects; enter the address it ends at. |
+| A hosted-mode server that names another sign-in service | It runs in hosted mode and uses a sign-in service this app does not trust; a server of your own has to run in self-hosted mode. |
+| A hosted-mode server that names the pinned sign-in service | It works: the account screen opens with a notice that this is a hosted service, so there is no owner password. |
+
+Checked by `mobile/tests/discovery.test.mjs`, `onboarding.test.mjs` and, in a DOM, `server-screen.test.mjs`. Not looked at on a simulator or a phone: how the guidance sits on a small screen, and the link opening the browser.
 
 ## Continue with Google and Apple
 

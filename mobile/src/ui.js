@@ -13,6 +13,10 @@
 
 export const BACK = Symbol('back');
 
+// The guide for running a server of your own. The project publishes its guides in its public repository (README.md), so this
+// is that repository's address with the guide's path; the app has no other documentation site.
+export const SELF_HOSTING_GUIDE = 'https://github.com/abdulmalikaltararwa-oss/little-archive/blob/main/docs/self-hosting.md';
+
 function h(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -215,15 +219,31 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       });
     },
 
-    /** Own server, step one. `submit(addressText)` checks it; the screen resolves with what it returns. */
+    /**
+     * Own server, step one. `submit(addressText)` checks it; the screen resolves with what it returns.
+     *
+     * Under the form is what someone needs to know before the address can work: the phone has to reach the server, only https is
+     * accepted, and where the guide is. The guide opens in the phone's browser (a link with target="_blank" leaves the web view,
+     * as "Open original" does in the interface). On arrival focus is on the heading, not the field: the keyboard would cover the
+     * guidance, and a screen reader starts at the top of the screen.
+     */
     server({ value = '', submit }) {
       return new Promise(done => {
-        const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser. It must start with https://.' });
+        const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser, for example https://archive.example.com. It must start with https://.' });
+        const guideId = nextId('native-guide');
+        const heading = landing(h('h1', {}, 'Connect to your server'));
         frame(
           h('p', { class: 'native-whisper' }, 'your own server'),
-          h('h1', {}, 'Connect to your server'),
-          form({ fields: { server: address }, submitLabel: 'Connect', busyLabel: 'Connecting…', submit: async values => { done(await submit(values.server)); }, extra: [backButton(done)] }));
-        address.control.focus();
+          heading,
+          h('p', { class: 'native-lede' }, 'Type the address of the Little Archive you run. The app asks it what it is before you enter a password.'),
+          form({ fields: { server: address }, submitLabel: 'Connect', busyLabel: 'Connecting…', submit: async values => { done(await submit(values.server)); }, extra: [backButton(done)] }),
+          h('section', { class: 'native-guide', 'aria-labelledby': guideId },
+            h('h2', { class: 'native-whisper', id: guideId }, 'before you connect'),
+            h('ul', {},
+              h('li', {}, 'This phone has to be able to reach the server. A public https:// address works from anywhere. An address on your home network works only while the phone is on the same Wi-Fi.'),
+              h('li', {}, 'Plain http:// is refused, on a home network too, because your password would travel unencrypted.')),
+            h('a', { class: 'native-link', href: SELF_HOSTING_GUIDE, target: '_blank', rel: 'noopener noreferrer' }, 'Self-hosting guide (opens in your browser)')));
+        heading.focus();
       });
     },
 

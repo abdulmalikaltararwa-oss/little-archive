@@ -70,7 +70,8 @@ export function createOnboarding({ http, config, ui, store, platform, plugin }) 
     for (;;) {
       const found = await ui.server({ value: typed, submit: async text => { typed = text; return checkServer({ http, config, input: text }); } });
       if (found === BACK) return null;
-      const record = await (found.mode === 'hosted' ? hostedSignIn(found, '') : selfHostedSignIn(found, ''));
+      // A hosted service that this app trusts was typed here. It works, but with an account, which the person did not expect.
+      const record = await (found.mode === 'hosted' ? hostedSignIn(found, `${hostName(found.url)} is a hosted Little Archive service, so you sign in with an account, not an owner password.`) : selfHostedSignIn(found, ''));
       if (record) return record;
     }
   }

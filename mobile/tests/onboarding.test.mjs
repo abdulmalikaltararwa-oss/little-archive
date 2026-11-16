@@ -99,6 +99,17 @@ test('the same refusal when a hosted server is typed under "My own server", and 
   assert.equal(again.native.asked.length, 0);
 });
 
+test('a hosted service this app trusts, typed under "My own server", goes to the account screen and says why there is no owner password', async () => {
+  const r = rig({
+    routes: { [HOSTED]: reply(200, hostedInfo()) },
+    ui: screens({ choices: ['own'], server: (() => { let asked = false; return async ({ submit }) => { if (asked) return BACK; asked = true; return submit(CONFIG.hostedServerUrl); }; })() }),
+  });
+  await assert.rejects(r.onboarding.firstLaunch(''), Stop);
+  const [account] = shown(r.ui, 'account');
+  assert.equal(account.notice, 'app.little-archive.example is a hosted Little Archive service, so you sign in with an account, not an owner password.');
+  assert.equal(shown(r.ui, 'password').length, 0);
+});
+
 test('after a discovery that names the pinned service, the account screen appears and every way in goes to that service only', async () => {
   let atAccount;
   const stages = [];

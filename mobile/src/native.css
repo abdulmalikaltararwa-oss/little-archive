@@ -41,6 +41,13 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-screen h1 { font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 2.25rem; line-height: 1.08; letter-spacing: -.02em; font-variation-settings: 'SOFT' 100, 'WONK' 0; color: var(--ink); margin: 0 0 10px; text-wrap: balance; }
 .native-lede { color: var(--ink-soft); font-size: .9375rem; line-height: 1.55; margin: 0 0 24px; text-wrap: pretty; }
 .native-fineprint { margin: 4px 0 18px; }
+/* What to know before connecting to a server of your own (ui.js, the server screen): a short list and a link to the guide. */
+.native-guide { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.native-guide ul { margin: 0 0 6px; padding: 0; padding-inline-start: 1.1rem; list-style: disc; color: var(--ink-soft); font-size: .875rem; line-height: 1.55; }
+.native-guide li { margin-bottom: 8px; text-wrap: pretty; }
+.native-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--sage); font-size: .9375rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; border-radius: 12px; }
+:root[data-theme='dark'] .native-link { color: var(--sage-deep); }
+.native-link:focus-visible { outline: 2.5px solid var(--sage); outline-offset: 2px; }
 .native-screen form { display: flex; flex-direction: column; }
 
 /* Buttons are pills; the one working colour is sage. */
