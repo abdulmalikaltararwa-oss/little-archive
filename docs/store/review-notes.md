@@ -18,6 +18,8 @@ Use made-up content only. Do not use a real person's account.
 
 ## Note for Apple (App Review Information, Notes, 4000)
 
+The text below is 2,632 of the 4,000 characters Apple allows.
+
 ```text
 WHAT THE APP IS
 Little Archive is a personal library for posts, videos and links a person has saved. They save a link with the share sheet or import an export file, then search and organise their saves. Nothing is shared with other users.
@@ -48,6 +50,9 @@ CONTACT
 ```
 
 ## Note for Google (App access instructions, and the note to the reviewer)
+
+Google's limit for this box was not looked up for this file (**unverified**). The text below is 1,121 characters;
+if the console refuses it, cut the sharing and AI paragraphs first.
 
 ```text
 Little Archive is a personal library for saved posts, videos and links. Nothing is shared with other users.

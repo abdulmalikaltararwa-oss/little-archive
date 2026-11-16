@@ -257,7 +257,7 @@ th {
 }
 
 /* On a phone three columns leave a few words a line, so each row becomes a short block: its name, the details,
-   then the reason in the quieter ink. The column headings stay available to screen readers. */
+   then the reason in the quieter ink. The cells are read in the same order as they are written. */
 @media (max-width: 599px) {
   table,
   tbody,

@@ -63,7 +63,7 @@ GOOD TO KNOW
 | Category | Productivity | |
 | Tags | Productivity; Bookmarks and read-later if offered | Pick from the console's list. |
 | Contact email | **Owner** | Google shows it publicly. No address exists in the project yet. |
-| Website | `https://abdulmalikaltararwa-oss.github.io/little-archive/` | The public demo, live today. |
+| Website | `https://abdulmalikaltararwa-oss.github.io/little-archive/` | The public demo (`docs/publishing.md` records it as verified; not opened again for this file). |
 | Privacy policy | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` | **Not live.** See the note under "URLs" in `app-store-listing.md`. |
 | Default language | English (United States) | The interface is English only today. |
 | Price | Free, with one in-app product | The one-time product `unlock_full`. **Owner:** the price is not set. |
@@ -135,7 +135,7 @@ advertising or analytics, not processed ephemerally unless noted.
 | App activity: Other user-generated content | Yes | See below | Required | App functionality | Saved links, titles, captions, notes, tags and collections are the library (`server/storage.py`). |
 | App activity: In-app search history | No | No | | | Searches and "ask" questions are sent to the server to be answered and are not stored (`server/enrich/ask.py` writes nothing). |
 | App activity: App interactions | Yes | No | Required | App functionality | Counts of AI requests per day and month, kept under a hash of the account id for the fair-use limits (`server/entitlements.py`). |
-| Location, Contacts, Messages, Audio, Calendar, Health, Web browsing, Device or other IDs | No | No | | | The app asks for none of these. Its only Android permissions are internet and billing (`AndroidManifest.xml`). |
+| Location, Contacts, Messages, Audio, Calendar, Health, Web browsing, Device or other IDs | No | No | | | The app asks for none of these. Its only Android permissions are internet and billing (`AndroidManifest.xml`). A place named in a saved post, which the server may send to a place-lookup service (`server/enrich/places.py`), is not the person's location. |
 | App info and performance (crash logs, diagnostics) | No | No | | | No crash or analytics software is in the app. |
 
 **The one answer that needs the owner's judgement: is saved content "shared"?** When a person uses an AI feature,
@@ -149,6 +149,11 @@ the text of the saves they chose goes to Google Gemini and, for a closer read, t
 
 **Owner:** check the terms of the Gemini and Groq plans in use before answering. The privacy policy names both
 companies either way.
+
+**If the places map is switched on with a map-tile service** (`VITE_LA_TILE_URL`, empty by default), the phone
+loads map pictures straight from that service, which sees the phone's network address. Google's form does not
+list a network address as a data type on its own, so no row changes, but the privacy policy has a line for it and
+the owner should know which service is used.
 
 ## Checked before this file was written
 

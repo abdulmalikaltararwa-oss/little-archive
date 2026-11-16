@@ -58,6 +58,10 @@ purpose `NSPrivacyCollectedDataTypePurposeAppFunctionality`:
 | `NSPrivacyCollectedDataTypePhotosorVideos` | Preview images the person uploads. |
 | `NSPrivacyCollectedDataTypeProductInteraction` | The usage counts. |
 
+The four names follow Apple's published list of collected data types as recalled here; they were not checked
+against Apple's page in this work. **Confirm each spelling in Apple's privacy manifest documentation before
+editing the file**, since Xcode rejects an unknown value only at upload.
+
 Nothing else in the manifest needs to change: `NSPrivacyTracking` stays `false`, the tracking-domain list stays
 empty, and the one required-reason API entry (user defaults, reason `1C8F.1`) is unchanged. The share extension's
 own manifest (`mobile/ios/App/ShareExtension/PrivacyInfo.xcprivacy`) collects nothing and is correct as it is: the
@@ -71,6 +75,13 @@ This file was not edited here. The `mobile/` folder belongs to another builder.
   `LA_AI_PROVIDER=gemini`, a transcription service (Groq, or Gemini), and `LA_AI_SHARE_PRIVATE_CONTEXT` left off, so
   that notes and collection names are not sent to the AI provider. The repository cannot show what the production
   server is set to.
+- **"Ask your archive" can send a title the person typed.** For suggestions the code leaves out a title the person
+  wrote; for "ask" it does not make that exception (`passages_for` in `server/enrich/ask.py` calls `build_evidence`
+  without `manual_title`). Notes and collection names are left out in both. This is already covered by Other User
+  Content above.
+- **Places.** Place names from saved posts can go to a place-lookup service, and the map can load tiles from a map
+  service (`server/enrich/places.py`; `VITE_LA_TILE_URL`). Both are off unless configured. Neither is the person's
+  location, so Location stays undeclared; the privacy policy mentions both.
 - **The AI providers' terms.** Apple's guideline 5.1.2(i) asks an app to say clearly when personal data goes to a
   third-party AI service and to get permission first. The permission dialog (Allow / Not now before the first AI
   action) is being built and is not in this branch. Check that it names Google Gemini and Groq, as the privacy

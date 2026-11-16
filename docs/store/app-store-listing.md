@@ -79,7 +79,7 @@ are not live.** The demo site publishes only the demo today (`scripts/build_demo
 | Field | Value |
 | --- | --- |
 | Support URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/support.html` |
-| Marketing URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/` (the public demo, live today) |
+| Marketing URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/` (the public demo; `docs/publishing.md` records it as verified after its last publish, and it was not opened again for this file) |
 | Privacy Policy URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` |
 
 ## Other fields
