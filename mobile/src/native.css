@@ -72,7 +72,7 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-screen input:focus-visible { border-color: var(--sage); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sage) 15%, transparent); outline: none; }
 .native-screen input[aria-invalid="true"] { border-color: var(--danger); }
 .native-screen .field-help { font-size: .75rem; line-height: 1.55; color: var(--ink-soft); margin: 0; }
-.native-screen form .native-reveal { width: auto; align-self: flex-start; margin: -6px 0 14px -8px; min-height: 40px; }
+.native-screen form .native-reveal { width: auto; align-self: flex-start; margin: -6px 0 14px -8px; min-height: 44px; }
 
 .native-screen .notice { margin-bottom: 18px; padding: 12px 16px; border-radius: 16px; background: var(--sage-pale); color: var(--ink); font-size: .875rem; line-height: 1.55; }
 .native-error { display: flex; gap: 8px; align-items: flex-start; color: var(--danger); font-size: .8125rem; line-height: 1.5; }

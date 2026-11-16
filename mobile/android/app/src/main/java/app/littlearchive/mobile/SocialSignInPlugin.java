@@ -33,13 +33,19 @@ import java.util.Locale;
  *     cannot sign anyone in: the page trades the code together with its own verifier, and the project refuses a code that was
  *     not made for that attempt's challenge (an error in the address is shown as a failed sign-in). So the most another app can
  *     do is make one attempt fail, and the person tries again.
- *   - With no call waiting, the address is dropped here and never handed to the page. If that happens before the page has asked
- *     interrupted() (the app was started, or started again, by the callback: Android ended the old process while the tab was
- *     open, or another app sent the intent), the fact is remembered, and the page says "Sign-in was interrupted. Try again."
- *     (interruptedSignIn in social.js). The code is not used: the verifier went with the old process. Capacitor hands the
- *     intent an activity was created with to onNewIntent as well, so both ways the callback can reach a fresh process end here.
+ *   - With no call waiting, the address is no answer to anything here. It may be the link of a password-reset email, which
+ *     comes back to the same address (mobile/src/recovery.js), so it is set aside for the page, which decides: it trades the
+ *     code only with a verifier it kept for a reset it asked for, and otherwise uses nothing of it.
+ *       - Before the page has asked interrupted() (the app was started, or started again, by the callback: a reset link opened
+ *         it, Android ended the old process while the tab was open, or another app sent the intent), the address is kept until
+ *         that question. With no reset waiting the page says "Sign-in was interrupted. Try again." and the code is not used:
+ *         the verifier went with the old process. Capacitor hands the intent an activity was created with to onNewIntent as
+ *         well, so both ways the callback can reach a fresh process end here.
+ *       - After that, it is sent to the page as a "callback" event, which the page ignores unless it is waiting on a reset link.
  *
- *   interrupted()     { interrupted: true } once, if a callback was dropped before the page first asked; false after that.
+ *   interrupted()     { interrupted: true, url } once, if a callback arrived with nothing waiting before the page first asked;
+ *                     { interrupted: false } after that.
+ *   "callback"        event { url }: a callback that arrived with nothing waiting, once the page has asked interrupted().
  */
 @CapacitorPlugin(name = "SocialSignIn")
 public class SocialSignInPlugin extends Plugin {
@@ -54,6 +60,8 @@ public class SocialSignInPlugin extends Plugin {
     private boolean opened;
     /** A callback arrived with nothing waiting, before the page asked interrupted(). Guarded by `this`. */
     private boolean droppedEarly;
+    /** The address of that callback (the latest, if there were several), for the page to read once. Guarded by `this`. */
+    private String droppedAddress;
     /** The page has asked interrupted() in this process: a callback dropped from now on is not remembered. Guarded by `this`. */
     private boolean asked;
 
@@ -94,14 +102,29 @@ public class SocialSignInPlugin extends Plugin {
         // Handled once: the address must not be read again from this intent.
         intent.setData(null);
         PluginCall call;
+        boolean tellPage = false;
         synchronized (this) {
             call = waiting;
             waiting = null;
             opened = false;
-            if (call == null && !asked) droppedEarly = true;
+            if (call == null) {
+                if (asked) {
+                    tellPage = true;
+                } else {
+                    droppedEarly = true;
+                    droppedAddress = data.toString();
+                }
+            }
         }
-        // Nothing is waiting: dropped (see the class comment).
-        if (call == null) return;
+        // Nothing is waiting: not an answer to a sign-in. The page is told, now or when it asks (see the class comment).
+        if (call == null) {
+            if (tellPage) {
+                JSObject event = new JSObject();
+                event.put("url", data.toString());
+                notifyListeners("callback", event);
+            }
+            return;
+        }
         // Something is waiting. This may be the browser's redirect or any other app's intent; the page and the project decide
         // what the address is worth, not this class.
         JSObject result = new JSObject();
@@ -113,13 +136,17 @@ public class SocialSignInPlugin extends Plugin {
     @PluginMethod
     public void interrupted(PluginCall call) {
         boolean was;
+        String address;
         synchronized (this) {
             was = droppedEarly;
+            address = droppedAddress;
             droppedEarly = false;
+            droppedAddress = null;
             asked = true;
         }
         JSObject result = new JSObject();
         result.put("interrupted", was);
+        if (was && address != null) result.put("url", address);
         call.resolve(result);
     }
 

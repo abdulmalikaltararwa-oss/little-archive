@@ -33,9 +33,11 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- Where Supabase sends the system browser back to after "Continue with Google": littlearchive://auth-callback, and only
-                 that (this host; the iOS share extension's littlearchive://share is not matched). SocialSignInPlugin accepts it only
-                 while a sign-in this app started is waiting. The same address must be on the Supabase project's redirect allow-list. -->
+            <!-- Where Supabase sends the system browser back to after "Continue with Google", and where the link of a password-reset
+                 email ends: littlearchive://auth-callback, and only that (this host; the iOS share extension's littlearchive://share
+                 is not matched). SocialSignInPlugin takes it as the answer to a sign-in only while one this app started is waiting;
+                 otherwise the page reads it only against a reset it asked for (mobile/src/recovery.js). The same address must be on
+                 the Supabase project's redirect allow-list. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
