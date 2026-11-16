@@ -5,7 +5,7 @@ import { cn } from 'cn';
 import { Archive, ArrowRight, Check, ChevronsUpDown, CircleCheck, FolderPlus, Heart, HeartOff, Inbox, LayoutGrid, Plus, Search, ShieldCheck, Shuffle, Sparkles, Tag as TagIcon, Upload, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { openDialog, toast } from '@/app/ui-state';
-import { AsciiSpinner } from '@/components/fx/ascii';
+import { AsciiSpinner, Garden } from '@/components/fx/ascii';
 import { PlatformIcon } from '@/components/icons';
 import { Pick } from '@/components/pick';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import { VIEW_TITLE_ID } from '@/lib/focus';
 import { StateCard } from '../feature-kit';
 import { Gallery } from './gallery';
 import { Hero } from './hero';
+import { WallEnd } from './wall-end';
 import { keptLine } from './words';
 
 const SORTS: { value: Sort; label: string }[] = [
@@ -294,6 +295,8 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
       ) : (
         <Gallery />
       )}
+      {/* Under an empty state the garden is sprouts and grass only: nothing has been saved here, so nothing has bloomed. */}
+      {list === 'ready' && !count ? <Garden bed="sprouts" className="mx-auto mt-10 max-w-xl" /> : null}
 
       <div className="flex min-h-10 justify-center pt-8">
         {list === 'ready' && count > 0 && filters.sort === 'random' ? (
@@ -305,6 +308,7 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
           </Button>
         ) : null}
       </div>
+      <WallEnd />
 
       <p className="mt-8 flex items-center justify-center gap-2 text-center text-xs text-ink-soft">
         <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />

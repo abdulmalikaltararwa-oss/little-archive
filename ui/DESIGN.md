@@ -32,6 +32,7 @@ nothing competing with the content. Spectacle is saved for moments:
 | Counts | Numbers in the hero and in an import result count up once |
 | Import, AI jobs | An ASCII progress bar that is also a real `progressbar` |
 | Nothing to show | A small ASCII drawing above the words |
+| The end of a page | The border garden: one row of text-art flowers. Static: it never moves, in any motion setting |
 | An AI suggestion | A slow beam travels the card's border, beside the evidence label in words |
 
 If an effect is not in this table it needs a reason to exist.
@@ -80,7 +81,17 @@ has `dir="auto"`.
   (the hero). Buttons, chips, tabs and the search box are full pills.
 - Spacing is Tailwind's 4px scale. Page gutters: 16px phone, 24px tablet, 40px desktop.
 - Shadows: `shadow-xs` resting, `shadow-md` lifted, `shadow-lg` floating (dialogs, island, dock).
-- The page is dotted paper (one fixed radial gradient). Do not put a second texture on top of it.
+- The page is dotted paper (one fixed radial gradient). Do not put a second texture on top of it. The one named
+  exception is the **border garden** (`Garden` in `components/fx/ascii.tsx`), and it is bounded:
+  - It is one row, planted only where a page ends: under the line at the true end of the wall (never while saves
+    are loading or more can be loaded), at the foot of the wide sidebar under its last line (dropped whole, first,
+    when the window is short), and under the library's empty states (sprouts and grass only: nothing saved, nothing
+    bloomed).
+  - It is in the page's flow. It is never behind text or a card, never fixed to the screen, and it ends above the
+    dock's reserved space.
+  - It is decoration: `aria-hidden`, not focusable, drawn left to right (`dir="ltr"`) in any page direction, thinned
+    to a watermark in both themes, and still. Real text beside it carries anything worth knowing.
+  - A bed shows as many whole plants as its width holds. A plant is never cut in half.
 
 ## Motion
 
@@ -145,6 +156,7 @@ Use these before writing something new.
 | One choice from a menu | `components/pick.tsx` |
 | A section label in the terminal voice | `Whisper` |
 | ASCII art, spinner, progress | `components/fx/ascii.tsx` |
+| The row of flowers at the end of a page | `Garden` in `components/fx/ascii.tsx`, with a bed: `wall`, `side` or `sprouts` |
 | A number that counts up | `components/fx/number-ticker.tsx` |
 | Marking an AI suggestion | `components/fx/border-beam.tsx`, always with the evidence label in words |
 | A feature screen's header, gate and empty states | `features/feature-kit.tsx` |

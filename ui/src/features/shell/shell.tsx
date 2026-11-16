@@ -7,6 +7,7 @@ import { FolderHeart, House, Plus, RotateCcw, Search, Settings, Sparkles, Upload
 import { useArchive, useArchiveState } from '@/app/archive-context';
 import { openDialog, type OpenDialog } from '@/app/ui-state';
 import { Brand } from '@/components/brand';
+import { Garden } from '@/components/fx/ascii';
 import { Modal } from '@/components/modal';
 import { Button } from '@/components/ui/button';
 import { restoreFocus, VIEW_TITLE_ID } from '@/lib/focus';
@@ -149,6 +150,14 @@ export function Shell({ children, demo }: { children: ReactNode; demo: boolean }
       <aside aria-label="Library navigation" className="sticky top-0 hidden h-dvh flex-col gap-7 overflow-y-auto overscroll-contain border-e border-line bg-paper-deep/80 px-4 pt-7 pb-5 lg:flex">
         <div className="px-2"><Brand /></div>
         <NavContent />
+        {/* The sidebar's bed of the border garden, under the last line of the navigation. It lives in whatever room is
+            left over: the box takes no height of its own (so it never adds a scrollbar), and the row is drawn only when
+            the whole of it fits, so in a short window it is the first thing to go and it is never cut in half. */}
+        <div className="-mt-7 min-h-0 flex-1 [container-type:size]">
+          <div className="hidden h-full flex-col justify-end px-2 [@container(min-height:5.5rem)]:flex">
+            <Garden bed="side" />
+          </div>
+        </div>
       </aside>
       {/* Where a phone draws the page under its status bar, the page scrolls behind the clock. This strip is as tall
           as that inset and stays put, so nothing shows through. Where there is no inset it has no height. */}
