@@ -9,8 +9,8 @@ Nothing in this list has been done or tried by a builder.
 ## Decisions first
 
 1. Decide the unlock's price, for the stores and in Kuwaiti dinars for the web (`docs/STATUS.md`, "Waiting on the owner").
-2. Choose a public contact address that is not a personal one and set it as `contact_email` in `web/site.json`; the privacy, terms, support and account deletion pages publish on the next push to `main`, and are not published at all while it is empty.
-3. After that push, open the four pages in a browser and check each shows the address; until then the app's "Privacy policy" and "Terms" links and every page address in the listings lead to a page that does not exist.
+2. Done: the contact address is `hello@littlearchive.me` (`contact_email` in `web/site.json`), a mailbox at Migadu on the owner's domain. Set its password from the invitation Migadu sent, then send it a test message and see it arrive.
+3. Open the four pages in a browser and check each shows the address.
 4. Give the company's exact registered name and country for the legal pages and the copyright line.
 5. Have a lawyer or yourself confirm the sentences listed in the builder's report: the refund promise for web payments, Kuwait as governing law, the liability limit, the minimum age of 13, the 30-day notice of closure and the 30 days for a deletion asked for by email.
 6. Decide whether to launch in English only; the interface has no Arabic yet (`docs/STATUS.md`).

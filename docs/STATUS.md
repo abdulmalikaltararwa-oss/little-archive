@@ -27,8 +27,8 @@ in the linked docs, not here. Last updated: 2026-11-16.
 - A permission step before saved content is sent to an AI service (kept per account, switch in Settings).
   The interface enforces it; the server does not refuse AI routes without it.
 - Privacy policy and terms links in Settings and on the unlock screen. Privacy, terms, support and account
-  deletion pages in `web/`, published only once `web/site.json` has a contact address (it is empty, so the
-  links lead nowhere today). The store listing pack in `docs/store/`.
+  deletion pages in `web/`, published because `web/site.json` names the contact address
+  `hello@littlearchive.me` (not opened in a browser since; no mail to it has been seen arriving). The store listing pack in `docs/store/`.
 - A flower border where a page ends, an empty library that teaches saving, Start cooking pinned on a recipe
   save, and a garden on the phone app's first screens, which fit the screen without scrolling.
 - Revoking a Sign in with Apple when an account is deleted (off until the Apple key is set).
@@ -67,7 +67,7 @@ in the linked docs, not here. Last updated: 2026-11-16.
 ## Waiting on the owner
 
 - The unlock price (stores and KWD), the Tap secret key (test first), Apple Pay domain verification in Tap.
-- A public contact address in `web/site.json`; until then the four site pages are not published.
+- Setting the password for the `hello@littlearchive.me` mailbox at Migadu (an invitation went to the owner).
 - On the hosted server for the pay page: the Supabase publishable key and `/pay` as a redirect address.
 - Publish the Google sign-in setup before real users. Register the share extension id and the app group
   with Apple; create a Sign in with Apple key for revocation.

@@ -62,9 +62,9 @@ GOOD TO KNOW
 | App or game | App | |
 | Category | Productivity | |
 | Tags | Productivity; Bookmarks and read-later if offered | Pick from the console's list. |
-| Contact email | **Owner** | Google shows it publicly. No address exists in the project yet. |
+| Contact email | `hello@littlearchive.me` | Google shows it publicly. |
 | Website | `https://abdulmalikaltararwa-oss.github.io/little-archive/` | The public demo (`docs/publishing.md` records it as verified; not opened again for this file). |
-| Privacy policy | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` | Does not exist until the contact address is set. See the note under "URLs" in `app-store-listing.md`. |
+| Privacy policy | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` | See the note under "URLs" in `app-store-listing.md`. Open it before submitting. |
 | Default language | English (United States) | The interface is English only today. |
 | Price | Free, with one in-app product | The one-time product `unlock_full`. **Owner:** the price is not set. |
 
@@ -119,7 +119,7 @@ Top-level answers:
 | Does the app collect or share any required user data types? | Yes | See the table. |
 | Is all collected data encrypted in transit? | Yes | The app accepts only `https` server addresses; release builds allow no cleartext traffic (`mobile/src/server-url.js`, Android network security config). |
 | Can users request that their data is deleted? | Yes | In the app, and by email. |
-| Account deletion URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/delete-account.html` | Does not exist until the contact address is set in `web/site.json`; the page then shows that address. Open it before submitting. |
+| Account deletion URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/delete-account.html` | The page shows the contact address from `web/site.json`. Open it before submitting. |
 
 Data types. Every row: purpose **App functionality** (and **Account management** where noted), not used for
 advertising or analytics, not processed ephemerally unless noted.

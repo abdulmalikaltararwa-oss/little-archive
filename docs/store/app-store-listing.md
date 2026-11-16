@@ -71,10 +71,9 @@ saved posts,bookmarks,links,read later,recipes,collections,organize,notes,archiv
 
 ## URLs
 
-These are the addresses of the four pages in `web/` on the public site, beside the demo. **They do not exist
-until the owner sets the contact address** (`contact_email` in `web/site.json`): the site is built without the pages
-while it is empty, and publishes them on the next push to `main` after it is set (`scripts/build_demo.py`). None has
-been opened in a browser. **Owner:** set the address, push, then open each one before pasting it.
+These are the addresses of the four pages in `web/` on the public site, beside the demo. They are
+published because the contact address is set (`contact_email` in `web/site.json`, `hello@littlearchive.me`);
+`scripts/build_demo.py` leaves them out whenever that value is empty. **Owner:** open each one before pasting it.
 
 | Field | Value |
 | --- | --- |

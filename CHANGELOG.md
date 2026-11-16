@@ -13,6 +13,7 @@ The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e
 ### The public site's pages and the store pack
 
 - **Four plain pages** in `web/`: privacy policy, terms of use, support, and deleting an account (with a way to ask by email, for Google Play). No script, nothing loaded from another site, light and dark from the system setting. `scripts/build_demo.py` publishes them beside the demo, and the publishing workflow checks them with their own rules.
+- **The contact address is set.** `hello@littlearchive.me`, so the four pages are published with the demo.
 - **One contact address, set once.** The pages hold a token where the address goes; the address is `contact_email` in `web/site.json` and is written in when the site is built. While it is empty the pages are not published at all and the demo is built without them; the build stops if a token or a placeholder would be published, and refuses a value that is not an email address. The workflow's check and `scripts/release_check.py` hold the same rule.
 - **`docs/store/`**: listing text for the App Store and Google Play with each field's limit counted, the privacy label and Data safety answers with the code they rest on, notes for the reviewers, the screenshot list and an ordered checklist for the owner.
 
