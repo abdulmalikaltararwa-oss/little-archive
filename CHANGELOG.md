@@ -10,6 +10,35 @@ The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e
 - **Kept with the library.** `ai_sharing_allowed` in `/api/settings` (per account on a hosted service); a switch in Settings withdraws it. `PATCH /api/settings` now writes only the fields it is given. The server does not refuse AI routes itself.
 - **Privacy policy and terms.** Linked from Settings, the unlock screen and the permission dialog, built from one site address (`ui/src/lib/site.ts`).
 
+### The public site's pages and the store pack
+
+- **Four plain pages** in `web/`: privacy policy, terms of use, support, and deleting an account (with a way to ask by email, for Google Play). No script, nothing loaded from another site, light and dark from the system setting. `scripts/build_demo.py` publishes them beside the demo, and the publishing workflow checks them with their own rules.
+- **One contact address, set once.** The pages hold a token where the address goes; the address is `contact_email` in `web/site.json` and is written in when the site is built. While it is empty the pages are not published at all and the demo is built without them; the build stops if a token or a placeholder would be published, and refuses a value that is not an email address. The workflow's check and `scripts/release_check.py` hold the same rule.
+- **`docs/store/`**: listing text for the App Store and Google Play with each field's limit counted, the privacy label and Data safety answers with the code they rest on, notes for the reviewers, the screenshot list and an ordered checklist for the owner.
+
+### Paying on the web, a forgotten password and your own server
+
+- **The unlock can be bought on the web through Tap Payments** (hosted service only, off until a key and a price are set: `LA_TAP_SECRET_KEY`, `LA_TAP_PRICE`, `LA_TAP_CURRENCY`). The server creates a charge on Tap's own page and unlocks the account only after Tap, asked for the charge by id, says it was captured for the amount, currency and account the server wrote down. A pay page at `/pay` signs the buyer in from the browser at the Supabase project and starts the payment; nothing in the apps links to it. A refund made in Tap's dashboard is not followed: an operator takes the purchase back by hand. Exercised against stand-ins and Tap's own example answers only; no Tap payment has been made.
+- **A forgotten password** (phone app, hosted accounts): "Forgot your password?" on the sign-in screen sends a reset link that opens the app on the same phone within a few minutes, where a new password is chosen. Every address gets the same answer, so the screen does not reveal which addresses have accounts. Run in tests against a stand-in only.
+- **Connecting to your own server** (phone app): the screen says what the address must be, links the self-hosting guide, and explains the common failures in words written for someone setting up a server.
+
+### Store review fixes in the phone app
+
+- Version 1 is built for iPhone only. Continue with Apple asks for the email address only, not the name, and its button follows Apple's sizes for a custom button.
+- The privacy manifest declares every collected data type and the file-timestamp API; camera and local-network purpose strings are in `Info.plist`.
+- Android release builds are signed with a keystore kept outside the repository. The app's package version is 1.0.0, and it names the production address of the hosted service.
+
+### A flower border, an empty library that teaches, Start cooking and a garden at sign-in
+
+- A still row of text-art flowers marks where a page ends: at the true end of the wall, at the foot of the wide sidebar and under the library's empty states. Decoration only, hidden from assistive technology.
+- An empty library shows how to save: in the phone app, the three steps of saving from another app's share sheet; in a browser, pasting a link and, on a self-hosted server, the companion extension.
+- A save whose recipe card has steps has "Start cooking" pinned at the foot of its detail.
+- The phone app's first-launch and sign-in screens have a band with a garden of text-art flowers. It sways only when motion is welcome and goes while the keyboard is up.
+
+### Fixed
+
+- Accepting an AI suggestion no longer makes the save look changed, so the next organize run does not queue the same save again (and, on a hosted account, count it against the allowance).
+
 ### The React interface is the interface (in development)
 
 The web interface is the React app in `ui/`, served by the server, the Docker image, the Mac app and the public demo. The old buildless interface in `web/` is no longer served; its files stay in the repository because the interface and the phone app import a few of them (`utils.js`, the demo data and store, the display font, `transport.js`).
@@ -74,7 +103,7 @@ Covered by automated tests with stand-ins only (no real Supabase project, Apple 
 - The page fetcher bounds inflated size (a gzip body is inflated under the byte limit instead of by the HTTP library), shares its time allowance across lookups and connections, refuses names that become addresses once normalised and scoped addresses, and lists the ranges Python versions disagree about.
 - Recipe cards, places and ask-your-archive: every model call and uncached geocoder request is a *feature call* charged to the account against a daily and monthly allowance (`LA_HOSTED_FEATURE_CALLS_*`; 100 a day and 1,500 a month unlocked, none for free accounts, so the features stay part of the unlock), refunded on failure, with the same `402`/`429` answers; the guided import's staged upload now counts toward a hosted account's storage quota (refused at `create` with `507 storage_full` if it cannot fit); route-class request prices and concurrency caps cover the new routes.
 - Mobile: `10.0.2.2` (the Android emulator's host) is accepted only by a development bundle (`LA_DEBUG_BUILD=1`); a test keeps the app's address check and both Android network configs in step.
-- Deleting an account revokes its Sign in with Apple, when the operator sets the team's Sign in with Apple key (`LA_APPLE_SIGNIN_TEAM_ID`, `LA_APPLE_SIGNIN_KEY_ID`, `LA_APPLE_SIGNIN_CLIENT_ID` and `LA_APPLE_SIGNIN_PRIVATE_KEY_FILE` or `LA_APPLE_SIGNIN_PRIVATE_KEY`; all or none, and with none nothing changes). After an Apple sign-in the iOS app posts Apple's one-time authorization code to the new `POST /api/account/apple-authorization`; the server trades it with Apple and keeps the refresh token for that account, and deletion asks Apple once to revoke it before the Supabase sign-in is removed. Apple being unreachable never blocks a deletion (a warning is logged and the token is not kept), and the post never blocks a sign-in. `doctor` lists `apple_signin_revocation` once the key is set. No new dependency (PyJWT and cryptography sign the client secret). Run against stand-ins only: Apple's endpoints, a real key and a device were not used, and the Swift change is uncompiled. The owner steps are in [the mobile app guide](docs/mobile-app.md#what-to-switch-on-and-create-the-owner-checklist).
+- Deleting an account revokes its Sign in with Apple, when the operator sets the team's Sign in with Apple key (`LA_APPLE_SIGNIN_TEAM_ID`, `LA_APPLE_SIGNIN_KEY_ID`, `LA_APPLE_SIGNIN_CLIENT_ID` and `LA_APPLE_SIGNIN_PRIVATE_KEY_FILE` or `LA_APPLE_SIGNIN_PRIVATE_KEY`; all or none, and with none nothing changes). After an Apple sign-in the iOS app posts Apple's one-time authorization code to the new `POST /api/account/apple-authorization`; the server trades it with Apple and keeps the refresh token for that account, and deletion asks Apple once to revoke it before the Supabase sign-in is removed. Apple being unreachable never blocks a deletion (a warning is logged and the token is not kept), and the post never blocks a sign-in. `doctor` lists `apple_signin_revocation` once the key is set. No new dependency (PyJWT and cryptography sign the client secret). Run against stand-ins only: Apple's endpoints, a real key and a device were not used. The Swift change compiled in an Xcode 26.6 simulator build and the Android plugin compiled with `assembleDebug`; neither was run against Apple. The owner steps are in [the mobile app guide](docs/mobile-app.md#what-to-switch-on-and-create-the-owner-checklist).
 
 ### iOS and Android app (in development)
 
