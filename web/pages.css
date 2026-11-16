@@ -1,0 +1,315 @@
+/* The plain pages of the public site: privacy, terms, support, account deletion.
+   Colours are the interface's tokens (ui/src/styles/tokens.css), light and dark, chosen by the system setting.
+   No script is used, so there is no theme switch here. Fraunces is the only vendored face in web/; body text
+   uses the system face. */
+
+@font-face {
+  font-family: 'Fraunces';
+  src: url('./fonts/fraunces-soft.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --paper: #f8f3ea;
+  --card: #fffdf8;
+  --card-2: #f4eee2;
+  --ink: #27302a;
+  --ink-soft: #5c665f;
+  --line: #e6decd;
+  --line-strong: #cbc1aa;
+  --sage: #4b6f56;
+  --sage-deep: #3a5a45;
+  --sage-pale: #e1ecdc;
+  --dot: #4b6f5624;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a211d;
+    --card: #242d27;
+    --card-2: #2c362f;
+    --ink: #f4f1e6;
+    --ink-soft: #b4bdb3;
+    --line: #36423a;
+    --line-strong: #4d5b51;
+    --sage: #bfd6b6;
+    --sage-deep: #d6e6cf;
+    --sage-pale: #2f4036;
+    --dot: #bfd6b61c;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--paper);
+  background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px);
+  background-size: 26px 26px;
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.skip {
+  position: absolute;
+  inset-inline-start: 16px;
+  top: -80px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--sage);
+  color: var(--card);
+  text-decoration: none;
+}
+
+.skip:focus {
+  top: 12px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 46rem;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+@media (min-width: 640px) {
+  .wrap {
+    padding-inline: 24px;
+  }
+}
+
+.site-header {
+  padding-block: 20px 12px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--ink);
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.site-nav ul,
+.site-footer ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav a,
+.site-footer li a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 14px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.site-nav a:hover,
+.site-footer li a:hover {
+  background: var(--card-2);
+  color: var(--ink);
+}
+
+.site-nav a[aria-current='page'] {
+  background: var(--sage-pale);
+  color: var(--ink);
+}
+
+main {
+  margin-block: 12px 32px;
+  padding: 24px 20px 28px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--card);
+}
+
+@media (min-width: 640px) {
+  main {
+    padding: 36px 40px 40px;
+  }
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+}
+
+h2 {
+  margin: 36px 0 8px;
+  font-size: 1.375rem;
+}
+
+h3 {
+  margin: 24px 0 4px;
+  font-size: 1.0625rem;
+}
+
+p,
+ul,
+ol {
+  margin: 0 0 14px;
+}
+
+ul,
+ol {
+  padding-inline-start: 1.25rem;
+}
+
+li {
+  margin-bottom: 6px;
+}
+
+a {
+  color: var(--sage);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--sage-deep);
+}
+
+a:focus-visible {
+  outline: 2.5px solid var(--sage);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.lede {
+  color: var(--ink-soft);
+  font-size: 1.0625rem;
+}
+
+.updated {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.note {
+  margin-block: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card-2);
+}
+
+.note > :last-child {
+  margin-bottom: 0;
+}
+
+.table-scroll {
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+th,
+td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+  vertical-align: top;
+}
+
+th {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* On a phone three columns leave a few words a line, so each row becomes a short block: its name, the details,
+   then the reason in the quieter ink. The column headings stay available to screen readers. */
+@media (max-width: 599px) {
+  table,
+  tbody,
+  tr,
+  th,
+  td {
+    display: block;
+  }
+
+  thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    padding-block: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  tbody th,
+  tbody td {
+    padding: 0;
+    border: 0;
+  }
+
+  tbody th {
+    margin-bottom: 4px;
+    color: var(--ink);
+  }
+
+  tbody td + td {
+    margin-top: 6px;
+    color: var(--ink-soft);
+  }
+}
+
+.contact-address {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.site-footer {
+  padding-block: 0 40px;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.site-footer p {
+  margin: 12px 0 0;
+  padding-inline: 14px;
+}

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f8f3ea" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a211d" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="How to delete a Little Archive account and its data, in the app or by email, and what is kept for how long.">
+    <!-- A plain page: no script runs and nothing is loaded from another site. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+    <title>Delete your account — Little Archive</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./pages.css">
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the page</a>
+    <header class="site-header wrap">
+      <a class="brand" href="./"><img src="./icon.svg" alt="" width="32" height="32">Little Archive</a>
+      <nav class="site-nav" aria-label="Pages">
+        <ul>
+          <li><a href="./privacy.html">Privacy</a></li>
+          <li><a href="./terms.html">Terms</a></li>
+          <li><a href="./support.html">Support</a></li>
+          <li><a href="./delete-account.html" aria-current="page">Delete account</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" class="wrap">
+      <h1>Delete your Little Archive account</h1>
+      <p class="lede">This page is for people who have an account on the Little Archive hosted service, run by Nuzio. It explains how to delete the account and its data, with or without the app.</p>
+
+      <h2 id="in-app">Delete it in the app</h2>
+      <ol>
+        <li>Open Little Archive and sign in.</li>
+        <li>Open Settings and find the section "This device".</li>
+        <li>Choose "Delete my account…".</li>
+        <li>Type DELETE to confirm, then choose "Delete my account".</li>
+      </ol>
+      <p>The deletion happens straight away and cannot be undone. If you want a copy of your library, export it or download a backup from Settings first.</p>
+
+      <h2 id="by-email">Ask us to delete it</h2>
+      <p>If you no longer have the app, write to the address under <a href="#contact">Contact</a>:</p>
+      <ul>
+        <li>Send the message from the email address of your Little Archive account, so we know the request is yours.</li>
+        <li>Put "Delete my account" in the subject.</li>
+        <li>If you signed up with Continue with Apple and hid your email address, say so. We may ask you to confirm the request from inside your account.</li>
+      </ul>
+      <p>We will delete the account within 30 days and reply to tell you it is done.</p>
+
+      <h2 id="deleted">What is deleted</h2>
+      <ul>
+        <li>Your whole library: every save, collection, tag, note, transcript, recipe card, place and AI suggestion.</li>
+        <li>Preview images you added, and any import file still waiting.</li>
+        <li>Your unlock and the record of your purchase on our server.</li>
+        <li>Your sign-in (your email address and password) at Supabase, the sign-in service we use. If Supabase cannot be reached at that moment, our server keeps trying until it is removed.</li>
+      </ul>
+
+      <h2 id="kept">What is kept, and for how long</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">What</th><th scope="col">How long</th><th scope="col">Why</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">The time of the deletion, stored under a hash of the account id</th>
+              <td>30 days</td>
+              <td>So an old sign-in on another device cannot bring the account back.</td>
+            </tr>
+            <tr>
+              <th scope="row">Counts of AI requests for the current day and month, under the same hash</th>
+              <td>Until that day and that month end</td>
+              <td>So deleting and signing up again does not reset the fair-use limits.</td>
+            </tr>
+            <tr>
+              <th scope="row">A record of a purchase that the store refunded or took back, with no account attached</th>
+              <td>Kept</td>
+              <td>So a refunded purchase cannot be used again.</td>
+            </tr>
+            <tr>
+              <th scope="row">Backups of our server made before the deletion</th>
+              <td>Until those backups are replaced</td>
+              <td>Backups cannot be edited one account at a time.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>None of the first three holds your content, your email address or your account id in readable form.</p>
+
+      <h2 id="outside">What deleting your account does not change</h2>
+      <ul>
+        <li>Exports and backups you downloaded stay on your own devices.</li>
+        <li>Text or media that was already sent to an AI company for a feature you used cannot be recalled.</li>
+        <li>Apple, Google or Tap keep their own record of your payment. Deleting your account does not refund a purchase.</li>
+        <li>If you used Continue with Apple, Little Archive stays listed in your Apple Account until you remove it: on your iPhone, Settings, your name, Sign in with Apple.</li>
+        <li>If you used your own server, there is no hosted account to delete. Your library is on that server.</li>
+      </ul>
+      <p>The <a href="./privacy.html">privacy policy</a> has the full picture.</p>
+
+      <h2 id="contact">Contact</h2>
+      <p>To ask for your account to be deleted, write to <span class="contact-address">support@[owner to set]</span></p>
+    </main>
+    <footer class="site-footer wrap">
+      <nav aria-label="Legal and help">
+        <ul>
+          <li><a href="./privacy.html">Privacy policy</a></li>
+          <li><a href="./terms.html">Terms of use</a></li>
+          <li><a href="./support.html">Support</a></li>
+          <li><a href="./delete-account.html">Delete your account</a></li>
+          <li><a href="https://github.com/abdulmalikaltararwa-oss/little-archive">Source code</a></li>
+        </ul>
+      </nav>
+      <p>Little Archive is open source under the MIT licence. The hosted service and the apps are run by Nuzio, Kuwait.</p>
+    </footer>
+  </body>
+</html>

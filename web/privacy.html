@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f8f3ea" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a211d" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="What the Little Archive hosted service and apps keep about you, who else receives it, and how to remove it.">
+    <!-- A plain page: no script runs and nothing is loaded from another site. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+    <title>Privacy policy — Little Archive</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./pages.css">
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the page</a>
+    <header class="site-header wrap">
+      <a class="brand" href="./"><img src="./icon.svg" alt="" width="32" height="32">Little Archive</a>
+      <nav class="site-nav" aria-label="Pages">
+        <ul>
+          <li><a href="./privacy.html" aria-current="page">Privacy</a></li>
+          <li><a href="./terms.html">Terms</a></li>
+          <li><a href="./support.html">Support</a></li>
+          <li><a href="./delete-account.html">Delete account</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" class="wrap">
+      <h1>Privacy policy</h1>
+      <p class="updated">Last updated: 16 November 2026</p>
+      <p class="lede">This page says what the Little Archive hosted service and apps keep about you, who else receives any of it, and how to remove it.</p>
+
+      <h2 id="who">Who runs it</h2>
+      <p>The Little Archive hosted service and the Little Archive apps for iPhone and Android are run by Nuzio, a company in Kuwait. In this policy "we" means Nuzio.</p>
+      <p>Little Archive is also open-source software that anyone can run on their own server. This policy covers the hosted service, which is what you use when you choose "Little Archive account" in the app. If you choose "My own server", see <a href="#own-server">Your own server</a>.</p>
+
+      <h2 id="collect">What we keep</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">What</th><th scope="col">Details</th><th scope="col">Why</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Account email and sign-in</th>
+              <td>Your email address and password are held by Supabase, the sign-in service we use. If you use Continue with Google, Google gives Supabase your email address and usually your name and the address of your profile picture. If you use Continue with Apple, Apple gives Supabase your email address or a private relay address. The Little Archive server does not store your email address or your password.</td>
+              <td>To sign you in.</td>
+            </tr>
+            <tr>
+              <th scope="row">Account id</th>
+              <td>A random identifier that Supabase gives your account. The Little Archive server uses it to find your library.</td>
+              <td>To keep your library separate from everyone else's.</td>
+            </tr>
+            <tr>
+              <th scope="row">What you save</th>
+              <td>Links, titles, captions, creator names, collections, tags, notes, favourites, preview images you add, files you import, details read from a saved post's public page, transcripts, recipe cards, places and AI suggestions.</td>
+              <td>This is your library. Storing it is the service.</td>
+            </tr>
+            <tr>
+              <th scope="row">Purchase record</th>
+              <td>Whether your account is unlocked and where it was bought. For an App Store purchase, Apple's transaction id. For a Google Play purchase, a scrambled form (a hash) of Google's purchase token. We never receive your card number.</td>
+              <td>To unlock your account, restore a purchase and act on a refund.</td>
+            </tr>
+            <tr>
+              <th scope="row">Usage counters</th>
+              <td>Counts of how many AI suggestions, closer reads and other AI requests your account has made today and this month. They are numbers only, with no text, and are stored under a hash of your account id.</td>
+              <td>To apply the fair-use limits.</td>
+            </tr>
+            <tr>
+              <th scope="row">Network address</th>
+              <td>The server holds the address your request came from in memory for a short time. The application keeps no access log unless we turn one on to investigate a problem.</td>
+              <td>To limit request rates and block abuse.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>On your phone, the app keeps your sign-in in the system's protected storage (the iOS Keychain or the Android Keystore).</p>
+
+      <h2 id="where">Where your library lives, and who can read it</h2>
+      <p>Your library is stored on a server that Nuzio runs. Each account has its own separate database. Data travels between the app and the server over an encrypted connection (HTTPS).</p>
+      <p>Your library is not end-to-end encrypted. The people who operate the server at Nuzio are technically able to read it, and it is included in the backups we make of the server. We look at an account's data only when that is needed to keep the service running, to answer a request from the account's owner, or when the law requires it.</p>
+
+      <h2 id="processors">Who else receives data, and why</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">Company</th><th scope="col">What it receives</th><th scope="col">Why</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Supabase</th>
+              <td>Your email address, your password (which it stores in protected form) and, if you sign in with Google or Apple, what they share about you.</td>
+              <td>Sign-in only. Your library is not stored at Supabase.</td>
+            </tr>
+            <tr>
+              <th scope="row">Google (Gemini)</th>
+              <td>When you use an AI feature: the text of the saves you chose, meaning the post's title, creator, caption, image description and transcript. For "ask your archive": the question you typed and short passages from the saves that match it. For a closer read, if we use Gemini to transcribe: the post's media file.</td>
+              <td>To suggest titles, folders and summaries, build recipe cards and places, answer your question, and turn speech into text.</td>
+            </tr>
+            <tr>
+              <th scope="row">Groq</th>
+              <td>For a closer read: the media file of the public post, which carries its sound and, for a video, its picture.</td>
+              <td>To turn the speech in the post into a transcript.</td>
+            </tr>
+            <tr>
+              <th scope="row">Apple</th>
+              <td>If you buy the unlock on an iPhone or iPad, Apple takes the payment. If you use Continue with Apple, Apple signs you in.</td>
+              <td>Payment and sign-in.</td>
+            </tr>
+            <tr>
+              <th scope="row">Google</th>
+              <td>If you buy the unlock on Android, Google Play takes the payment, and our server asks Google whether the purchase is valid. If you use Continue with Google, Google signs you in.</td>
+              <td>Payment and sign-in.</td>
+            </tr>
+            <tr>
+              <th scope="row">Tap Payments</th>
+              <td>If you buy the unlock on the web, Tap Payments (Kuwait) takes the payment by KNET, Apple Pay or card, and tells us whether it succeeded. Your payment details go to Tap, not to us.</td>
+              <td>Payment.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>More about the AI features:</p>
+      <ul>
+        <li>They run only when you start them. Nothing in your library is sent to an AI company in the background.</li>
+        <li>Your own notes and the names of your collections are not sent to Google or Groq.</li>
+        <li>The media file for a closer read is fetched by our server from the public post, held in memory while it is transcribed, and then discarded. We keep the transcript, not the video or audio.</li>
+        <li>Once text or media has been sent to Google or Groq, their own terms decide how long they keep it. We cannot take it back.</li>
+        <li>An AI suggestion is a guess made from text. It is not a checked fact about a post.</li>
+      </ul>
+      <p>When you ask the app to read a saved post's page, our server requests that public page. The site that hosts the post sees a request from our server, with no account and no cookies, not from your phone.</p>
+      <p>These companies may process data in countries other than Kuwait and other than the one you live in.</p>
+
+      <h2 id="not">What we do not do</h2>
+      <ul>
+        <li>No advertising, and no advertising software in the apps.</li>
+        <li>No tracking of you across other apps or websites.</li>
+        <li>No analytics software in the apps.</li>
+        <li>We do not sell your data, and we do not give it to anyone except the companies listed above, for the purposes listed.</li>
+        <li>The apps do not ask for your location, your contacts or your social media passwords.</li>
+      </ul>
+
+      <h2 id="own-server">Your own server</h2>
+      <p>If you choose "My own server" in the app, or run Little Archive on your own computer, the app talks only to the server you named. Nuzio receives nothing: no account, no library and no usage counts. There is nothing to buy, and no AI company receives anything unless the person who runs that server has set one up. Whoever runs that server is responsible for its data, and this policy does not apply to it. The <a href="https://github.com/abdulmalikaltararwa-oss/little-archive/blob/main/docs/privacy.md">technical privacy notes</a> describe what the software does on a server you run.</p>
+
+      <h2 id="retention">How long we keep it, and deleting it</h2>
+      <p>We keep your library for as long as your account exists. You can delete a single save at any time, and you can export your library or download a full backup from Settings.</p>
+      <p>You can delete your account in the app: Settings, "This device", "Delete my account…". The <a href="./delete-account.html">account deletion page</a> has the steps and a way to ask by email. Deleting your account:</p>
+      <ul>
+        <li>removes your library, your preview images, any import file still waiting, and your unlock and purchase record from our server straight away;</li>
+        <li>then removes your sign-in from Supabase. If Supabase cannot be reached at that moment, the server keeps trying until it is gone.</li>
+      </ul>
+      <p>What stays for a limited time, none of it with your content, your email address or your account id in readable form:</p>
+      <ul>
+        <li>a record of when the deletion happened, stored under a hash of your account id, for 30 days, so that an old sign-in on another device cannot bring the account back;</li>
+        <li>the current day's and month's usage counts, under the same hash, until that day and that month end;</li>
+        <li>if a store refunded or took back your purchase, a record of that purchase with no account attached, so the same purchase cannot be used again.</li>
+      </ul>
+      <p>What deletion cannot reach:</p>
+      <ul>
+        <li>exports and backups you downloaded, which are yours to keep or delete;</li>
+        <li>backups of the server that we made before you deleted your account, until those backups are replaced;</li>
+        <li>text or media already sent to Google or Groq for an AI feature;</li>
+        <li>records Apple, Google or Tap keep about your payment;</li>
+        <li>if you used Continue with Apple, the entry for Little Archive in your Apple Account. You can remove it on your iPhone under Settings, your name, Sign in with Apple.</li>
+      </ul>
+
+      <h2 id="children">Children</h2>
+      <p>Little Archive is not meant for children under 13, and we do not knowingly hold an account for a child under 13. If you believe a child has made an account, write to us and we will delete it.</p>
+
+      <h2 id="changes">Changes to this policy</h2>
+      <p>If we change what we collect or who receives it, we will update this page and the date at the top before the change takes effect. If the change is significant, we will also say so in the app.</p>
+
+      <h2 id="contact">Contact</h2>
+      <p>Questions about your data, or a request to see, correct or delete it: <span class="contact-address">support@[owner to set]</span></p>
+    </main>
+    <footer class="site-footer wrap">
+      <nav aria-label="Legal and help">
+        <ul>
+          <li><a href="./privacy.html">Privacy policy</a></li>
+          <li><a href="./terms.html">Terms of use</a></li>
+          <li><a href="./support.html">Support</a></li>
+          <li><a href="./delete-account.html">Delete your account</a></li>
+          <li><a href="https://github.com/abdulmalikaltararwa-oss/little-archive">Source code</a></li>
+        </ul>
+      </nav>
+      <p>Little Archive is open source under the MIT licence. The hosted service and the apps are run by Nuzio, Kuwait.</p>
+    </footer>
+  </body>
+</html>
