@@ -95,9 +95,11 @@ test.describe('on a phone', () => {
     // Measured once the dialog has finished arriving.
     await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map(animation => animation.finished.catch(() => {}))));
     const box = await dialog.boundingBox();
-    // As wide as the page: a browser with a classic scrollbar (Chromium on Linux) keeps its gutter beside the dialog.
-    const pageWidth = await page.evaluate(() => document.documentElement.clientWidth);
-    expect(box).toMatchObject({ x: 0, y: 0, width: pageWidth, height: 844 });
+    // Edge to edge. Where the browser draws a classic scrollbar (Chromium on Linux), the dialog stops at the gutter
+    // the scroll lock keeps for it, as every dialog in the app does; a phone has no such gutter.
+    expect(box).toMatchObject({ x: 0, y: 0, height: 844 });
+    expect(box.width).toBeGreaterThanOrEqual(390 - 20);
+    expect(box.width).toBeLessThanOrEqual(390);
     const field = await dialog.getByRole('combobox').boundingBox();
     expect(field.y).toBeGreaterThan(844 - 90);
     expect(field.y + field.height).toBeLessThanOrEqual(844);
