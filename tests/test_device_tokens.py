@@ -33,7 +33,7 @@ ORIGIN = {"Origin": "http://testserver"}
 PUBLIC = {("GET", "/api/health"), ("GET", "/api/discovery"), ("GET", "/api/auth/me"), ("POST", "/api/auth/login"), ("POST", "/api/auth/devices")}
 IMPORT_ONLY = {("GET", "/api/extension/status"), ("POST", "/api/extension/imports"),
                ("POST", "/api/extension/imports/{rid}/batches"), ("POST", "/api/extension/imports/{rid}/finish")}
-HOSTED_ONLY = {("POST", "/api/account/delete"), ("GET", "/api/purchases"), ("POST", "/api/purchases/apple"), ("POST", "/api/purchases/google"),
+HOSTED_ONLY = {("POST", "/api/account/delete"), ("POST", "/api/account/apple-authorization"), ("GET", "/api/purchases"), ("POST", "/api/purchases/apple"), ("POST", "/api/purchases/google"),
                ("POST", "/api/purchases/apple/notifications"), ("POST", "/api/purchases/google/notifications")}  # answer 404 on a self-hosted library, whoever asks
 
 

@@ -20,6 +20,10 @@ class AccountDeletion(StrictModel):
     confirm: Literal["DELETE"]
 
 
+class AppleAuthorization(StrictModel):
+    authorization_code: str = Field(min_length=8, max_length=2048)
+
+
 class NewItem(StrictModel):
     url: str = Field(min_length=8, max_length=4096)
     title: str = Field(default="", max_length=500)

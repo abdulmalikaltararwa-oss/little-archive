@@ -10,7 +10,10 @@ import UIKit
 /// SocialSignInPlugin.java says how). Every answer is `{ status, ... }`:
 ///
 ///   apple({ nonce })  nonce is the SHA-256 of the page's raw nonce, as lower case hex, which Apple signs into the identity token.
-///                     { status: "signed_in", identityToken } | { status: "cancelled" }
+///                     { status: "signed_in", identityToken, authorizationCode? } | { status: "cancelled" }
+///                     authorizationCode is Apple's one-time code (good once, for five minutes). The page hands it to the Little
+///                     Archive server, which trades it with Apple so that deleting the account can revoke this sign-in. It is
+///                     left out when Apple gave none, and is not kept or logged here.
 ///   browser({ url })  opens `url` (the project's authorize address) in the system authentication session, which closes itself when
 ///                     the page it shows redirects to littlearchive://auth-callback.
 ///                     { status: "returned", url } | { status: "cancelled" }
@@ -61,7 +64,10 @@ public class SocialSignInPlugin: CAPPlugin, CAPBridgedPlugin {
             let sheet = AppleSheet(anchor: anchor, nonce: hashedNonce) { [weak self] outcome in
                 self?.appleSheet = nil
                 switch outcome {
-                case .token(let token): call.resolve(["status": "signed_in", "identityToken": token])
+                case .token(let token, let code):
+                    var answer: [String: Any] = ["status": "signed_in", "identityToken": token]
+                    if let code = code, !code.isEmpty { answer["authorizationCode"] = code }
+                    call.resolve(answer)
                 case .cancelled: call.resolve(["status": "cancelled"])
                 case .failed(let message): call.reject(message, "APPLE_FAILED")
                 }
@@ -108,7 +114,8 @@ public class SocialSignInPlugin: CAPPlugin, CAPBridgedPlugin {
 // MARK: - the two sheets
 
 private final class AppleSheet: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
-    enum Outcome { case token(String), cancelled, failed(String) }
+    /// `token` carries the identity token and, when Apple gave one, the authorization code.
+    enum Outcome { case token(String, String?), cancelled, failed(String) }
 
     private let anchor: ASPresentationAnchor
     private let controller: ASAuthorizationController
@@ -145,7 +152,7 @@ private final class AppleSheet: NSObject, ASAuthorizationControllerDelegate, ASA
             end(.failed("Apple did not send back a sign-in. Try again."))
             return
         }
-        end(.token(token))
+        end(.token(token, credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }))
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {

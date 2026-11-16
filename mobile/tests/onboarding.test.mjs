@@ -142,3 +142,40 @@ test('the stage of a Google sign-in reaches the screen: "signing in" is said aft
   assert.deepEqual(order, ['browser', 'signing-in', 'exchange']);
   assert.equal(record.credential.refreshToken, 'refresh-1');
 });
+
+// Apple's authorization code goes to the server that discovery just checked, and nowhere else (so that deleting the account can
+// revoke the Apple sign-in; server/apple_signin.py).
+const APPLE_CODE = 'c0de.synthetic-authorization-code.0.rrtq.Zx9';
+const KEEP_CODE = `POST ${CONFIG.hostedServerUrl}/api/account/apple-authorization`;
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+function appleRig(keepCode) {
+  const routes = { [HOSTED]: reply(200, hostedInfo()), [`POST ${CONFIG.supabaseUrl}/auth/v1/token?grant_type=id_token`]: reply(200, session), ...(keepCode === undefined ? {} : { [KEEP_CODE]: keepCode }) };
+  const r = rig({ routes, ui: screens({ account: options => options.social('apple') }) });
+  r.native.apple = async options => ({ status: 'signed_in', identityToken: fakeJwt({ iss: 'https://appleid.apple.com', nonce: options.nonce }), authorizationCode: APPLE_CODE });
+  return r;
+}
+
+test('after an Apple sign-in the checked server is sent Apple\'s authorization code, with the new session, and nothing else is', async () => {
+  const r = appleRig(reply(200, { stored: true }));
+  const record = await r.onboarding.firstLaunch('');
+  await settle();
+  assert.equal(record.credential.email, 'reader@example.com');
+  const sent = r.calls.filter(call => call.url.includes('apple-authorization'));
+  assert.equal(sent.length, 1);
+  assert.equal(`${sent[0].method} ${sent[0].url}`, KEEP_CODE);
+  assert.equal(sent[0].headers.Authorization, `Bearer ${session.access_token}`);
+  assert.deepEqual(JSON.parse(sent[0].body), { authorization_code: APPLE_CODE });
+  for (const call of r.calls) if (call !== sent[0]) assert.ok(!JSON.stringify(call).includes(APPLE_CODE), `${call.url} was not given the code`);
+  assert.ok(!JSON.stringify(await r.store.load()).includes(APPLE_CODE), 'and it is not kept on the phone');
+});
+
+test('a server that refuses the code, is not set up for it, or cannot be reached leaves the person signed in all the same', async () => {
+  for (const answer of [reply(200, { stored: false }), reply(400, { detail: 'refused', code: 'apple_code_refused' }), reply(503, { code: 'apple_unavailable' }), reply(404, {}), new Error('offline'), undefined]) {
+    const r = appleRig(answer);
+    const record = await r.onboarding.firstLaunch('');
+    await settle();
+    assert.equal(record.server.kind, 'hosted');
+    assert.deepEqual(await r.store.load(), record);
+  }
+});
