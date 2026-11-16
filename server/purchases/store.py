@@ -12,7 +12,8 @@ The rules, each in one place here:
 * A refund can arrive before the person ever redeems the purchase. It is recorded the same way, so redeeming it afterwards fails.
 * A payment at Tap is started by this server, so it has a row of its own first (`tap_attempts`): which account asked, for how much,
   and the charge Tap made for it. Only a charge with such a row can unlock anyone, and only the account in the row. The row is
-  deleted with the account, so the charge of a deleted account can never be presented again.
+  deleted with the account, so the charge of a deleted account can never be presented again. Its `status` is `INITIATED` until Tap
+  decides: then `CAPTURED`, or the word Tap gave a payment that ended unpaid. A row whose charge is not decided is never dropped.
 * A store's events carry their own time. An older event than the one that last set a purchase's state is ignored, and an event
   is acted on once (the store may send it again).
 """
@@ -23,6 +24,8 @@ from datetime import datetime, timezone
 import sqlite3
 from threading import RLock
 
+from .tap import ENDED_UNPAID
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS purchases(
  provider TEXT NOT NULL, purchase_key TEXT NOT NULL, user_id TEXT NOT NULL DEFAULT '', product_id TEXT NOT NULL DEFAULT '',
@@ -32,7 +35,8 @@ CREATE TABLE IF NOT EXISTS purchases(
 CREATE INDEX IF NOT EXISTS purchases_by_user ON purchases(user_id);
 CREATE TABLE IF NOT EXISTS tap_attempts(
  order_ref TEXT PRIMARY KEY, idempotent_ref TEXT NOT NULL, user_id TEXT NOT NULL, charge_id TEXT UNIQUE, amount TEXT NOT NULL, currency TEXT NOT NULL,
- live INTEGER NOT NULL, url TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'INITIATED', created_at INTEGER NOT NULL);
+ live INTEGER NOT NULL, url TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'INITIATED', created_at INTEGER NOT NULL,
+ checks INTEGER NOT NULL DEFAULT 0, next_check_at INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS tap_attempts_by_user ON tap_attempts(user_id, created_at);
 CREATE TABLE IF NOT EXISTS purchase_events(provider TEXT NOT NULL, event_id TEXT NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(provider, event_id));
 """
@@ -142,11 +146,22 @@ class PurchaseStore:
 
     # -- payments started at Tap -------------------------------------------------------------------------------
     def tap_begin(self, order_ref, idempotent_ref, user_id, amount, currency, live):
-        """Write down a payment before Tap is asked for it. Attempts that never reached a paid charge are dropped after a month."""
+        """Write down a payment before Tap is asked for it.
+
+        Old attempts are dropped after a month, but only those that can no longer matter: one Tap never made a charge for, and
+        one Tap said ended unpaid. A captured charge, and one Tap has not decided, are kept.
+        """
         now = int(self.clock())
         with self._transaction() as c:
-            c.execute("DELETE FROM tap_attempts WHERE created_at<? AND status<>'CAPTURED'", (now - EVENT_DAYS * 86400,))
+            c.execute("DELETE FROM tap_attempts WHERE created_at<? AND (charge_id IS NULL OR status IN (%s))" % ",".join("?" * len(ENDED_UNPAID)), (now - EVENT_DAYS * 86400, *sorted(ENDED_UNPAID)))
             c.execute("INSERT INTO tap_attempts(order_ref,idempotent_ref,user_id,amount,currency,live,created_at) VALUES(?,?,?,?,?,?,?)", (order_ref, idempotent_ref, user_id, amount, currency, int(live), now))
+
+    def tap_unattached(self, user_id, amount, currency, live, since):
+        """The account's newest attempt, made since `since` for this price, that Tap has not been seen to answer; or None."""
+        with self._transaction() as c:
+            row = c.execute("SELECT order_ref,idempotent_ref FROM tap_attempts WHERE user_id=? AND charge_id IS NULL AND amount=? AND currency=? AND live=? AND created_at>=? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                            (user_id, amount, currency, int(live), int(since))).fetchone()
+            return dict(row) if row else None
 
     def tap_attach(self, order_ref, charge_id, url):
         with self._transaction() as c:
@@ -166,3 +181,26 @@ class PurchaseStore:
     def tap_status(self, charge_id, status):
         with self._transaction() as c:
             c.execute("UPDATE tap_attempts SET status=? WHERE charge_id=?", (status[:40], charge_id))
+
+    def tap_due(self, user_id):
+        """The account's latest charge if Tap has not decided it and it is time to ask again, else None. Asking is spaced out:
+        a minute after the last look, then two, four and so on up to an hour, and not at all once the payment is a month old."""
+        now = int(self.clock())
+        with self._transaction() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT order_ref,charge_id,status,checks,next_check_at,created_at FROM tap_attempts WHERE user_id=? AND charge_id IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1", (user_id,)).fetchone()
+            if row is None or row["status"] != "INITIATED" or row["next_check_at"] > now or row["created_at"] < now - EVENT_DAYS * 86400:
+                return None
+            c.execute("UPDATE tap_attempts SET checks=checks+1,next_check_at=? WHERE order_ref=?", (now + min(3600, 60 * 2 ** min(row["checks"], 6)), row["order_ref"]))
+            return row["charge_id"]
+
+    def tap_test_holders(self):
+        """Accounts holding an active Tap purchase that was paid for with a test card."""
+        with self._transaction() as c:
+            return [row[0] for row in c.execute("SELECT DISTINCT user_id FROM purchases WHERE provider='tap' AND environment='test' AND state='active' AND user_id<>''")]
+
+    def purchase(self, provider, key):
+        """One purchase's row (`user_id`, `state`, `environment`), or None."""
+        with self._transaction() as c:
+            row = c.execute("SELECT user_id,state,environment FROM purchases WHERE provider=? AND purchase_key=?", (provider, key)).fetchone()
+            return dict(row) if row else None

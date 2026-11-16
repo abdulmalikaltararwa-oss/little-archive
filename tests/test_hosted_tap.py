@@ -6,6 +6,7 @@ ever created at Tap, in its sandbox or anywhere else.
 """
 from dataclasses import replace
 from decimal import Decimal
+import contextlib
 import hashlib
 import hmac
 import io
@@ -15,6 +16,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from threading import Event, Thread
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -26,9 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from support_hosted import SigningKey, bearer, claims, hosted_app, no_worker_threads  # noqa: E402
 
 from server.config import Config  # noqa: E402
-from server.purchases.tap import STATUSES, HttpTapClient, TapCharge, TapClient, TapError, amount_text, hashstring, money, page_address, read_charge  # noqa: E402
+from server.purchases.tap import ENDED_UNPAID, HttpTapClient, TapCharge, TapClient, TapError, amount_text, hashstring, money, page_address, read_charge  # noqa: E402
 
 KEY = "sk_" "test_SyntheticKeyNeverIssuedByTap0123"
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "tap"  # Tap's own examples of both answers, as its API reference prints them
 PRICE = Decimal("2.500")
 BUYER = {"email": "buyer@example.test", "name": "Synthetic Buyer"}
 
@@ -46,7 +49,7 @@ class FakeTap(TapClient):
         self.created.append({"id": charge_id, "amount": amount, "currency": currency, "order": order, "idempotent": idempotent, "account": account, "name": name, "email": email,
                              "redirect_url": redirect_url, "post_url": post_url})
         self.charges[charge_id] = TapCharge(id=charge_id, status="INITIATED", amount=amount, currency=currency, live_mode=self.live, order=order, account=account, metadata_order=order,
-                                            url="https://sandbox.payments.tap.company/pay/" + charge_id, payment_reference="pay_" + charge_id[-8:], created="1763300000000")
+                                            url="https://checkout.payments.tap.company?mode=page&token=" + charge_id[6:30], payment_reference="pay_" + charge_id[-8:], created="1763300000000")
         return self.charges[charge_id]
 
     def retrieve_charge(self, charge_id):
@@ -131,7 +134,7 @@ class StartTests(TapCase):
         answer = self.start(auth)
         self.assertEqual(answer.status_code, 200, answer.text)
         asked = self.tap.created[0]
-        self.assertEqual(answer.json(), {"unlocked": False, "provider": "tap", "status": "pending", "url": "https://sandbox.payments.tap.company/pay/" + asked["id"]})
+        self.assertEqual(answer.json(), {"unlocked": False, "provider": "tap", "status": "pending", "url": "https://checkout.payments.tap.company?mode=page&token=" + asked["id"][6:30]})
         self.assertEqual((asked["amount"], asked["currency"], asked["account"], asked["name"], asked["email"]), (PRICE, "KWD", user, "Synthetic Buyer", "buyer@example.test"))
         self.assertEqual((asked["redirect_url"], asked["post_url"]), ("http://testserver/api/purchases/tap/return", "http://testserver/api/purchases/tap/notifications"))
         self.assertRegex(asked["order"], r"^la_[0-9a-f]{24}$", "the order reference is made here, not taken from the request")
@@ -169,7 +172,9 @@ class StartTests(TapCase):
         for wrong in ({"amount": Decimal("0.100")}, {"currency": "USD"}, {"live_mode": True}, {"status": "CAPTURED"}, {"order": "someone-elses"}, {"url": ""}):
             with patch.object(self.tap, "create_charge", side_effect=lambda *a, **k: replace(original(*a, **k), **wrong)), self.assertLogs("little_archive", "WARNING"):
                 self.refused(self.start(auth), 503, "purchases_unavailable")
-        self.assertEqual([row["charge_id"] for row in self.rows("tap_attempts")], [None] * 6)
+        attempts = self.rows("tap_attempts")
+        self.assertEqual([row["charge_id"] for row in attempts], [None], "one attempt, asked for again with the same references each time")
+        self.assertEqual({call["idempotent"] for call in self.tap.created}, {attempts[0]["idempotent_ref"]})
 
     def test_the_buyer_details_are_checked_and_nothing_else_is_read_from_the_request(self):
         user, auth = self.account()
@@ -181,9 +186,10 @@ class StartTests(TapCase):
 
     def test_when_tap_cannot_be_reached_or_refuses_the_key_the_buyer_is_told_to_try_again(self):
         user, auth = self.account()
-        for kind, reason in (("unavailable", "unavailable"), ("forbidden", "forbidden"), ("invalid", "unavailable")):
+        for kind, reason in (("unavailable", "unavailable"), ("forbidden", "forbidden"), ("invalid", "unavailable"), ("refused", "unavailable")):
             self.tap.down = kind
-            answer = self.start(auth)
+            with self.assertLogs("little_archive", "WARNING") if kind == "refused" else contextlib.nullcontext():
+                answer = self.start(auth)
             self.refused(answer, 503, "purchases_unavailable")
             self.assertEqual((answer.json()["provider"], answer.json()["reason"], answer.headers["retry-after"]), ("tap", reason, "30"))
 
@@ -195,7 +201,7 @@ class SettleTests(TapCase):
         charge = self.started(auth)
         waiting = self.back(charge)
         self.assertEqual(waiting.status_code, 200)
-        self.assertIn("Payment not confirmed yet", waiting.text)
+        self.assertIn("Payment still being confirmed", waiting.text)
         self.assertFalse(self.summary(auth)["unlocked"], "coming back before paying unlocks nothing")
         self.tap.change(charge, status="CAPTURED")
         page = self.back(charge)
@@ -241,19 +247,20 @@ class SettleTests(TapCase):
                 self.refused(self.confirm(auth, charge), 400, "purchase_invalid")
                 self.assertIn("Payment not found", self.back(charge).text)
                 self.assertEqual(self.notify(charge).json(), {"received": True, "action": "ignored"})
+                self.assertFalse(self.summary(auth)["unlocked"], wrong)
             self.assertIn("does not match", noted.output[0], "noted for the operator")
             self.assertNotIn(user, "".join(noted.output))
-            self.assertFalse(self.summary(auth)["unlocked"], wrong)
         self.assertEqual((self.summary(o)["unlocked"], self.rows()), (False, []))
 
     def test_only_captured_is_paid(self):
         user, auth = self.account()
-        for status in sorted(STATUSES - {"CAPTURED", "INITIATED"}) + ["A_WORD_TAP_ADDS_LATER", "captured"]:
+        for status in sorted(ENDED_UNPAID):
             charge = self.started(auth)
             self.tap.change(charge, status=status)
             answer = self.confirm(auth, charge)
             self.refused(answer, 409, "purchase_not_paid")
-            self.assertEqual(answer.json()["status"], status.lower() if status in STATUSES else "unknown")
+            self.assertEqual(answer.json()["status"], status.lower())
+            self.assertEqual(self.rows("tap_attempts")[-1]["status"], status, "an ended payment is written down as ended")
             page = self.back(charge)
             self.assertEqual(page.status_code, 200)
             self.assertIn("Payment not completed", page.text)
@@ -322,9 +329,11 @@ class SettleTests(TapCase):
         with self.assertLogs("little_archive", "WARNING"):
             self.refused(self.confirm(auth, charge), 400, "purchase_invalid")
             self.assertIn("Payment not found", self.back(charge).text)
-        self.assertFalse(self.summary(auth)["unlocked"], "the amount must be the configured one, as well as the one the payment was started with")
-        other, o = self.account()
-        self.start(o)
+            self.assertFalse(self.summary(auth)["unlocked"], "the amount must be the configured one, as well as the one the payment was started with")
+            self.refused(self.start(auth), 409, "payment_open")
+        self.assertEqual(len(self.tap.created), 1, "the page at the old price is not handed out again, and no second charge is made beside it")
+        self.tap.change(charge, status="ABANDONED")
+        self.assertEqual(self.start(auth).status_code, 200, "once the old one has ended, a new one at the new price")
         self.assertEqual(self.tap.created[-1]["amount"], Decimal("3.000"), "a new payment is at the new price")
 
     def test_an_unlock_that_was_stopped_half_way_is_finished_the_next_time_the_charge_is_seen(self):
@@ -511,7 +520,7 @@ class FakeTapApi:
             return httpx.Response(self.status, content=self.raw)
         charge = {"object": "charge", "id": "chg_TS0123456789abcdef", "status": "INITIATED", "amount": 2.5, "currency": "KWD", "live_mode": False, "threeDSecure": True,
                   "reference": {"order": "la_order", "transaction": "la_order", "idempotent": "idem", "gateway": "", "payment": "4516251234"}, "metadata": {"account_id": "account-1", "order": "la_order"},
-                  "transaction": {"created": "1763300000000", "url": "https://sandbox.payments.tap.company/pay/chg_TS0123456789abcdef", "expiry": {"period": 30, "type": "MINUTE"}},
+                  "transaction": {"created": "1763300000000", "url": "https://checkout.payments.tap.company?mode=page&token=6318405da53ea40ebd4da0c0", "expiry": {"period": 30, "type": "MINUTE"}},
                   "customer": {"first_name": "Synthetic", "email": "buyer@example.test"}, "source": {"object": "source", "id": "src_all"}, **self.changes}
         return httpx.Response(self.status, json=charge)
 
@@ -530,7 +539,7 @@ class HttpTapClientTests(unittest.TestCase):
         charge = self.create()
         self.assertEqual((charge.id, charge.status, charge.amount, charge.currency, charge.live_mode, charge.order, charge.account, charge.metadata_order),
                          ("chg_TS0123456789abcdef", "INITIATED", PRICE, "KWD", False, "la_order", "account-1", "la_order"))
-        self.assertEqual(charge.url, "https://sandbox.payments.tap.company/pay/chg_TS0123456789abcdef")
+        self.assertEqual(charge.url, "https://checkout.payments.tap.company?mode=page&token=6318405da53ea40ebd4da0c0")
         sent = self.api.requests[0]
         self.assertEqual((sent.method, str(sent.url), sent.headers["authorization"], sent.headers["content-type"]), ("POST", "https://api.tap.company/v2/charges", "Bearer " + KEY, "application/json"))
         self.assertIn(b'"amount": 2.500,', sent.content, "three decimals for KWD, as a JSON number")
@@ -547,14 +556,17 @@ class HttpTapClientTests(unittest.TestCase):
         self.assertEqual(json.loads(self.api.requests[1].content)["merchant"], {"id": "599424"})
 
     def test_a_page_that_is_not_taps_is_never_handed_to_a_buyer(self):
-        for url in ("https://tap.company.example/pay/x", "http://sandbox.payments.tap.company/pay/x", "https://sandbox.payments.tap.company/", "https://user@sandbox.payments.tap.company/pay/x",
-                    "https://sandbox.payments.tap.company:8443/pay/x", "https://kw.payments.tap.company/pay/x", "javascript:alert(1)", "", None):
+        for url in ("https://tap.company.example/pay/x", "http://checkout.payments.tap.company?mode=page&token=x", "https://checkout.payments.tap.company.example?mode=page&token=x",
+                    "https://user@checkout.payments.tap.company?mode=page&token=x", "https://checkout.payments.tap.company:8443?mode=page&token=x", "https://payments.tap.company?mode=page&token=x",
+                    "https://kw.payments.tap.company/pay/x", "javascript:alert(1)", "//checkout.payments.tap.company", "", None):
             self.api.changes = {"transaction": {"url": url, "created": "1"}}
             with self.assertRaises(TapError, msg=url) as caught:
                 self.create()
             self.assertEqual(caught.exception.kind, "invalid")
         self.assertEqual(page_address("https://kw.payments.tap.company/pay/x", True), "https://kw.payments.tap.company/pay/x", "the live page, for a live key")
         self.assertIsNone(page_address("https://sandbox.payments.tap.company/pay/x", True))
+        for live in (True, False):
+            self.assertIsNotNone(page_address("https://checkout.payments.tap.company?mode=page&token=6318405da53ea40ebd4da0c0", live), "the address in Tap's own example, in either mode")
 
     def test_a_charge_is_read_by_its_id_and_a_name_that_could_change_the_address_is_refused_first(self):
         self.api.changes = {"status": "CAPTURED", "amount": "2.500"}
@@ -573,10 +585,11 @@ class HttpTapClientTests(unittest.TestCase):
             with self.assertRaises(TapError) as caught:
                 self.client.retrieve_charge("chg_TS0123456789abcdef")
             self.assertEqual(caught.exception.kind, kind, status)
-        self.api.status = 400
-        with self.assertRaises(TapError) as caught:
-            self.create()
-        self.assertEqual(caught.exception.kind, "forbidden", "a refused create is the key's or the account's doing")
+        for status, kind in ((400, "refused"), (422, "refused"), (401, "forbidden"), (500, "unavailable")):
+            self.api.status = status
+            with self.assertRaises(TapError) as caught:
+                self.create()
+            self.assertEqual(caught.exception.kind, kind, "a create Tap would not make is not a wrong key")
         self.api.status = 200
         for raw in (b"not json", b"[]", b"{}", b'{"id":"chg_TS0123456789abcdef","status":"CAPTURED","amount":"lots","currency":"KWD","live_mode":false}',
                     b'{"id":"chg_TS0123456789abcdef","status":"CAPTURED","amount":2.5,"currency":"XXX","live_mode":false}', b'{"id":"chg_TS0123456789abcdef","status":"CAPTURED","amount":2.5,"currency":"KWD","live_mode":"no"}',
@@ -668,6 +681,337 @@ class TapSettingsTests(unittest.TestCase):
             public = Config.from_env(self.values(LA_TAP_SECRET_KEY=KEY, LA_TAP_PRICE="2.5", LA_PUBLIC_URL="https://archive.example", LA_TAP_RETURN_URL="https://archive.example/paid"))
             service = build_purchases(public, MemoryEntitlements(), Libraries, {"apple": None})
             self.assertEqual((service.tap_redirect, service.tap_post), ("https://archive.example/paid", "https://archive.example/api/purchases/tap/notifications"))
+
+
+
+class OnePayableChargeTests(TapCase):
+    """An account never has two charges that could both be paid, and a payment Tap has not decided is never called failed."""
+
+    def test_a_payment_tap_has_not_decided_is_pending_and_no_second_charge_is_made(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        for status in ("IN_PROGRESS", "UNKNOWN", "A_WORD_TAP_ADDS_LATER", "captured"):
+            self.tap.change(charge, status=status)
+            waiting = self.confirm(auth, charge)
+            self.assertEqual((waiting.status_code, waiting.json()), (202, {"unlocked": False, "provider": "tap", "status": "pending", "restored": False}), status)
+            page = self.back(charge)
+            self.assertEqual(page.status_code, 200)
+            self.assertIn("Payment still being confirmed", page.text)
+            self.assertIn("you do not need to pay twice", page.text)
+            self.assertEqual(self.notify(charge).json(), {"received": True, "action": "pending"})
+            self.refused(self.start(auth), 409, "payment_open")
+            self.assertEqual(self.rows("tap_attempts")[0]["status"], "INITIATED", "nothing is written down as ended while Tap has not said so")
+        self.assertEqual((len(self.tap.created), self.summary(auth)["unlocked"]), (1, False))
+        self.tap.change(charge, status="CAPTURED")
+        self.assertEqual(self.start(auth).json()["unlocked"], True, "and when it is captured after all, that is the answer")
+
+    def test_the_open_page_is_given_again_however_old_it_is(self):
+        user, auth = self.account()
+        first = self.start(auth).json()["url"]
+        started = self.service.store.clock()
+        for minutes in (19, 21, 25, 29, 45, 60 * 24 * 3):
+            self.service.store.clock = lambda: started + minutes * 60
+            self.assertEqual(self.start(auth).json()["url"], first, minutes)
+        self.assertEqual(len(self.tap.created), 1, "between minute 20 and 30 Tap's page is still open: a second charge there could be paid as well")
+        self.tap.change(self.tap.created[0]["id"], status="TIMEDOUT")
+        self.assertNotEqual(self.start(auth).json()["url"], first, "a new charge only once Tap says the last one ended")
+
+    def test_two_requests_at_once_make_one_charge(self):
+        user, auth = self.account()
+        entered, release, original, answers = Event(), Event(), self.tap.create_charge, []
+
+        def slow(*arguments, **named):
+            entered.set()
+            self.assertTrue(release.wait(10))
+            return original(*arguments, **named)
+
+        with patch.object(self.tap, "create_charge", side_effect=slow):
+            threads = [Thread(target=lambda: answers.append(self.start(auth)), daemon=True) for _ in range(2)]
+            threads[0].start()
+            self.assertTrue(entered.wait(10), "the first request never reached Tap")
+            threads[1].start()
+            threads[1].join(0.5)
+            self.assertTrue(threads[1].is_alive(), "the second request waits for the first instead of starting a payment of its own")
+            release.set()
+            for thread in threads:
+                thread.join(10)
+        self.assertEqual([a.status_code for a in answers], [200, 200])
+        self.assertEqual(len({a.json()["url"] for a in answers}), 1, "both are sent to the same page")
+        self.assertEqual((len(self.tap.created), len(self.rows("tap_attempts"))), (1, 1))
+
+    def test_another_accounts_payment_does_not_wait_behind_this_one(self):
+        (alice, a), (bob, b) = self.account(), self.account()
+        self.assertEqual(self.start(a).status_code, 200)
+        self.assertEqual(self.start(b).status_code, 200)
+        self.assertEqual(len({call["account"] for call in self.tap.created}), 2)
+        self.assertEqual(len(self.service._tap_locks), 64, "a fixed number of locks, whatever the number of accounts")
+
+    def test_a_request_tap_may_have_received_is_sent_again_with_the_same_references(self):
+        user, auth = self.account()
+        self.tap.down = "unavailable"  # a timeout: Tap may have made the charge
+        self.refused(self.start(auth), 503, "purchases_unavailable")
+        self.refused(self.start(auth), 503, "purchases_unavailable")
+        self.tap.down = None
+        self.assertEqual(self.start(auth).status_code, 200)
+        attempts = self.rows("tap_attempts")
+        self.assertEqual(len(attempts), 1, "one attempt, not one for every try")
+        asked = self.tap.created[0]
+        self.assertEqual((asked["order"], asked["idempotent"]), (attempts[0]["order_ref"], attempts[0]["idempotent_ref"]), "so Tap answers with the charge it already made")
+
+    def test_an_attempt_too_old_for_its_page_to_be_open_is_not_replayed(self):
+        user, auth = self.account()
+        self.tap.down = "unavailable"
+        self.start(auth)
+        self.tap.down = None
+        started = self.service.store.clock()
+        self.service.store.clock = lambda: started + 11 * 60
+        self.assertEqual(self.start(auth).status_code, 200)
+        first, second = self.rows("tap_attempts")
+        self.assertEqual((first["charge_id"], second["charge_id"]), (None, self.tap.created[0]["id"]))
+        self.assertNotEqual(first["idempotent_ref"], second["idempotent_ref"])
+
+    def test_a_charge_tap_does_not_know_is_not_decided_either(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        del self.tap.charges[charge]  # Tap answers 404 for a charge this server made: a key for another account, or Tap's own trouble
+        with self.assertLogs("little_archive", "WARNING") as noted:
+            self.refused(self.confirm(auth, charge), 503, "purchases_unavailable")
+            page = self.back(charge)
+            self.assertEqual(page.status_code, 503)
+            self.assertIn("could not be checked", page.text)
+            self.assertEqual(self.notify_raw(charge).status_code, 503, "so that Tap sends the notification again")
+            self.refused(self.start(auth), 503, "purchases_unavailable")
+        self.assertIn("nothing was decided", noted.output[0])
+        self.assertEqual((len(self.tap.created), self.rows("tap_attempts")[0]["status"]), (1, "INITIATED"), "not written down as ended, and no new charge")
+
+    def test_metadata_tap_left_out_does_not_lose_a_payment_and_metadata_that_differs_does(self):
+        other, _ = self.account()
+        for metadata in ({"account": None, "metadata_order": None}, {"account": None}, {"metadata_order": None}):
+            user, auth = self.account()
+            charge = self.started(auth)
+            self.tap.change(charge, status="CAPTURED", **metadata)
+            self.assertEqual(self.confirm(auth, charge).status_code, 200, metadata)
+            self.assertEqual(self.summary(auth)["unlocked_via"], "tap")
+        for metadata in ({"account": other}, {"metadata_order": "la_" + "0" * 24}, {"account": None, "order": "la_" + "0" * 24}, {"account": None, "metadata_order": None, "order": ""}):
+            user, auth = self.account()
+            charge = self.started(auth)
+            self.tap.change(charge, status="CAPTURED", **metadata)
+            with self.assertLogs("little_archive", "WARNING") as noted:
+                self.refused(self.confirm(auth, charge), 400, "purchase_invalid")
+                self.assertFalse(self.summary(auth)["unlocked"], metadata)
+            self.assertIn(charge, noted.output[0], "the operator can find the charge by its id")
+            self.assertNotIn(user, "".join(noted.output))
+
+    def notify_raw(self, charge_id):
+        """A signed notification for a charge Tap's dictionary no longer holds."""
+        gone = TapCharge(id=charge_id, status="CAPTURED", amount=PRICE, currency="KWD", live_mode=False)
+        body = {"object": "charge", "id": charge_id, "status": "CAPTURED", "amount": 2.5, "currency": "KWD", "live_mode": False}
+        return self.client.post("/api/purchases/tap/notifications", content=json.dumps(body).encode(), headers={"hashstring": hashstring(KEY, gone), "content-type": "application/json"})
+
+
+class RecheckTests(TapCase):
+    def test_a_buyer_who_paid_and_never_came_back_is_unlocked_when_the_account_is_next_seen(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        self.assertFalse(self.summary(auth)["unlocked"])
+        self.tap.change(charge, status="CAPTURED")  # paid; the tab was closed and the webhook never arrived
+        now = [self.service.store.clock() + 61]
+        self.service.store.clock = lambda: now[0]
+        summary = self.summary(auth)
+        self.assertEqual((summary["unlocked"], summary["unlocked_via"]), (True, "tap"))
+        asked = len(self.tap.asked)
+        self.summary(auth)
+        self.assertEqual(len(self.tap.asked), asked, "an unlocked account is not looked at again")
+
+    def test_looking_again_is_spaced_out_and_stops_when_the_payment_ends(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        now = [self.service.store.clock()]
+        self.service.store.clock = lambda: now[0]
+        looks = []
+        for _ in range(12):
+            before = len(self.tap.asked)
+            self.summary(auth)
+            self.summary(auth)
+            looks.append(len(self.tap.asked) - before)
+            now[0] += 30
+        self.assertEqual(looks[0], 1, "once at first, and not again on the very next request")
+        self.assertLess(sum(looks), 5, "then a minute later, two, four: not on every request")
+        now[0] += 3 * 3600
+        self.tap.change(charge, status="DECLINED")
+        self.summary(auth)
+        asked = len(self.tap.asked)
+        now[0] += 3 * 3600
+        self.summary(auth)
+        self.assertEqual((len(self.tap.asked), self.rows("tap_attempts")[0]["status"]), (asked, "DECLINED"), "a payment that ended is not asked about any more")
+
+    def test_a_look_that_fails_never_fails_the_account_route(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        self.tap.down = "unavailable"
+        self.assertEqual(self.client.get("/api/account", headers=auth).status_code, 200)
+        self.tap.down = None
+        now = [self.service.store.clock() + 3600]
+        self.service.store.clock = lambda: now[0]
+        with patch.object(self.tap, "retrieve_charge", side_effect=RuntimeError("synthetic fault")), self.assertLogs("little_archive", "WARNING"):
+            self.assertEqual(self.client.get("/api/account", headers=auth).status_code, 200)
+        self.assertFalse(self.summary(auth)["unlocked"])
+
+    def test_old_attempts_are_dropped_but_never_one_tap_captured_or_has_not_decided(self):
+        store = self.service.store
+        now = [1_800_000_000]
+        store.clock = lambda: now[0]
+        for name, charge, status in (("captured", "chg_TS_captured_1", "CAPTURED"), ("pending", "chg_TS_pending_01", None), ("declined", "chg_TS_declined_1", "DECLINED"),
+                                     ("abandoned", "chg_TS_abandoned1", "ABANDONED"), ("unattached", None, None)):
+            store.tap_begin("la_" + name, "idem-" + name, "account-" + name, "2.500", "KWD", False)
+            if charge:
+                store.tap_attach("la_" + name, charge, "https://checkout.payments.tap.company?mode=page&token=x")
+            if status:
+                store.tap_status(charge, status)
+        now[0] += 31 * 86400
+        store.tap_begin("la_new", "idem-new", "account-new", "2.500", "KWD", False)
+        self.assertEqual(sorted(row["order_ref"] for row in self.rows("tap_attempts")), ["la_captured", "la_new", "la_pending"])
+
+
+class TestKeyTests(TapCase):
+    """What was paid for with a test card unlocks only while the key is a test key, or the operator says otherwise."""
+
+    def paid(self):
+        user, auth = self.account()
+        charge = self.started(auth)
+        self.tap.change(charge, status="CAPTURED")
+        self.assertEqual(self.confirm(auth, charge).status_code, 200)
+        return user, auth, charge
+
+    def live(self, **settings):
+        charges = self.tap.charges
+        self.tap = FakeTap(key="sk_" "live_SyntheticKeyNeverIssuedByTap0123", live=True)
+        self.tap.charges = charges
+        self.build(tap_secret_key="sk_" "live_SyntheticKeyNeverIssuedByTap0123", **settings)
+
+    def test_an_unlock_bought_with_a_test_card_does_not_survive_the_switch_to_a_live_key(self):
+        user, auth, charge = self.paid()
+        (hand, h), (both, b) = self.account(), self.account()
+        self.app.state.entitlements.set_unlocked(hand, True, source="manual")
+        self.live()
+        self.assertEqual((self.summary(auth)["unlocked"], self.summary(h)["unlocked_via"]), (False, "manual"), "only what the test purchase alone was holding open is locked")
+        self.refused(self.confirm(auth, charge), 400, "purchase_wrong_environment")
+        self.assertIn("Payment not found", self.back(charge).text)
+        self.assertFalse(self.summary(auth)["unlocked"])
+        self.assertEqual(self.rows()[0]["state"], "active", "nothing is deleted or marked refunded")
+        answer = self.start(auth)
+        self.assertEqual((answer.status_code, answer.json()["unlocked"], self.tap.created[-1]["account"]), (200, False, user), "the account can now pay for real")
+
+    def test_the_operator_can_keep_test_purchases_and_going_back_to_a_test_key_restores_them(self):
+        user, auth, charge = self.paid()
+        self.live(tap_allow_test_purchases=True)
+        self.assertEqual(self.summary(auth)["unlocked_via"], "tap")
+        self.assertEqual(self.confirm(auth, charge).json()["restored"], True)
+        self.live()
+        self.assertFalse(self.summary(auth)["unlocked"])
+        self.tap = FakeTap()
+        self.build()
+        self.assertEqual(self.summary(auth)["unlocked_via"], "tap", "back on a test key the test purchase counts again")
+
+    def test_a_live_purchase_is_recorded_as_one_and_a_payment_started_with_the_other_key_is_not_asked_about(self):
+        user, auth = self.account()
+        open_test = self.started(auth)
+        self.live()
+        asked = len(self.tap.asked)
+        self.refused(self.confirm(auth, open_test), 400, "purchase_wrong_environment")
+        self.assertEqual(len(self.tap.asked), asked)
+        charge = self.started(auth)
+        self.assertNotEqual(charge, open_test, "the payment started with the test key does not block a real one")
+        self.tap.change(charge, status="CAPTURED")
+        self.assertEqual(self.confirm(auth, charge).status_code, 200)
+        self.assertEqual([row["environment"] for row in self.rows()], [""])
+        self.assertEqual(self.client.get("/api/purchases", headers=auth).json()["purchases"], [{"provider": "tap", "product_id": "unlock", "status": "active", "environment": ""}])
+
+
+class TapsOwnExamplesTests(TapCase):
+    """The real client and the service against Tap's two example answers, as its API reference prints them (tests/fixtures/tap).
+
+    Only what a real exchange would differ in is changed: the order reference Tap echoes is the one this server sent, and the
+    charge that is read back has the id of the one that was created.
+    """
+    settings = {**TapCase.settings, "tap_price": "1.000"}
+
+    def setUp(self):
+        self.sent = []
+        self.created = (FIXTURES / "create-a-charge.json").read_text()
+        self.read = (FIXTURES / "retrieve-a-charge.json").read_text()
+        self.assertIn('"url": "https://checkout.payments.tap.company?mode=page&token=6318405da53ea40ebd4da0c0"', self.created)
+        super().setUp()
+
+    def tap_api(self, request):
+        self.sent.append(request)
+        if request.method == "POST":
+            self.order = json.loads(request.content)["reference"]["order"]
+            return httpx.Response(200, content=self.created.replace('"order": "ord_01"', '"order": "%s"' % self.order))
+        return httpx.Response(200, content=self.read.replace('"order": "ord_01"', '"order": "%s"' % self.order).replace("chg_TS050120220958Bk240709704", "chg_TS012520220955Rr950709475"))
+
+    def build(self, clients=None, **settings):
+        super().build(clients={"tap": HttpTapClient(KEY, transport=httpx.MockTransport(self.tap_api))}, **settings)
+
+    def test_start_hands_out_the_page_in_taps_example_and_the_captured_example_unlocks(self):
+        user, auth = self.account()
+        answer = self.start(auth)
+        self.assertEqual((answer.status_code, answer.json()["url"]), (200, "https://checkout.payments.tap.company?mode=page&token=6318405da53ea40ebd4da0c0"), answer.text)
+        page = self.back("chg_TS012520220955Rr950709475")
+        self.assertIn("Payment received", page.text)
+        self.assertEqual(self.summary(auth)["unlocked_via"], "tap", "Tap's example carries none of this server's metadata, and that does not lose the payment")
+
+    def test_the_amount_compared_is_the_charges_own_not_the_transactions(self):
+        charge = read_charge(self.read.encode())
+        self.assertEqual((charge.id, charge.status, charge.amount, charge.currency, charge.live_mode), ("chg_TS050120220958Bk240709704", "CAPTURED", Decimal("1.000"), "KWD", False))
+        self.assertIn('"amount": 1.030', self.read, "the example's transaction amount differs from the charge's")
+        self.assertEqual((charge.order, charge.account, charge.metadata_order, charge.gateway_reference, charge.payment_reference, charge.created),
+                         ("ord_01", None, None, "123456789", "1707220958097045920", "1662544753039"))
+        first = read_charge(self.created.encode())
+        self.assertEqual((first.id, first.status, first.amount, first.order, first.account), ("chg_TS012520220955Rr950709475", "INITIATED", Decimal("1.000"), "ord_01", None))
+
+    def test_a_captured_example_at_another_price_unlocks_nothing(self):
+        user, auth = self.account()
+        self.start(auth)
+        self.read = self.read.replace('"amount": 1.000,\n\t"currency": "KWD",\n\t"threeDSecure"', '"amount": 0.100,\n\t"currency": "KWD",\n\t"threeDSecure"')
+        self.assertIn('"amount": 0.100', self.read)
+        with self.assertLogs("little_archive", "WARNING"):
+            self.refused(self.confirm(auth, "chg_TS012520220955Rr950709475"), 400, "purchase_invalid")
+            self.assertFalse(self.summary(auth)["unlocked"])
+
+
+class HttpTapClientLimitsTests(unittest.TestCase):
+    def test_a_redirect_is_never_followed(self):
+        captured = (FIXTURES / "retrieve-a-charge.json").read_bytes()
+        seen = []
+
+        def api(request):
+            seen.append(str(request.url))
+            if request.url.path.endswith("/elsewhere"):
+                return httpx.Response(200, content=captured)
+            return httpx.Response(307, headers={"Location": "https://api.tap.company/v2/charges/elsewhere"})
+
+        client = HttpTapClient(KEY, transport=httpx.MockTransport(api))
+        with self.assertRaises(TapError) as caught:
+            client.retrieve_charge("chg_TS050120220958Bk240709704")
+        self.assertEqual((caught.exception.kind, seen), ("unavailable", ["https://api.tap.company/v2/charges/chg_TS050120220958Bk240709704"]), "the key is not carried to wherever a redirect points")
+
+    def test_an_answer_that_keeps_arriving_past_the_time_allowed_is_cut_off(self):
+        now = [0.0]
+
+        def drip():
+            for _ in range(100):
+                now[0] += 1.0  # each piece arrives in time by itself; together they take a hundred seconds
+                yield b" "
+            yield (FIXTURES / "retrieve-a-charge.json").read_bytes()
+
+        client = HttpTapClient(KEY, transport=httpx.MockTransport(lambda request: httpx.Response(200, content=drip())), timeout=10.0, clock=lambda: now[0])
+        with self.assertRaises(TapError) as caught:
+            client.retrieve_charge("chg_TS050120220958Bk240709704")
+        self.assertEqual(caught.exception.kind, "unavailable")
+        self.assertLess(now[0], 15.0, "stopped at the limit, not read to the end")
+        quick = HttpTapClient(KEY, transport=httpx.MockTransport(lambda request: httpx.Response(200, content=(FIXTURES / "retrieve-a-charge.json").read_bytes())), timeout=10.0, clock=lambda: now[0])
+        self.assertEqual(quick.retrieve_charge("chg_TS050120220958Bk240709704").status, "CAPTURED")
 
 
 if __name__ == "__main__":

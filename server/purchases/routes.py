@@ -10,6 +10,8 @@
     GET  /api/purchases/tap/return?tap_id=      a browser, sent by Tap      the page a buyer lands on afterwards (HTML)
     POST /api/purchases/tap/notifications       a charge, signed            Tap's webhook (from Tap)
 
+The page a buyer starts from in a browser, /pay, is in pay.py.
+
 The first three and Tap's start and confirm need the caller's sign-in. The notification routes are called by the stores and carry no
 account; each is judged by its own proof (Apple's signature, Google's signed OpenID token, Tap's `hashstring`), and Tap's is then
 checked again by asking Tap. The return page carries no sign-in either and decides nothing by itself: it asks Tap about a payment this
@@ -47,8 +49,9 @@ class TapReturn(StrictModel):
     tap_id: str = Field(min_length=10, max_length=104, pattern=r"^chg_[A-Za-z0-9_]+$")
 
 
-# The page a buyer lands on after Tap. A hosted server has no web interface, so this is the whole of it: plain HTML, no script,
-# no style (the response's content security policy allows neither inline), and nothing from the request is written into it.
+# The page a buyer lands on after Tap: plain HTML, no script, no inline style (the response's content security policy allows
+# neither), and nothing from the request is written into it. Where the pay page is on, it borrows that page's stylesheet and
+# links back to it; otherwise it is unstyled.
 RETURN_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -56,24 +59,28 @@ RETURN_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
-<title>{title} - Little Archive</title>
+<title>{title} - Little Archive</title>{style}
 </head>
 <body>
+<div class="wrap">
 <main>
 <h1>{title}</h1>
-<p>{text}</p>
+<p>{text}</p>{more}
 <p>You can close this page and go back to Little Archive.</p>
 </main>
+</div>
 </body>
 </html>
 """
 RETURN_PAGES = {
     "paid": (200, "Payment received", "Thank you. Your Little Archive account is unlocked."),
-    "pending": (200, "Payment not confirmed yet", "Your payment has not been confirmed yet. Reload this page in a minute. If you paid, your account unlocks as soon as the payment is confirmed."),
-    "unpaid": (200, "Payment not completed", "The payment was not completed, so nothing was unlocked. You can start again from your account."),
+    "pending": (200, "Payment still being confirmed", "Your payment is still being confirmed. Reload this page in a minute. If you paid, your account unlocks by itself as soon as it is confirmed; you do not need to pay twice."),
+    "unpaid": (200, "Payment not completed", "The payment was not completed, so nothing was unlocked."),
     "later": (503, "Payment could not be checked", "The payment could not be checked just now. Reload this page in a minute. If you paid, your account unlocks as soon as the payment is confirmed."),
     "unknown": (404, "Payment not found", "This address does not match a payment started from a Little Archive account, so nothing was unlocked."),
 }
+RETURN_STYLE = '\n<link rel="stylesheet" href="/pay/pay.css">'
+RETURN_LINKS = {"unpaid": "Start again on the pay page", "pending": "Back to the pay page", "later": "Back to the pay page"}
 
 
 def install_routes(app, *, owner, service, hosted_route, entitlements):
@@ -123,7 +130,9 @@ def install_routes(app, *, owner, service, hosted_route, entitlements):
         except Refusal as refusal:
             kind = {"purchase_not_paid": "unpaid", "purchases_unavailable": "later"}.get(refusal.code, "unknown")
         status, title, text = RETURN_PAGES[kind]
-        return HTMLResponse(RETURN_PAGE.format(title=title, text=text), status_code=status)
+        pay = service.pay_page
+        more = f'\n<p><a href="/pay">{RETURN_LINKS[kind]}</a></p>' if pay and kind in RETURN_LINKS else ""
+        return HTMLResponse(RETURN_PAGE.format(title=title, text=text, style=RETURN_STYLE if pay else "", more=more), status_code=status)
 
     @app.post("/api/purchases/tap/notifications", dependencies=hosted_route)
     async def tap_notification(request: Request):

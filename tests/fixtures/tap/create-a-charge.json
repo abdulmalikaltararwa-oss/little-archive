@@ -1,0 +1,79 @@
+{
+	"id": "chg_TS012520220955Rr950709475",
+	"object": "charge",
+	"live_mode": false,
+	"api_version": "V2",
+	"method": "CREATE",
+	"status": "INITIATED",
+	"amount": 1.000,
+	"currency": "KWD",
+	"threeDSecure": true,
+	"card_threeDSecure": false,
+	"save_card": false,
+	"merchant_id": "",
+	"product": "GOSELL",
+	"description": "Test Description",
+	"metadata": {
+		"udf1": "Metadata 1"
+	},
+	"transaction": {
+		"timezone": "UTC+03:00",
+		"created": "1662544525491",
+		"url": "https://checkout.payments.tap.company?mode=page&token=6318405da53ea40ebd4da0c0",
+		"expiry": {
+			"period": 30,
+			"type": "MINUTE"
+		},
+		"asynchronous": false,
+		"amount": 1.000,
+		"currency": "KWD"
+	},
+	"reference": {
+		"transaction": "txn_01",
+		"order": "ord_01"
+	},
+	"response": {
+		"code": "100",
+		"message": "Initiated"
+	},
+	"receipt": {
+		"email": true,
+		"sms": true
+	},
+	"customer": {
+		"first_name": "test",
+		"last_name": "test",
+		"email": "test@test.com",
+		"phone": {
+			"country_code": "965",
+			"number": "51234567"
+		}
+	},
+	"merchant": {
+		"id": "599424"
+	},
+	"source": {
+		"object": "source",
+		"id": "src_all"
+	},
+	"redirect": {
+		"status": "PENDING",
+		"url": "http://your_website.com/redirect_url"
+	},
+	"post": {
+		"status": "PENDING",
+		"url": "http://your_website.com/post_url"
+	},
+	"activities": [
+		{
+			"id": "activity_TS062620220955Nk440709312",
+			"object": "activity",
+			"created": 1662544525491,
+			"status": "INITIATED",
+			"currency": "KWD",
+			"amount": 1.000,
+			"remarks": "charge - created"
+		}
+	],
+	"auto_reversed": false
+}

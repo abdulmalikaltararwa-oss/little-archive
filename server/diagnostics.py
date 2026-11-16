@@ -73,6 +73,10 @@ def _hosted_checks(database, config):
         rows.append(check("tap_payments", "passed", "tap_configured", "Tap Payments is configured for the web unlock. Tap was not contacted."))
     else:
         rows.append(check("tap_payments", "passed", "tap_not_configured", "Tap Payments is not configured, so the web unlock is off and its routes say so."))
+    if config.tap_secret_key and config.tap_price and config.supabase_publishable_key:
+        rows.append(check("pay_page", "passed", "pay_page_on", "The pay page (/pay) is on: Tap and the Supabase publishable key are configured. Neither was contacted."))
+    else:
+        rows.append(check("pay_page", "passed", "pay_page_off", "The pay page (/pay) is off and answers 404. It needs Tap (LA_TAP_SECRET_KEY, LA_TAP_PRICE) and LA_SUPABASE_PUBLISHABLE_KEY."))
     rows.append(check("owner_access", "passed", "identity_provider_sign_in", "Hosted mode verifies identity-provider access tokens; there is no owner password. Signing keys were not requested."))
     for name in HOSTED_DEPENDENCIES:
         try:

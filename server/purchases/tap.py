@@ -13,11 +13,13 @@ the same (`live_mode`), and a charge that disagrees with the key is refused.
 
 Shapes follow Tap's API reference (developers.tap.company: Create a Charge, Retrieve a Charge, Webhook), read in November 2026:
 `POST /v2/charges` with a Bearer key; `amount` is a JSON number in the currency's own decimals (three for KWD), not a string and not
-fils; only the status `CAPTURED` is paid; the webhook carries a `hashstring` header, an HMAC-SHA256 in hex, keyed with the secret
+fils; only the status `CAPTURED` is paid, seven statuses mean the payment ended unpaid, and everything else (`INITIATED`,
+`IN_PROGRESS`, `UNKNOWN`, a word Tap adds later) means it is not decided yet; the webhook carries a `hashstring` header, an HMAC-SHA256 in hex, keyed with the secret
 key, over `x_id`, `x_amount`, `x_currency`, `x_gateway_reference`, `x_payment_reference`, `x_status`, `x_created` joined with no
-separator. UNVERIFIED (Tap's pages do not state it): that Retrieve a Charge returns `metadata` exactly as Create does (if it does not, no
-payment ever settles), the complete list of hosts a hosted page may be on (if it is short, starting a payment answers 503), and
-what characters a secret key may hold. Exercised only against stand-ins: no charge was ever created at Tap by this code.
+separator. Tap's own examples of both answers are kept as fixtures (tests/fixtures/tap): the hosted page there is
+`https://checkout.payments.tap.company?mode=page&token=...`, and Retrieve a Charge returns `metadata`. UNVERIFIED (Tap's pages do
+not state it): the complete list of hosts a hosted page may be on (if it is short, starting a payment answers 503), what
+characters a secret key may hold, and how long after a buyer leaves its page Tap gives a charge a final status. Exercised only against stand-ins: no charge was ever created at Tap by this code.
 """
 from __future__ import annotations
 
@@ -27,19 +29,22 @@ import hashlib
 import hmac
 import json
 import re
+import time
 from urllib.parse import quote, urlsplit
 
 import httpx
 
 API = "https://api.tap.company/v2/charges"
 # Where Tap's hosted page may be, by whether the key is a live one. Anything else is not handed to a buyer.
-PAGE_HOSTS = {True: frozenset({"kw.payments.tap.company", "checkout.tap.company"}),
-              False: frozenset({"sandbox.payments.tap.company", "acceptance.sandbox.tap.company", "checkout.tap.company"})}
+PAGE_HOSTS = {True: frozenset({"checkout.payments.tap.company", "kw.payments.tap.company", "checkout.tap.company"}),
+              False: frozenset({"checkout.payments.tap.company", "sandbox.payments.tap.company", "acceptance.sandbox.tap.company", "checkout.tap.company"})}
 # Decimal places of the currencies Tap settles in. An amount is always written, compared and signed with exactly this many.
 DECIMALS = {"KWD": 3, "BHD": 3, "OMR": 3, "JOD": 3, "SAR": 2, "AED": 2, "QAR": 2, "EGP": 2, "USD": 2, "EUR": 2, "GBP": 2}
-# Every status Tap documents. Only CAPTURED is paid, INITIATED is still open, and a word that is not here is treated as unpaid.
+# Only CAPTURED is paid. These seven mean the payment ended without being paid. Everything else is not decided yet: INITIATED (the
+# hosted page is open), IN_PROGRESS (the buyer is at their bank), UNKNOWN, and any word Tap adds later. A payment that is not
+# decided is never treated as failed, because a buyer told it failed pays again.
 PAID, OPEN = "CAPTURED", "INITIATED"
-STATUSES = frozenset({"INITIATED", "CAPTURED", "ABANDONED", "CANCELLED", "FAILED", "DECLINED", "RESTRICTED", "VOID", "TIMEDOUT", "UNKNOWN"})
+ENDED_UNPAID = frozenset({"ABANDONED", "CANCELLED", "FAILED", "DECLINED", "RESTRICTED", "VOID", "TIMEDOUT"})
 CHARGE_ID = re.compile(r"chg_[A-Za-z0-9_]{6,100}")
 KEY = re.compile(r"sk_(test|live)_[!-~]{8,200}")  # Tap does not publish what follows the prefix, so only whitespace and control characters are refused
 RESPONSE_BYTES = 64 * 1024
@@ -63,7 +68,8 @@ def amount_text(amount, currency):
 
 
 class TapError(Exception):
-    """`kind`: 'not_found', 'forbidden' (the key is wrong or not allowed), 'unavailable' (try again), or 'invalid' (an answer that is not a charge)."""
+    """`kind`: 'not_found' (Tap has no such charge), 'forbidden' (the key is wrong or not allowed), 'refused' (Tap would not make the
+    charge), 'unavailable' (try again), or 'invalid' (an answer that is not a charge)."""
 
     def __init__(self, kind):
         super().__init__(kind)
@@ -78,8 +84,8 @@ class TapCharge:
     currency: str
     live_mode: bool
     order: str = ""              # reference.order: the reference this server made for the attempt
-    account: str = ""            # metadata.account_id: the account the charge was started for
-    metadata_order: str = ""     # metadata.order: the same reference again, beside the account it belongs to
+    account: str | None = None         # metadata.account_id: the account the charge was started for; None when Tap returned none
+    metadata_order: str | None = None  # metadata.order: the same reference again; None when Tap returned none
     url: str = ""                # transaction.url: Tap's hosted page, while the charge is open
     gateway_reference: str = ""
     payment_reference: str = ""
@@ -99,7 +105,7 @@ def parse_charge(body):
         if body.get("object", "charge") != "charge" or not CHARGE_ID.fullmatch(body["id"]) or amount is None or not isinstance(body["status"], str) or not isinstance(body["live_mode"], bool):
             raise TapError("invalid")
         return TapCharge(id=body["id"], status=body["status"][:40], amount=amount, currency=currency, live_mode=body["live_mode"], order=_text(reference.get("order")),
-                         account=_text(metadata.get("account_id")), metadata_order=_text(metadata.get("order")), url=_text(transaction.get("url"), 2048), gateway_reference=_text(reference.get("gateway")),
+                         account=_text(metadata["account_id"]) if "account_id" in metadata else None, metadata_order=_text(metadata["order"]) if "order" in metadata else None, url=_text(transaction.get("url"), 2048), gateway_reference=_text(reference.get("gateway")),
                          payment_reference=_text(reference.get("payment")), created=_text(transaction.get("created")))
     except (KeyError, TypeError, AttributeError):
         raise TapError("invalid") from None
@@ -124,7 +130,7 @@ def page_address(url, live):
     """Tap's hosted page for a charge, or None when the address is not one a buyer should be sent to."""
     try:
         parts = urlsplit(url)
-        if parts.scheme == "https" and parts.hostname in PAGE_HOSTS[bool(live)] and not parts.username and not parts.password and parts.port is None and parts.path not in {"", "/"} and len(url) <= 2048 and "\\" not in url and url.isprintable():
+        if parts.scheme == "https" and parts.hostname in PAGE_HOSTS[bool(live)] and not parts.username and not parts.password and parts.port is None and len(url) <= 2048 and "\\" not in url and url.isprintable():
             return url
     except ValueError:
         pass
@@ -147,10 +153,10 @@ class TapClient:
 
 
 class HttpTapClient(TapClient):
-    def __init__(self, secret_key, *, merchant_id="", transport=None, timeout=10.0):
+    def __init__(self, secret_key, *, merchant_id="", transport=None, timeout=10.0, clock=time.monotonic):
         if not isinstance(secret_key, str) or not KEY.fullmatch(secret_key):
             raise ValueError("The Tap secret key must be an sk_test_ or sk_live_ key.")
-        self._key, self._merchant, self._transport, self._timeout = secret_key, merchant_id, transport, float(timeout)
+        self._key, self._merchant, self._transport, self._timeout, self._clock = secret_key, merchant_id, transport, float(timeout), clock
         self.live = secret_key.startswith("sk_live_")
 
     def __repr__(self):
@@ -160,21 +166,22 @@ class HttpTapClient(TapClient):
         headers = {"Authorization": "Bearer " + self._key, "Accept": "application/json", "lang_code": "en"}
         if content is not None:
             headers["Content-Type"] = "application/json"
+        deadline = self._clock() + self._timeout  # for the whole answer: a server that keeps sending a little is cut off too
         try:
             with httpx.Client(transport=self._transport, timeout=httpx.Timeout(self._timeout, connect=min(5.0, self._timeout)), follow_redirects=False, trust_env=False) as client:
                 with client.stream(method, url, headers=headers, content=content) as response:
                     raw = b""
                     for chunk in response.iter_bytes():
                         raw += chunk
-                        if len(raw) > RESPONSE_BYTES:
+                        if len(raw) > RESPONSE_BYTES or self._clock() > deadline:
                             raise TapError("unavailable")
                     status = response.status_code
         except (httpx.HTTPError, OSError):
             raise TapError("unavailable") from None  # nothing of the request, and so nothing of the key, goes into the error
         if status in (401, 403):
             raise TapError("forbidden")
-        if status in (400, 404, 410):
-            raise TapError("not_found" if method == "GET" else "forbidden")  # a refused create is the account's or the key's doing (Tap's 1101: key and environment disagree)
+        if status in (400, 404, 410, 422):
+            raise TapError("not_found" if method == "GET" else "refused")
         if status != 200:
             raise TapError("unavailable")
         return read_charge(raw)

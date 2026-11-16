@@ -35,9 +35,14 @@ def build_purchases(config, entitlements, libraries, clients=None):
     origin = config.public_url.rstrip("/")
     store = PurchaseStore(libraries.accounts_path)
     libraries.on_delete.append(store.forget)
-    return PurchaseService(store, entitlements, apple=apple, google=google, google_package=config.google_package_name, google_product=config.google_product_id,
+    service = PurchaseService(store, entitlements, apple=apple, google=google, google_package=config.google_package_name, google_product=config.google_product_id,
                            google_allow_test=config.google_allow_test_purchases, push=push,
                            tap=tap, tap_amount=money(config.tap_price, config.tap_currency) if priced else None, tap_currency=config.tap_currency,
                            tap_redirect=config.tap_return_url or origin + "/api/purchases/tap/return",
                            # Tap cannot post to a loopback address, so a server on one is settled by the buyer's return alone.
-                           tap_post="" if urlsplit(origin).hostname in LOOPBACK else origin + "/api/purchases/tap/notifications")
+                           tap_post="" if urlsplit(origin).hostname in LOOPBACK else origin + "/api/purchases/tap/notifications",
+                           tap_allow_test=config.tap_allow_test_purchases)
+    # The pay page (pay.py) is offered only when a buyer could finish: Tap is set up, and the page can sign them in.
+    service.pay_page = service.tap is not None and service.tap_amount is not None and bool(config.supabase_publishable_key)
+    service.apply_tap_environment()
+    return service
