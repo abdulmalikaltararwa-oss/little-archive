@@ -34,7 +34,9 @@ in the linked docs, not here. Last updated: 2026-11-16.
   mode: only listed test users can sign in until it is published.
 - Apple: switched on in Supabase, but the app is not registered with Apple yet, so the sheet has never run.
 - Known faults: Google's page names the Supabase address, not Little Archive; the iOS prompt calls the app
-  "App"; on the account screen the keyboard slides the logo under the status bar.
+  "App".
+- Fixed on iOS: the keyboard no longer slides the page under the status bar (the web view ends at the
+  keyboard). Proven on the iOS 26.5 simulator only; iOS 15 to 18, an iPad and a physical device are not run.
 
 ## Running
 
