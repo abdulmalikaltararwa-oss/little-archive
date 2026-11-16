@@ -339,11 +339,12 @@ class PurchaseService:
         if charge.status != PAID:
             return {"unlocked": False, "provider": "tap", "status": "pending", "restored": False}, charge
         self.store.tap_status(charge_id, PAID)
-        outcome = self.store.claim("tap", charge_id, user_id, TAP_PRODUCT, "" if tap.live else "test", True, int(time.time() * 1000))
+        environment = "" if tap.live else "test"
+        outcome = self.store.claim("tap", charge_id, user_id, TAP_PRODUCT, environment, True, int(time.time() * 1000))
         if outcome in {"other_account", "revoked"}:
             raise self._refuse(outcome)
         self._unlock(user_id, "tap")
-        others = [key for key in self.store.held_keys("tap", user_id) if key != charge_id]
+        others = [key for key in self.store.held_keys("tap", user_id, environment) if key != charge_id]  # a test-card purchase beside a real one moved no money
         if others:  # an earlier charge was given up on, a new one made, and then both were paid: the account is unlocked once, and one is owed back
             log.warning("Tap charges %s and %s were both captured for one account; refund one of them by hand in Tap's dashboard.", charge_id, ", ".join(others))
         return {"unlocked": True, "provider": "tap", "status": "active", "restored": outcome == "restored"}, charge

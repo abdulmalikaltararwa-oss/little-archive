@@ -946,6 +946,18 @@ class TestKeyTests(TapCase):
         self.assertEqual(self.confirm(auth, charge).status_code, 200)
         return user, auth, charge
 
+    def paid_with_a_test_card_then_live(self):
+        self.tap = FakeTap()
+        self.build()
+        user, auth, charge = self.paid()
+        self.live()
+        return user, auth, charge
+
+    def pay_for_real(self, auth):
+        charge = self.started(auth)
+        self.tap.change(charge, status="CAPTURED")
+        return charge
+
     def live(self, **settings):
         charges = self.tap.charges
         self.tap = FakeTap(key="sk_" "live_SyntheticKeyNeverIssuedByTap0123", live=True)
@@ -993,6 +1005,10 @@ class TestKeyTests(TapCase):
         self.tap.change(charge, status="CAPTURED")
         self.assertEqual(self.confirm(auth, charge).status_code, 200)
         self.assertEqual([row["environment"] for row in self.rows()], [""])
+        tested, t, earlier = self.paid_with_a_test_card_then_live()
+        with self.assertNoLogs("little_archive", "WARNING"):
+            self.assertEqual(self.confirm(t, self.pay_for_real(t)).status_code, 200)
+        self.assertEqual(sorted(row["environment"] for row in self.rows() if row["user_id"] == tested), ["", "test"], "no refund is asked for: the test payment moved no money")
         self.assertEqual(self.client.get("/api/purchases", headers=auth).json()["purchases"], [{"provider": "tap", "product_id": "unlock", "status": "active", "environment": ""}])
 
 

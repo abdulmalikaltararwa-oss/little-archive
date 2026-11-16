@@ -119,6 +119,27 @@ class DeleteAccountCommandTests(unittest.TestCase):
         self.assertEqual(code, 0, "asking again is safe")
         self.assertIn("no library is on this server, 0 purchase record(s)", said)
 
+    def test_a_sign_in_with_apple_on_record_is_revoked_at_apple_and_removed(self):
+        class Apple:
+            def __init__(self):
+                self.revoked = []
+
+            def exchange(self, code):
+                return "synthetic-apple-refresh-token"
+
+            def revoke(self, token):
+                self.revoked.append(token)
+
+        apple = Apple()
+        with patch("server.apple_signin.client_from_config", return_value=apple):
+            user, token = self.account("noor@example.test")
+            app, _ = hosted_app(self.root, supabase_url=self.supabase, supabase_jwt_issuer=self.supabase + "/auth/v1", supabase_jwt_secret=JWT_SECRET, supabase_service_key=SERVICE_KEY)
+            app.state.apple_signin.keep(user, "synthetic-authorization-code")
+            self.assertEqual(app.state.apple_signin.count(), 1)
+            code, said, problems = self.run_command(user, "--yes")
+            self.assertEqual((code, apple.revoked, app.state.apple_signin.count()), (0, ["synthetic-apple-refresh-token"], 0), said + problems)
+        self.assertNotIn("synthetic-apple-refresh-token", said + problems)
+
     def test_it_asks_first_and_deletes_nothing_without_the_word(self):
         user, token = self.account("noor@example.test")
         code, said, _ = self.run_command(user, typed="yes")

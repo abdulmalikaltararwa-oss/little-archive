@@ -196,10 +196,11 @@ class PurchaseStore:
             c.execute("UPDATE tap_attempts SET checks=checks+1,next_check_at=? WHERE order_ref=?", (now + min(3600, 60 * 2 ** min(row["checks"], 6)), row["order_ref"]))
             return row["charge_id"]
 
-    def held_keys(self, provider, user_id):
-        """The keys of the active purchases this account holds from one provider."""
+    def held_keys(self, provider, user_id, environment):
+        """The keys of the active purchases this account holds from one provider, made in one environment."""
         with self._transaction() as c:
-            return [row[0] for row in c.execute("SELECT purchase_key FROM purchases WHERE provider=? AND user_id=? AND state='active' ORDER BY first_verified_at, rowid", (provider, user_id))]
+            return [row[0] for row in c.execute("SELECT purchase_key FROM purchases WHERE provider=? AND user_id=? AND environment=? AND state='active' ORDER BY first_verified_at, rowid",
+                                                (provider, user_id, environment))]
 
     def tap_test_holders(self):
         """Accounts holding an active Tap purchase that was paid for with a test card."""
