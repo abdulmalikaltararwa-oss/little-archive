@@ -42,3 +42,43 @@ export function endLine(total: number, firstMonth: string | null = null): string
   const all = `that is all ${total.toLocaleString('en')}`;
   return firstMonth ? `${all} · your first save was in ${firstMonth}` : all;
 }
+
+export interface EmptyLibraryWords {
+  title: string;
+  /** Three steps, in order. `picture` names the small drawing beside a step; the words stand without it. */
+  steps: { title: string; body: string; picture?: 'share' | 'apps' }[];
+  /** The companion extension, where there is one to set up: a self-hosted server opened in a browser. */
+  extension: string | null;
+}
+
+/**
+ * What an empty library teaches, which depends on where it is open. Only the phone app is in the share sheet, so
+ * only it describes one; a browser (and the demo) is shown the way that works there, which is pasting a link.
+ * Each sentence is true of that place: sharing into the app opens the save dialog with the link filled in and
+ * keeps nothing until Save is tapped (docs/mobile-app.md), and the extension brings in a view of saves from
+ * Instagram or TikTok to a server you run, it does not save the page you are on (extension/README.md).
+ */
+export function emptyLibraryWords(kind: BackendKind): EmptyLibraryWords {
+  if (kind === 'native') {
+    return {
+      title: 'Save from the app you are already in.',
+      steps: [
+        { title: 'Tap Share on a post, a video or a page', body: 'In your browser, or in any app that can share a link.', picture: 'share' },
+        { title: 'Choose Little Archive', body: 'It is in the row of apps. The first time, it may be near the end of the row.', picture: 'apps' },
+        { title: 'Check it and tap Save', body: 'Little Archive opens with the link filled in. Nothing is kept until you tap Save.' },
+      ],
+      extension: null,
+    };
+  }
+  return {
+    title: 'Every collection starts with one link.',
+    steps: [
+      { title: 'Copy the link', body: 'Of a post, a video or a page you want to find again.' },
+      { title: 'Choose Save a link and paste it', body: 'Add a title, topics or a collection if you like.' },
+      { title: 'It is kept here', body: 'In your library, ready to search, sort and come back to.' },
+    ],
+    extension: kind === 'browser'
+      ? 'There is also a companion extension for Chrome. It is experimental, and it brings in the Instagram saved view or TikTok favorites you have open, one view at a time.'
+      : null,
+  };
+}
