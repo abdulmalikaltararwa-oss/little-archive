@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+// Release signing. The upload keystore and its passwords are never in the repository. A release build reads these four
+// values from Gradle properties (your own ~/.gradle/gradle.properties, or -P on the command line) or, failing that, from
+// environment variables of the same names. With none of them set every build still works: debug builds use the debug key,
+// and a release build comes out unsigned. With only some of them set the build stops, so a half-configured release is
+// never mistaken for a signed one.
+def signingNames = ['LA_ANDROID_KEYSTORE', 'LA_ANDROID_KEYSTORE_PASSWORD', 'LA_ANDROID_KEY_ALIAS', 'LA_ANDROID_KEY_PASSWORD']
+def signingValues = signingNames.collectEntries { name -> [name, providers.gradleProperty(name).orElse(providers.environmentVariable(name)).getOrNull()] }
+def signingMissing = signingNames.findAll { !signingValues[it] }
+def hasReleaseSigning = signingMissing.isEmpty()
+if (!hasReleaseSigning && signingMissing.size() < signingNames.size()) {
+    throw new GradleException("Release signing is half set: ${signingMissing.join(', ')} missing. Set all four or none (docs/mobile-app.md, \"A release build for Google Play\").")
+}
+
 android {
     namespace = "app.littlearchive.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +29,20 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                // An absolute path, or one relative to this folder. Keep the file outside the repository.
+                storeFile file(signingValues.LA_ANDROID_KEYSTORE)
+                storePassword signingValues.LA_ANDROID_KEYSTORE_PASSWORD
+                keyAlias signingValues.LA_ANDROID_KEY_ALIAS
+                keyPassword signingValues.LA_ANDROID_KEY_PASSWORD
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseSigning) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
