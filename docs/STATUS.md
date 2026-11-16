@@ -25,16 +25,16 @@ in the linked docs, not here. Last updated: 2026-11-16.
 - React interface, synthetic demo, Chrome extension, Mac app build, container image.
 - Phone app (iOS and Android shell): first-launch server choice, hosted and own-server sign-in, share sheet,
   native purchase sheet.
-- Google and Apple sign-in code. Release validation is green on main at `5ce3d52`.
+- Google and Apple sign-in code. Release validation is green on main at `038f7e7`.
 
 ## Sign-in, proven and not
 
 - Google: proven end to end on 2026-11-16 from the iOS simulator against staging and the real Supabase
   project (Continue with Google, Google's page, back into an empty library). The Google setup is in testing
   mode: only listed test users can sign in until it is published.
-- Apple: switched on in Supabase, but the app is not registered with Apple yet, so the sheet has never run.
-- Known faults: Google's page names the Supabase address, not Little Archive; the iOS prompt calls the app
-  "App".
+- Apple: switched on in Supabase and the app id is registered with Apple (Sign in with Apple ticked). The
+  sheet has never run: it needs a signed build on a real device.
+- Known fault: Google's page names the Supabase address, not Little Archive.
 - Fixed on iOS: the keyboard no longer slides the page under the status bar (the web view ends at the
   keyboard). Proven on the iOS 26.5 simulator only; iOS 15 to 18, an iPad and a physical device are not run.
 
@@ -60,8 +60,8 @@ in the linked docs, not here. Last updated: 2026-11-16.
 
 ## Waiting on the owner
 
-- Register the app with Apple (team and bundle id) so Sign in with Apple can run; publish the Google
-  sign-in setup before real users.
+- Publish the Google sign-in setup before real users. Register the share extension id and the app group
+  with Apple.
 - The unlock price, and whether the store apps sell the unlock through Tap or through the stores.
 - The production address for the hosted service.
 - Arabic: the interface is English only today. Decide before a store listing or a payment page.
