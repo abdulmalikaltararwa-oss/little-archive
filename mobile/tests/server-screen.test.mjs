@@ -32,14 +32,16 @@ test('the own-server screen says what an address looks like, that the phone must
   const field = page.$('input[name=server]');
   assert.equal(page.$(`label[for=${field.id}]`).textContent, 'Server address');
   const hint = page.window.document.getElementById(field.getAttribute('aria-describedby'));
-  assert.match(hint.textContent, /for example https:\/\/archive\.example\.com/);
+  assert.equal(field.placeholder, 'https://archive.example.com', 'what an address looks like');
+  assert.match(hint.textContent, /open it at in a browser/);
+  assert.equal(hint.previousElementSibling, field, 'the hint is under the field, as in the interface');
   assert.match(hint.textContent, /must start with https:\/\//);
   // The guidance is a labelled region with a short list.
   const guide = page.$('.native-guide');
   assert.equal(page.window.document.getElementById(guide.getAttribute('aria-labelledby')).textContent, 'before you connect');
   const items = [...guide.querySelectorAll('li')].map(item => item.textContent);
   assert.equal(items.length, 2);
-  assert.match(items[0], /has to be able to reach the server/);
+  assert.match(items[0], /has to reach the server/);
   assert.match(items[0], /same Wi-Fi/);
   assert.match(items[0], /public https:\/\/ address/);
   assert.match(items[1], /http:\/\/ is refused/);

@@ -27,7 +27,7 @@ function open(t, draw) {
   const all = selector => [...window.document.querySelectorAll(selector)];
   return {
     window, result, $, all,
-    byText: text => all('.native-screen button').find(button => button.textContent.trim() === text),
+    byText: text => all('.native-screen button').find(button => (button.getAttribute('aria-label') || button.textContent.trim()) === text),
     get active() { return window.document.activeElement; },
     get live() { return $('[aria-live]').textContent; },
     labelOf: input => $(`label[for=${input.id}]`).textContent,
@@ -38,18 +38,19 @@ function open(t, draw) {
 
 const account = (t, options = {}) => open(t, ui => ui.account({ host: 'app.little-archive.example', providers: { apple: true, google: true }, social: async () => null, signIn: async () => assert.fail('not sent'), signUp: async () => assert.fail('not sent'), ...options }));
 
-test('the account screen: "Forgot your password?" is on the Sign in view only, finger sized, and hands over the email typed so far', { skip }, async t => {
+test('the account screen: "Forgot your password?" is on the Sign in view only, at the end of the password\'s label, and hands over the email typed so far', { skip }, async t => {
   const page = account(t, { forgot: true });
   const button = page.byText('Forgot your password?');
   assert.ok(button, 'the button is there');
   assert.equal(button.type, 'button', 'Return in a field still signs in');
-  assert.ok(button.classList.contains('btn') && button.classList.contains('small'), '.btn.small is 44px high in native.css');
-  assert.ok(button.closest('form'), 'under the form, before Back');
-  assert.deepEqual(page.all('form button').map(node => node.textContent.trim()), ['Show password', 'Sign in', 'Forgot your password?', 'Back']);
+  assert.ok(button.classList.contains('native-textlink'), 'a text link with a 44px area to press (native.css; account-screen.test.mjs reads the rule)');
+  assert.equal(button.parentElement, page.$(`label[for=${page.$('input[name=password]').id}]`).parentElement, 'in the password label\'s row, so it adds no height');
+  assert.deepEqual(page.all('form button').map(node => node.getAttribute('aria-label') || node.textContent.trim()), ['Forgot your password?', 'Show password', 'Sign in', 'Create an account', 'Back']);
   // Creating an account has no password to forget.
-  page.byText('Create account').click();
-  assert.equal(page.byText('Forgot your password?'), undefined);
-  page.all('.native-tabs button')[0].click();
+  page.byText('Create an account').click();
+  assert.equal(button.hidden, true);
+  page.byText('Sign in').click();
+  assert.equal(button.hidden, false);
   page.$('input[name=email]').value = '  reader@example.com ';
   page.byText('Forgot your password?').click();
   assert.deepEqual(await page.result, { forgot: 'reader@example.com' });
@@ -87,7 +88,8 @@ test('the reset screen: focus on the heading, a labelled email field carried ove
   assert.equal(field.type, 'email');
   assert.equal(field.getAttribute('autocomplete'), 'username');
   assert.equal(field.value, 'reader@example.com');
-  assert.match(page.$('.native-lede').textContent, /account on app\.little-archive\.example/);
+  assert.match(page.$('.native-whisper').textContent, /^account on app\.little-archive\.example$/);
+  assert.match(page.$('.native-lede').textContent, /^If this email has an account, we send it a link/, 'the same words for every address');
   field.value = ' reader@example.com  ';
   page.send();
   await tick();
@@ -127,7 +129,7 @@ test('the reset screen: an empty or malformed address stays on the field, and no
 const fresh = (t, options = {}) => open(t, ui => ui.newPassword({ email: 'reader@example.com', submit: async () => {}, ...options }));
 const type = (page, password, again = password) => { page.$('input[name=password]').value = password; page.$('input[name=confirm]').value = again; };
 
-test('the new-password screen: focus on the heading, two labelled fields with the sign-up rule and a show-password toggle each', { skip }, t => {
+test('the new-password screen: focus on the heading, two labelled fields with the sign-up rule and a show-password eye each', { skip }, t => {
   const page = fresh(t);
   assert.equal(page.active, page.$('h1'));
   assert.equal(page.$('h1').textContent, 'Choose a new password');
@@ -141,15 +143,16 @@ test('the new-password screen: focus on the heading, two labelled fields with th
     assert.equal(field.required, true);
   }
   assert.equal(password.getAttribute('minlength'), '8');
-  assert.equal(page.described(password), 'At least 8 characters. A password manager can make and keep one for you.', 'the same rule the sign-up form states');
+  assert.equal(page.described(password), 'At least 8 characters', 'the same rule the sign-up form states');
   assert.equal(page.described(confirm), '');
   // Show and hide, each field on its own, as on the sign-up form.
-  const toggles = page.all('.native-reveal');
+  const toggles = page.all('.native-eye');
   assert.equal(toggles.length, 2);
   toggles[0].click();
   assert.equal(password.type, 'text');
   assert.equal(confirm.type, 'password');
-  assert.equal(toggles[0].textContent, 'Hide password');
+  assert.equal(toggles[0].getAttribute('aria-label'), 'Show password');
+  assert.equal(toggles[1].getAttribute('aria-pressed'), 'false');
   assert.equal(toggles[0].getAttribute('aria-pressed'), 'true');
   toggles[0].click();
   assert.equal(password.type, 'password');

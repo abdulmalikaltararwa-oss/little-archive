@@ -99,7 +99,7 @@ test('the garden: first launch has the tall band with the line; the screens with
 
 test('the garden: it is still there, and still hidden, after the account screen is redrawn (the other tab, a notice, an error)', { skip }, async t => {
   const page = open(t, ui => ui.account({ host, providers: { apple: true, google: true }, social: never, signIn: async () => { throw new Error('That email and password do not match an account.'); }, signUp: async () => ({ confirmationSent: true }) }));
-  page.byText('Create account').click();
+  page.byText('Create an account').click();
   checkGarden(page, 'after switching to Create account');
   assert.equal(page.window.document.activeElement, page.$('h1'), 'focus is on the new heading, as before');
 

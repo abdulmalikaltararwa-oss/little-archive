@@ -27,7 +27,7 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 /* First-launch screens ---------------------------------------------------------------------------------------------- */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
-.native-screen { min-height: 100dvh; width: min(440px, 100%); margin: 0 auto; padding: calc(var(--safe-top) + 28px) calc(var(--safe-end) + 24px) calc(var(--safe-bottom) + 32px) calc(var(--safe-start) + 24px); display: flex; flex-direction: column; color: var(--ink); }
+.native-screen { min-height: 100dvh; width: min(440px, 100%); margin: 0 auto; padding: calc(var(--safe-top) + 28px) calc(var(--safe-end) + 24px) calc(var(--safe-bottom) + 16px) calc(var(--safe-start) + 24px); display: flex; flex-direction: column; color: var(--ink); }
 /* With the keyboard up the screen is shorter than its content and scrolls, and the page is drawn under the status bar, so the
    logo would pass behind the clock. A strip of the same dotted paper, as tall as the inset (nothing where there is none), stays
    over it. It holds because the app ends the web view at the keyboard (RootViewController in MainViewController.swift on iOS;
@@ -42,14 +42,15 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
    .hero-paper, restated here from the same tokens: sage fading to oat, a butter sun in one corner, a petal blush in the other),
    with a bed of text-art flowers along its foot. The band runs to the screen's edges and up under the status bar.
 
-   --band-h is the band's height. On the screens with a form ('compact') it is what the logo and the space under it took
-   before the band (28 + 38 + 34px, less the 16px now under the band), so nothing under it moved. On first launch ('tall') it
+   --band-h is the band's height. On the screens with a form ('compact') it is the logo, the space over it and the grass
+   under it (28 + 38 + 18px), and no more: the form needs the rest of a small phone. On first launch ('tall') it
    holds the logo, the line and a full row of flowers. The strip that stays over the status bar (above) shows the top of the
    same paper, drawn at the same size, so there is no seam where the two meet. */
 .native-has-band { padding-top: 0; --band-h: calc(var(--safe-top) + 84px);
   --hero-paper: radial-gradient(circle 220px at 100% 0, var(--butter-pale), transparent 70%), radial-gradient(circle 260px at 76% 125%, var(--petal-pale), transparent 70%), linear-gradient(115deg, var(--sage-pale), var(--card-2)); }
 .native-has-band.native-band-tall { --band-h: calc(var(--safe-top) + 292px); }
-.native-band { position: relative; box-sizing: border-box; flex: none; display: flex; flex-direction: column; min-height: var(--band-h); margin: 0 calc(-24px - var(--safe-end)) 16px calc(-24px - var(--safe-start)); padding: calc(var(--safe-top) + 28px) calc(var(--safe-end) + 24px) 0 calc(var(--safe-start) + 24px); overflow: hidden; }
+.native-band-tall .native-band { margin-bottom: 16px; }
+.native-band { position: relative; box-sizing: border-box; flex: none; display: flex; flex-direction: column; min-height: var(--band-h); margin: 0 calc(-24px - var(--safe-end)) 14px calc(-24px - var(--safe-start)); padding: calc(var(--safe-top) + 28px) calc(var(--safe-end) + 24px) 0 calc(var(--safe-start) + 24px); overflow: hidden; }
 .native-band, .native-has-band::before { background-color: var(--card-2); background-image: var(--hero-paper); background-position: 0 0; background-size: 100% var(--band-h); background-repeat: no-repeat; }
 /* The band's own paper covers all of it. That is --band-h, and the strip's size, unless larger text has made the band taller. */
 .native-band { background-size: 100% 100%; }
@@ -66,14 +67,15 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
    stand on one baseline, each a <pre> in the mono face, so their columns line up.
    compact: the bed fills the width the name leaves and adds no height. The grass (the first row) lies along the band's foot
    under the logo. The flowers (the second row) stand in the width the name leaves, beside it and never behind it: the row wraps upward and is clipped to one line, so
-   with a longer name (larger text) or a narrower phone the flowers that do not fit are left out whole.
+   with a longer name (larger text) or a narrower phone the flowers that do not fit are left out whole (the gap between the
+   lines keeps the foot of one that was left out from showing at the top edge).
    tall: one full row under the line, in the flow, so a longer line pushes it down and never runs over it. */
 .native-garden { display: flex; align-items: flex-end; opacity: .6; pointer-events: none; -webkit-user-select: none; user-select: none; }
 :root[data-theme='dark'] .native-garden { opacity: .68; }
 .native-garden-row { display: flex; align-items: flex-end; }
 .native-band-compact .native-garden { position: relative; flex: 1; min-width: 0; align-self: stretch; margin: -24px 0 -18px; }
 .native-band-compact .native-garden-row:first-child { position: absolute; inset: auto 100% 0 auto; width: 176px; justify-content: space-between; padding-inline: 8px; }
-.native-band-compact .native-garden-row:last-child { position: absolute; inset: auto 0 0 0; height: 78px; overflow: hidden; flex-wrap: wrap-reverse; justify-content: flex-end; align-items: flex-start; align-content: flex-start; gap: 0 9px; padding-inline: 5px 12px; }
+.native-band-compact .native-garden-row:last-child { position: absolute; inset: auto 0 0 0; height: 78px; overflow: hidden; flex-wrap: wrap-reverse; justify-content: flex-end; align-items: flex-start; align-content: flex-start; gap: 4px 9px; padding-inline: 5px 12px; }
 /* An empty first item, as tall as the row: a line that already holds something wraps a plant that does not fit, where an
    empty line would keep it and show half of it, and the line it holds is the one line that shows. */
 .native-band-compact .native-garden-row:last-child::before { content: ''; flex: none; width: 0; height: 78px; }
@@ -104,21 +106,36 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
     .native-garden-row:last-child .native-plant:nth-child(4n + 1) .native-flower-head { animation-delay: -5.9s; }
   }
 }
-/* The terminal voice: a small mono line above a title (DESIGN.md). */
-.native-whisper { font-family: var(--font-mono, 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace); font-size: .6875rem; line-height: 1rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 8px; }
-.native-screen h1 { font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 2.25rem; line-height: 1.08; letter-spacing: -.02em; font-variation-settings: 'SOFT' 100, 'WONK' 0; color: var(--ink); margin: 0 0 10px; text-wrap: balance; }
-.native-lede { color: var(--ink-soft); font-size: .9375rem; line-height: 1.55; margin: 0 0 24px; text-wrap: pretty; }
-.native-fineprint { margin: 4px 0 18px; }
+/* The screens with a form (ui.js: the account, reset, new-password, own-server and owner-password screens) ----------------
+   Each of them fits a phone with the keyboard down and nothing to scroll, from 375x667 up (docs/mobile-app.md has the
+   measured table). So the rhythm here is one set of sizes for every phone, not a roomy one that tightens on a small screen:
+   a rule that follows the page's height would move the form at the moment the keyboard comes up. What a taller phone has
+   left over lies between the form and the way back (.native-back). At 320px wide, or with larger text, a screen is taller
+   than the phone and scrolls; nothing here has a fixed height, so nothing is cut off.
+
+   The terminal voice: a small mono line above a title (DESIGN.md). A long server name breaks where it must. */
+.native-whisper { font-family: var(--font-mono, 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace); font-size: .6875rem; line-height: 1rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 4px; overflow-wrap: anywhere; }
+.native-screen h1 { font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 1.75rem; line-height: 1.12; letter-spacing: -.02em; font-variation-settings: 'SOFT' 100, 'WONK' 0; color: var(--ink); margin: 0 0 14px; text-wrap: balance; }
+.native-lede { color: var(--ink-soft); font-size: .875rem; line-height: 1.5; margin: -6px 0 16px; text-wrap: pretty; }
+/* First launch has no form and the room for the larger title it has always had. */
+.native-band-tall h1 { font-size: 2.25rem; line-height: 1.08; margin-bottom: 10px; }
+.native-band-tall .native-whisper { margin-bottom: 8px; }
+.native-band-tall .native-lede, .native-screen:not(.native-has-band) .native-lede { font-size: .9375rem; line-height: 1.55; margin: 0 0 24px; }
+.native-screen form .native-fineprint { margin: 14px 0 4px; }
 /* What to know before connecting to a server of your own (ui.js, the server screen): a short list and a link to the guide. */
-.native-guide { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
-.native-guide ul { margin: 0 0 6px; padding: 0; padding-inline-start: 1.1rem; list-style: disc; color: var(--ink-soft); font-size: .875rem; line-height: 1.55; }
-.native-guide li { margin-bottom: 8px; text-wrap: pretty; }
-.native-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--sage); font-size: .9375rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; border-radius: 12px; }
+.native-guide { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.native-guide .native-whisper { margin-bottom: 6px; }
+.native-guide ul { margin: 0; padding: 0; padding-inline-start: 1.1rem; list-style: disc; color: var(--ink-soft); font-size: .8125rem; line-height: 1.5; }
+.native-guide li { margin-bottom: 4px; text-wrap: pretty; }
+.native-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--sage); font-size: .875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; border-radius: 12px; }
 :root[data-theme='dark'] .native-link { color: var(--sage-deep); }
 .native-link:focus-visible { outline: 2.5px solid var(--sage); outline-offset: 2px; }
 .native-screen form { display: flex; flex-direction: column; }
+/* A form that ends its screen takes the room that is left, so the way back can stand at the screen's foot. */
+.native-screen form:last-child { flex: 1; }
+.native-screen [hidden] { display: none; }
 
-/* Buttons are pills; the one working colour is sage. */
+/* Buttons are pills; the one working colour is sage. (The interface's Button: `lg` is 48px, the rest 44px on touch.) */
 .native-screen .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--card); color: var(--ink); font-size: .9375rem; font-weight: 600; transition: background-color var(--dur-2, 200ms) ease, border-color var(--dur-2, 200ms) ease, transform var(--dur-1, 120ms) ease; }
 .native-screen .btn:active { transform: scale(.97); }
 .native-screen .btn.primary { background: var(--sage); color: var(--on-sage); border-color: transparent; box-shadow: 0 10px 18px -10px var(--sage), inset 0 1px 0 #ffffff33; }
@@ -127,25 +144,61 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-screen .btn:disabled { opacity: .55; cursor: not-allowed; }
 .native-screen .btn[aria-busy="true"] { cursor: progress; }
 .native-screen form .btn { width: 100%; }
-.native-screen form .btn.ghost { margin-top: 6px; }
+/* The way back: quiet, last, and at the foot of the screen when the form is what ends it (the auto margin is the room a taller
+   phone has left; on a small phone it is nothing and the button follows the form). */
+.native-screen form .native-back { margin-top: auto; color: var(--ink-soft); }
 .native-actions { display: flex; flex-direction: column; gap: 8px; }
 .native-actions .btn { width: 100%; }
 
-/* Fields. 16px keeps iOS from zooming into one. */
-.native-screen .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-.native-screen label { font-size: .875rem; font-weight: 600; color: var(--ink); }
-.native-screen input { width: 100%; min-width: 0; min-height: 48px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--card); color: var(--ink); font-size: 16px; box-shadow: var(--shadow-1); outline: none; transition: border-color var(--dur-2, 200ms) ease, box-shadow var(--dur-2, 200ms) ease; }
+/* A button that reads as a link in a line of text: the interface's Button, variant "link" (sage, semibold, underlined 4px
+   under the words, a 12px corner for its focus ring), with the interface's .hit-44 around it: the area that takes a press is
+   44px high whatever the line's height, and draws nothing. */
+.native-textlink { position: relative; display: inline-flex; align-items: center; padding: 0; border: 0; border-radius: 12px; background: none; color: var(--sage); font: inherit; font-size: .8125rem; line-height: 1.25rem; font-weight: 600; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 4px; -webkit-tap-highlight-color: transparent; }
+:root[data-theme='dark'] .native-textlink { color: var(--sage-deep); }
+.native-textlink::after { content: ''; position: absolute; inset: 50% -8px auto; height: max(100%, 44px); transform: translateY(-50%); }
+.native-textlink:active { opacity: .7; }
+.native-textlink:disabled { opacity: .55; cursor: not-allowed; }
+.native-textlink:focus-visible { outline: 2.5px solid var(--sage); outline-offset: 3px; }
+/* Under the form's button: "New here? Create an account", or the other way round. One centred line, 44px high. */
+.native-switch { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 6px; min-height: 44px; margin: 2px 0 0; color: var(--ink-soft); font-size: .8125rem; line-height: 1.25rem; }
+
+/* Fields: the interface's Field and Input (a 13px semibold label, 6px, a 44px control with a 16px corner, 14px of padding and
+   the resting shadow; the hint under it in 12px). 16px text keeps iOS from zooming into one. The label's row is 22px and
+   has a place at its end (ui.js, field) for a short note or a link. The link's 44px press area fills the room between the
+   two controls; where it would reach the control under it by a few pixels, the control is drawn over it and takes the press. */
+.native-screen .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.native-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; margin-bottom: 2px; }
+.native-label-row .field-help { text-align: end; }
+.native-screen label { font-size: .875rem; line-height: 1.25rem; font-weight: 600; color: var(--ink); }
+.native-screen input { width: 100%; min-width: 0; min-height: 44px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--card); color: var(--ink); font-size: 16px; box-shadow: var(--shadow-1); outline: none; transition: border-color var(--dur-2, 200ms) ease, box-shadow var(--dur-2, 200ms) ease; }
 :root[data-theme='dark'] .native-screen input { background: var(--card-2); }
 .native-screen input::placeholder { color: var(--ink-soft); opacity: .8; }
 .native-screen input:focus-visible { border-color: var(--sage); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sage) 15%, transparent); outline: none; }
 .native-screen input[aria-invalid="true"] { border-color: var(--danger); }
-.native-screen .field-help { font-size: .75rem; line-height: 1.55; color: var(--ink-soft); margin: 0; }
-.native-screen form .native-reveal { width: auto; align-self: flex-start; margin: -6px 0 14px -8px; min-height: 44px; }
+.native-screen .field-help { font-size: .75rem; line-height: 1.5; color: var(--ink-soft); margin: 0; }
+/* A password field with the eye at its end (ui.js, passwordField): the interface's icon button (ghost, a circle, the soft
+   ink) laid over the end of the Input, which keeps that much padding so what is typed never runs under it. The button is the
+   control's full 44px each way. The open eye shows while the password is hidden; struck through while it is showing. */
+.native-input-wrap { position: relative; display: flex; }
+.native-input-wrap input { padding-inline-end: 46px; }
+.native-eye { position: absolute; inset-block: 0; inset-inline-end: 0; display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--ink-soft); -webkit-tap-highlight-color: transparent; transition: color var(--dur-2, 200ms) ease, transform var(--dur-1, 120ms) ease; }
+.native-eye:active { transform: scale(.92); color: var(--ink); }
+.native-eye[aria-pressed="true"] { color: var(--ink); }
+.native-eye:disabled { opacity: .55; cursor: not-allowed; }
+.native-eye:focus-visible { outline: 2.5px solid var(--sage); outline-offset: -4px; }
+.native-eye .native-eye-shut, .native-eye[aria-pressed="true"] .native-eye-open { display: none; }
+.native-eye[aria-pressed="true"] .native-eye-shut { display: block; }
 
-.native-screen .notice { margin-bottom: 18px; padding: 12px 16px; border-radius: 16px; background: var(--sage-pale); color: var(--ink); font-size: .875rem; line-height: 1.55; }
+.native-screen .notice { margin-bottom: 14px; padding: 10px 14px; border-radius: 16px; background: var(--sage-pale); color: var(--ink); font-size: .8125rem; line-height: 1.5; }
 .native-error { display: flex; gap: 8px; align-items: flex-start; color: var(--danger); font-size: .8125rem; line-height: 1.5; }
 .native-error[hidden] { display: none; }
-.native-error-general { padding: 11px 14px; border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius: 16px; margin-bottom: 16px; background: var(--danger-pale); }
+.native-error-general { padding: 9px 14px; border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius: 16px; margin-bottom: 12px; background: var(--danger-pale); }
+
+/* Words that changed in place (ui.js, swapped: the account screen between signing in and creating an account) fade in over
+   a fifth of a second and rise 3px, only for someone who has not asked for less motion. Opacity and a transform: the layout is
+   the same before, during and after. */
+@keyframes native-swap { from { opacity: 0; transform: translateY(3px); } }
+@media (prefers-reduced-motion: no-preference) { .native-swappable.native-swap { animation: native-swap var(--dur-2, 200ms) ease-out; } }
 
 /* Choosing where the library lives. */
 .native-choices { display: flex; flex-direction: column; gap: 12px; }
@@ -154,19 +207,13 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-choice span { color: var(--ink-soft); font-size: .875rem; line-height: 1.45; }
 .native-choice:active { background: var(--sage-pale); border-color: var(--sage); transform: scale(.985); }
 
-/* Sign in or create an account. */
-.native-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
-.native-tabs .btn { flex: 1; }
-.native-screen .native-tabs .btn[aria-pressed="true"] { background: var(--sage-pale); border-color: transparent; color: var(--sage); }
-:root[data-theme='dark'] .native-screen .native-tabs .btn[aria-pressed="true"] { color: var(--sage-deep); }
-
 /* "Continue with Apple" and "Continue with Google" (ui.js, the account screen), above the email form. They are drawn here,
    modelled on each brand's button guidelines: the brands' colours and wording ("Continue with …"), finger sized (48px), and pills
    like the app's other buttons. They are not the brands' own components. Known differences: the Apple logo is an Apple mark as
    an SVG path, not the artwork Apple supplies for this button (that artwork may not be redistributed here), and the Google
    button uses the system font where the phone has no Roboto. The Apple button stays a small App Review risk for the first
    reason (docs/mobile-app.md, the risks). */
-.native-socials { display: flex; flex-direction: column; gap: 12px; margin-bottom: 4px; }
+.native-socials { display: flex; flex-direction: column; gap: 10px; }
 .native-social { --social-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: var(--social-height); padding: 0 20px; border-radius: 999px; border: 1px solid transparent; font-family: inherit; font-size: 1rem; font-weight: 500; line-height: 1.25; -webkit-tap-highlight-color: transparent; transition: transform var(--dur-1, 120ms) ease, opacity var(--dur-2, 200ms) ease; }
 .native-social svg { flex: none; }
 .native-social:active { transform: scale(.98); }
@@ -187,5 +234,5 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 /* Google: white with a 1px #747775 stroke and #1F1F1F text; #131314 with an #8E918F stroke and #E3E3E3 text on dark. The G keeps its colours. */
 .native-social-google { background: #fff; border-color: #747775; color: #1f1f1f; font-family: Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif; }
 :root[data-theme='dark'] .native-social-google { background: #131314; border-color: #8e918f; color: #e3e3e3; }
-.native-divider { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; color: var(--ink-soft); font-size: .8125rem; line-height: 1.4; }
+.native-divider { display: flex; align-items: center; gap: 12px; margin: 2px 0 10px; color: var(--ink-soft); font-size: .8125rem; line-height: 1.4; }
 .native-divider::before, .native-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }

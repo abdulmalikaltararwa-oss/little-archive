@@ -3,7 +3,7 @@
 //
 // Form practice: one <form> per screen with real labels; type, autocomplete, inputmode and enterkeyhint set so the
 // keyboard and password managers behave (an email is autocomplete="username", a sign-in password "current-password", a
-// new one "new-password"); required fields; a show-password toggle, and no double entry of a password except where a typing
+// new one "new-password"); required fields; a show-password eye in the field, and no double entry of a password except where a typing
 // slip would lock the person out again (choosing a new password after a reset); an error is shown
 // as text with an icon, announced once through a live region, tied to its field with aria-invalid and aria-describedby
 // only while it applies, and focus moves to the first field that needs attention.
@@ -46,6 +46,16 @@ function icon(size, ...paths) {
   }
   return node;
 }
+/** A line icon, drawn as the interface draws its own (lucide: a 24 unit box, a 2 unit round stroke in the text colour, 16px). */
+function lineIcon(name, ...ds) {
+  const node = icon(16, ...ds.map(d => ({ box: '0 0 24 24', d })));
+  for (const [key, value] of Object.entries({ class: name, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) node.setAttribute(key, String(value));
+  return node;
+}
+// The eye of a show-password button, open and struck through. The same drawings as the interface's icon set (lucide's Eye and
+// EyeOff), restated here because the shell cannot import from ui/.
+const EYE = ['M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0', 'M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0'];
+const EYE_OFF = ['M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49', 'M14.084 14.158a3 3 0 0 1-4.242-4.242', 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143', 'm2 2 20 20'];
 // An Apple mark for the "Continue with Apple" button (white: the button is black, or in the dark theme the logo turns black).
 // It is a path drawn here, not the logo artwork Apple supplies for Sign in with Apple buttons (see native.css and the guide's risks).
 // The path fills the box's height and about 17 of its 24 units of width; the button draws it 16px high (a third of its height).
@@ -87,9 +97,20 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
     const height = page.visualViewport?.height ?? page.innerHeight;
     const box = field.getBoundingClientRect();
     if (box.top < top || box.bottom > top + height) field.scrollIntoView({ block: 'center' });
+    // The button that sends the form is kept in view with the field, when the page has room for both: someone typing can see
+    // what comes next without putting the keyboard away. The page moves up by just what the button needs, and only if the
+    // field then still clears the strip over the status bar; when both do not fit, the field wins and nothing more moves.
+    const button = field.form?.querySelector('button[type=submit]');
+    const screen = field.closest('.native-screen');
+    if (!button || !screen) return;
+    const strip = parseFloat(page.getComputedStyle(screen, '::before').height) || 0;
+    const lift = button.getBoundingClientRect().bottom + 12 - (top + height);
+    if (lift > 0 && field.getBoundingClientRect().top - lift >= top + strip + 8) page.scrollBy(0, lift);
   };
   document.defaultView?.addEventListener('resize', showField);
   document.defaultView?.visualViewport?.addEventListener('resize', showField);
+  // Moving from one field to the next with the keyboard already up changes no size, so the same check runs then too.
+  root.addEventListener('focusin', showField);
 
   /** Focus a control from script. After a touch it gets no focus ring (native.css, .native-quiet), until focus next leaves it. */
   function focusQuietly(node) {
@@ -147,46 +168,79 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
   const frame = (...content) => draw(null, content);
   const heroFrame = (...content) => draw('compact', content);
 
-  // An input with its label, hint and error. The error is linked to the field only while it is showing.
-  function field({ label, hint, name, ...input }) {
+  // An input with its label, hint and error, laid out as the interface's Field is (components/field.tsx): the label, the
+  // control, then the hint under it. The error is linked to the field only while it is showing.
+  //
+  // The label's row has a place at its end for one short thing that belongs to the field: `note`, a few words that describe it
+  // (the rule for a new password), or `aside`, a control (the way to a forgotten password). The row is as tall with them as
+  // without, so showing or hiding either moves nothing (`setNote`). A hidden note is not part of the field's description.
+  function field({ label, hint, note, aside, trailing, name, ...input }) {
     const id = nextId('native-field');
     const hintId = hint ? `${id}-hint` : '';
+    const noteId = note ? `${id}-note` : '';
     const errorId = `${id}-error`;
-    const control = h('input', { id, name, 'aria-invalid': 'false', ...(hintId ? { 'aria-describedby': hintId } : {}), ...input });
+    const control = h('input', { id, name, 'aria-invalid': 'false', ...input });
+    const said = note && h('p', { class: 'field-help native-swappable', id: noteId }, note);
     const error = h('div', { class: 'native-error', id: errorId, hidden: true }, h('span', { role: 'img', 'aria-label': 'Error' }, '⚠'), h('span', { class: 'native-error-text' }));
-    const wrap = h('div', { class: 'form-field' }, h('label', { for: id }, label), hint && h('p', { class: 'field-help', id: hintId }, hint), control, error);
+    const wrap = h('div', { class: 'form-field' },
+      h('div', { class: 'native-label-row' }, h('label', { for: id }, label), said, aside),
+      trailing ? h('div', { class: 'native-input-wrap' }, control, trailing) : control,
+      hint && h('p', { class: 'field-help', id: hintId }, hint),
+      error);
+    const describe = () => {
+      const ids = [said && !said.hidden && noteId, hintId, !error.hidden && errorId].filter(Boolean);
+      if (ids.length) control.setAttribute('aria-describedby', ids.join(' ')); else control.removeAttribute('aria-describedby');
+    };
+    describe();
     return {
-      wrap, control,
+      wrap, control, note: said,
       show(message) {
         error.querySelector('.native-error-text').textContent = message;
         error.hidden = false;
         control.setAttribute('aria-invalid', 'true');
-        control.setAttribute('aria-describedby', [hintId, errorId].filter(Boolean).join(' '));
+        describe();
       },
       clear() {
         error.hidden = true;
         control.setAttribute('aria-invalid', 'false');
-        if (hintId) control.setAttribute('aria-describedby', hintId); else control.removeAttribute('aria-describedby');
+        describe();
       },
+      setNote(on) { if (said) { said.hidden = !on; describe(); } },
     };
   }
 
+  // A password field with a button at its end that shows what was typed. The interface has no such field yet, so this is put
+  // together from the parts it does have: its Input, and inside it an icon button (ghost, a 44px circle, the soft ink) holding
+  // the eye from its icon set. The button's name stays "Show password" and aria-pressed says whether it is on; the eye is
+  // struck through while the password is showing. Pressing it does not take focus from the field, so the keyboard stays up.
   function passwordField(options) {
-    const f = field({ ...options, type: 'password', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', required: true });
-    f.control.dataset.secret = 'true';
-    const toggle = h('button', { type: 'button', class: 'btn ghost small native-reveal', 'aria-pressed': 'false', onClick: () => {
+    const toggle = h('button', { type: 'button', class: 'native-eye', 'aria-label': 'Show password', 'aria-pressed': 'false', onClick: () => {
       const shown = f.control.type === 'text';
       f.control.type = shown ? 'password' : 'text';
-      toggle.textContent = shown ? 'Show password' : 'Hide password';
       toggle.setAttribute('aria-pressed', String(!shown));
-    } }, 'Show password');
-    f.wrap.append(toggle);
+    } }, lineIcon('native-eye-open', ...EYE), lineIcon('native-eye-shut', ...EYE_OFF));
+    for (const press of ['pointerdown', 'mousedown']) toggle.addEventListener(press, event => event.preventDefault());
+    const f = field({ ...options, trailing: toggle, type: 'password', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', required: true });
+    f.control.dataset.secret = 'true';
     return f;
+  }
+
+  /** Words that have just changed in place fade in (native.css, and only for someone who has not asked for less motion). */
+  function swapped(...nodes) {
+    for (const node of nodes) {
+      if (!node) continue;
+      node.classList.remove('native-swap');
+      void node.offsetWidth; // so that adding the class again starts the fade again
+      node.classList.add('native-swap');
+    }
   }
 
   // A form that runs `submit` and either moves on (it returns) or shows an AppError beside the field it names. `lock` is the
   // screen's lock when the screen has other actions that must not run at the same time (the account screen); without one the
   // form only keeps its own button from being pressed twice.
+  //
+  // The node it returns has two things for a screen that changes in place (the account screen, between signing in and creating
+  // an account): `relabel(submitLabel, busyLabel)` and `clearErrors()`.
   function form({ fields, submitLabel, busyLabel, submit, extra = [], lock }) {
     const general = h('div', { class: 'native-error native-error-general', role: 'alert', hidden: true }, h('span', { role: 'img', 'aria-label': 'Error' }, '⚠'), h('span', { class: 'native-error-text' }));
     const button = h('button', { class: 'btn primary', type: 'submit' }, submitLabel);
@@ -222,10 +276,16 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       if (target) target.control.focus();
       else if (focusLost() && !button.disabled) focusQuietly(button);
     } }, general, ...Object.values(fields).map(f => f.wrap), button, ...extra);
+    node.relabel = (label, busy) => { submitLabel = label; busyLabel = busy; if (!running) button.textContent = label; };
+    node.clearErrors = () => { general.hidden = true; for (const f of Object.values(fields)) f.clear(); };
     return node;
   }
 
-  const backButton = (done, label = 'Back') => h('button', { type: 'button', class: 'btn ghost', onClick: () => done(BACK) }, label);
+  // The way back is the last thing on a screen. Where the form ends the screen it sits at the foot of the screen, under
+  // whatever room the phone has left (native.css, .native-back), apart from the form's own path.
+  const backButton = (done, label = 'Back') => h('button', { type: 'button', class: 'btn ghost small native-back', onClick: () => done(BACK) }, label);
+  /** A button that reads as a link in a line of text (the interface's Button, variant "link"), with a 44px area to press. */
+  const textLink = (label, onClick) => h('button', { type: 'button', class: 'native-textlink native-swappable', onClick }, label);
 
   return {
     /** The first question: where does the library live? Resolves with 'hosted' or 'own'. */
@@ -253,19 +313,19 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
      */
     server({ value = '', submit }) {
       return new Promise(done => {
-        const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser, for example https://archive.example.com. It must start with https://.' });
+        const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open it at in a browser. It must start with https://.' });
         const guideId = nextId('native-guide');
         const heading = landing(h('h1', {}, 'Connect to your server'));
         heroFrame(
           h('p', { class: 'native-whisper' }, 'your own server'),
           heading,
-          h('p', { class: 'native-lede' }, 'Type the address of the Little Archive you run. The app asks it what it is before you enter a password.'),
+          h('p', { class: 'native-lede' }, 'The app checks it before asking for a password.'),
           form({ fields: { server: address }, submitLabel: 'Connect', busyLabel: 'Connecting…', submit: async values => { done(await submit(values.server)); }, extra: [backButton(done)] }),
           h('section', { class: 'native-guide', 'aria-labelledby': guideId },
             h('h2', { class: 'native-whisper', id: guideId }, 'before you connect'),
             h('ul', {},
-              h('li', {}, 'This phone has to be able to reach the server. A public https:// address works from anywhere. An address on your home network works only while the phone is on the same Wi-Fi.'),
-              h('li', {}, 'Plain http:// is refused, on a home network too, because your password would travel unencrypted.')),
+              h('li', {}, 'This phone has to reach the server. A public https:// address works anywhere; one on your home network works only on the same Wi-Fi.'),
+              h('li', {}, 'Plain http:// is refused, at home too: your password would travel unencrypted.')),
             h('a', { class: 'native-link', href: SELF_HOSTING_GUIDE, target: '_blank', rel: 'noopener noreferrer' }, 'Self-hosting guide (opens in your browser)')));
         heading.focus();
       });
@@ -274,7 +334,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
     /** Own server, step two: the owner password, exchanged once for this phone's access token. */
     password({ host, notice, submit }) {
       return new Promise(done => {
-        const password = passwordField({ label: 'Owner password', name: 'password', autocomplete: 'current-password', enterkeyhint: 'go', hint: undefined });
+        const password = passwordField({ label: 'Owner password', name: 'password', autocomplete: 'current-password', enterkeyhint: 'go' });
         heroFrame(
           h('p', { class: 'native-whisper' }, 'owner sign-in'),
           h('h1', {}, 'Sign in'),
@@ -294,11 +354,11 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
      * said then). It calls `onStage('signing-in')` when the sheet or the browser is done and the app is asking for the session.
      *
      * One lock for the whole screen: while any sign-in is on its way (a sheet is open, a code is being traded, the email form
-     * was sent) the tabs, both "Continue with" buttons, the form's button and Back cannot be pressed and Return does not send
-     * the form, so two sign-ins cannot overlap and leave a session that nothing holds. Once the screen has its answer the lock
+     * was sent) both "Continue with" buttons, the form's button, the eye in the password field, the line that changes between
+     * signing in and creating an account, and Back cannot be pressed and Return does not send the form, so two sign-ins cannot overlap and leave a session that nothing holds. Once the screen has its answer the lock
      * stays, until the app draws the next screen.
      *
-     * With `forgot`, the Sign in view has a "Forgot your password?" button under the form. It is under the same lock, and the
+     * With `forgot`, the Sign in view has "Forgot your password?" at the end of the password's label. It is under the same lock, and the
      * screen then resolves with `{ forgot: <the email typed so far> }`, for the caller to show the reset screen.
      */
     account({ mode = 'in', host, notice, signIn, signUp, providers = {}, social, forgot = false }) {
@@ -306,12 +366,16 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
         let creating = mode === 'up';
         const lock = createLock();
         const finish = value => { lock.seal(); done(value); };
-        // `land` says where focus goes once the view is drawn: 'start' (arriving), 'heading' (the other tab) or 'notice'.
+        const words = () => creating
+          ? { title: 'Create your account', submit: 'Create account', busy: 'Creating…', ask: 'Have an account?', other: 'Sign in' }
+          : { title: 'Welcome back', submit: 'Sign in', busy: 'Signing in…', ask: 'New here?', other: 'Create an account' };
+        // `land` says where focus goes once the view is drawn: 'start' (arriving) or 'notice'.
         const render = (message = notice, land = 'start') => {
           const email = field({ label: 'Email', name: 'email', type: 'email', inputmode: 'email', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next', required: true });
-          const password = passwordField({ label: 'Password', name: 'password', autocomplete: creating ? 'new-password' : 'current-password', enterkeyhint: 'go', minlength: creating ? 8 : null, hint: creating ? 'At least 8 characters. A password manager can make and keep one for you.' : undefined });
-          const tabs = h('div', { class: 'native-tabs', role: 'group', 'aria-label': 'Sign in or create an account' },
-            ...[[false, 'Sign in'], [true, 'Create account']].map(([isCreate, label]) => h('button', { type: 'button', class: 'btn small', 'aria-pressed': String(creating === isCreate), onClick: () => { if (!lock.held && creating !== isCreate) { creating = isCreate; render(undefined, 'heading'); } } }, label)));
+          // The end of the password's label row holds one of two things, in the same place and the same height: the way to a
+          // forgotten password when signing in, the rule for a new one when creating an account.
+          const lost = forgot && textLink('Forgot your password?', () => { if (!lock.held) finish({ forgot: email.control.value.trim() }); });
+          const password = passwordField({ label: 'Password', name: 'password', enterkeyhint: 'go', note: 'At least 8 characters', aside: lost });
           const names = ['apple', 'google'].filter(name => providers[name] && social);
           // Not an alert: like a field's error, it is read as the description of the button that focus returns to.
           const providerError = h('div', { class: 'native-error native-error-general', id: nextId('native-social-error'), hidden: true }, h('span', { role: 'img', 'aria-label': 'Error' }, '⚠'), h('span', { class: 'native-error-text' }));
@@ -346,27 +410,52 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
             buttons[name] = button;
             return button;
           };
-          const heading = landing(h('h1', {}, creating ? 'Create your account' : 'Welcome back'));
+          const heading = landing(h('h1', { class: 'native-swappable' }));
           const said = message && landing(h('div', { class: 'notice', role: 'status' }, message));
+          const ask = h('span', {});
+          // The one way between signing in and creating an account: a line under the form's button. The screen is not drawn
+          // again, so what was typed stays and nothing moves; the words that differ change where they stand, and focus goes to
+          // the heading, which now says which of the two this is.
+          const other = textLink('', () => {
+            if (lock.held) return;
+            creating = !creating;
+            if (said) said.remove();
+            clearProviderError();
+            sheet.clearErrors();
+            apply();
+            swapped(heading, turn, password.note, lost);
+            heading.focus();
+          });
+          const turn = h('p', { class: 'native-switch native-swappable' }, ask, ' ', other);
+          const sheet = form({ lock, fields: { email, password }, submitLabel: '', busyLabel: '', submit: async values => {
+            clearProviderError();
+            const result = await (creating ? signUp : signIn)(values.email.trim(), values.password);
+            if (result?.confirmationSent) { creating = false; render(`We sent a message to ${values.email.trim()}. Open it to confirm your email, then sign in here.`, 'notice'); return; }
+            finish(result);
+          }, extra: [turn, backButton(finish)] });
+          /** Everything that differs between signing in and creating an account. */
+          const apply = () => {
+            const now = words();
+            heading.textContent = now.title;
+            sheet.relabel(now.submit, now.busy);
+            ask.textContent = now.ask;
+            other.textContent = now.other;
+            password.control.setAttribute('autocomplete', creating ? 'new-password' : 'current-password');
+            if (creating) password.control.setAttribute('minlength', '8'); else password.control.removeAttribute('minlength');
+            password.setNote(creating);
+            if (lost) lost.hidden = creating;
+          };
+          apply();
           lock.over(heroFrame(
-            h('p', { class: 'native-whisper' }, 'a little archive account'),
+            h('p', { class: 'native-whisper' }, `account on ${host}`),
             heading,
-            h('p', { class: 'native-lede' }, creating ? 'A library of your own, kept on your account.' : `Sign in to your account on ${host}.`),
             said,
             names.length > 0 && h('div', { class: 'native-socials' }, ...names.map(providerButton), providerError, h('p', { class: 'native-divider' }, h('span', {}, 'or use your email'))),
-            tabs,
-            form({ lock, fields: { email, password }, submitLabel: creating ? 'Create account' : 'Sign in', busyLabel: creating ? 'Creating…' : 'Signing in…', submit: async values => {
-              clearProviderError();
-              const result = await (creating ? signUp : signIn)(values.email.trim(), values.password);
-              if (result?.confirmationSent) { creating = false; render(`We sent a message to ${values.email.trim()}. Open it to confirm your email, then sign in here.`, 'notice'); return; }
-              finish(result);
-            }, extra: [
-              forgot && !creating && h('button', { type: 'button', class: 'btn ghost small', onClick: () => { if (!lock.held) finish({ forgot: email.control.value.trim() }); } }, 'Forgot your password?'),
-              backButton(finish)] })));
-          // The view was redrawn, so whatever had focus is gone. A notice is what the person needs to hear first; after a tab
-          // switch it is the new heading. On arrival the email field takes focus only when there are no "Continue with" buttons:
-          // with them showing, the keyboard would cover them, so it stays down until the person goes to a field.
-          if (said && land !== 'heading') said.focus();
+            sheet));
+          // The view was drawn, so whatever had focus is gone. A notice is what the person needs to hear first. On arrival the
+          // email field takes focus only when there are no "Continue with" buttons: with them showing, the keyboard would cover
+          // them, so it stays down until the person goes to a field.
+          if (said) said.focus();
           else if (land === 'start' && names.length === 0) email.control.focus();
           else heading.focus();
         };
@@ -384,9 +473,9 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
         const address = field({ label: 'Email', name: 'email', type: 'email', inputmode: 'email', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'send', required: true, value: email });
         const heading = landing(h('h1', {}, 'Reset your password'));
         heroFrame(
-          h('p', { class: 'native-whisper' }, 'a little archive account'),
+          h('p', { class: 'native-whisper' }, `account on ${host}`),
           heading,
-          h('p', { class: 'native-lede' }, `Enter the email of your account on ${host}. If it has an account, we send it a link that lets you choose a new password.`),
+          h('p', { class: 'native-lede' }, 'If this email has an account, we send it a link that lets you choose a new password.'),
           form({ fields: { email: address }, submitLabel: 'Send reset link', busyLabel: 'Sending…', submit: async values => { await submit(values.email.trim()); done('sent'); }, extra: [
             h('p', { class: 'field-help native-fineprint' }, 'Signed up with Google or Apple? There is no password to reset: go back and use that button.'),
             backButton(done, 'Back to sign in')] }));
@@ -397,13 +486,12 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
     /**
      * A forgotten password, step two, reached from the emailed link: choose the new one. `submit(password)` sets it; the screen
      * resolves with 'saved' when it returns, or BACK for Cancel. The rules are the sign-up form's (8 characters, a show-password
-     * toggle on each field); the password is typed twice here, because a slip would lock the person out a second time.
+     * eye in each field); the password is typed twice here, because a slip would lock the person out a second time.
      */
     newPassword({ email = '', submit }) {
       return new Promise(done => {
-        const rule = 'At least 8 characters. A password manager can make and keep one for you.';
-        const password = passwordField({ label: 'New password', name: 'password', autocomplete: 'new-password', enterkeyhint: 'next', minlength: 8, hint: rule });
-        const confirm = passwordField({ label: 'New password, again', name: 'confirm', autocomplete: 'new-password', enterkeyhint: 'go', hint: undefined });
+        const password = passwordField({ label: 'New password', name: 'password', autocomplete: 'new-password', enterkeyhint: 'next', minlength: 8, note: 'At least 8 characters' });
+        const confirm = passwordField({ label: 'New password, again', name: 'confirm', autocomplete: 'new-password', enterkeyhint: 'go' });
         const heading = landing(h('h1', {}, 'Choose a new password'));
         heroFrame(
           h('p', { class: 'native-whisper' }, 'a little archive account'),
