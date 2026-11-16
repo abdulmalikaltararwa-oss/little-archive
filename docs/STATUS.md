@@ -21,15 +21,19 @@ in the linked docs, not here. Last updated: 2026-11-16.
 ## Built and merged (main)
 
 - Server: single-owner and hosted modes, understanding layer, recipes, places, ask, guided import, purchases
-  for Apple and Google.
+  for Apple, Google and Tap (Tap against stand-ins only), a pay page at `/pay` on a hosted server, and an
+  operator command that deletes an account.
 - React interface, synthetic demo, Chrome extension, Mac app build, container image.
 - Phone app (iOS and Android shell): first-launch server choice with own-server guidance, hosted and
   own-server sign-in, Google and Apple sign-in, password reset for hosted accounts, share sheet, native
   purchase sheet. iPhone only in version 1.
 - A permission step before saved content is sent to an AI service (kept per account, switch in Settings).
   The interface enforces it; the server does not refuse AI routes without it.
-- Privacy policy and terms links in Settings and on the unlock screen; privacy, terms, support and account
-  deletion pages on the public site; the store listing pack in `docs/store/`.
+- Privacy policy and terms links in Settings and on the unlock screen. Privacy, terms, support and account
+  deletion pages in `web/`, published only once `web/site.json` has a contact address (it is empty, so the
+  links lead nowhere today). The store listing pack in `docs/store/`.
+- A flower border where a page ends, an empty library that teaches saving, Start cooking pinned on a recipe
+  save, and a garden on the phone app's first screens, which fit the screen without scrolling.
 - Revoking a Sign in with Apple when an account is deleted (off until the Apple key is set).
 - Release validation was last green on main at `038f7e7`.
 
@@ -53,8 +57,9 @@ in the linked docs, not here. Last updated: 2026-11-16.
 
 ## Not built
 
-- A scheduled refund follow-up for web payments; Arabic.
+- Following a refund of a web payment automatically (the operator removes the unlock by hand); Arabic.
 - Browser sign-in for hosted accounts beyond the pay page (hosted mode serves the API only).
+- Server-side refusal of AI routes without the permission (the interface asks; the server does not check).
 
 ## Never run for real
 
@@ -65,7 +70,8 @@ in the linked docs, not here. Last updated: 2026-11-16.
 ## Waiting on the owner
 
 - The unlock price (stores and KWD), the Tap secret key (test first), Apple Pay domain verification in Tap.
-- A public contact address: the four site pages show `support@[owner to set]`.
+- A public contact address in `web/site.json`; until then the four site pages are not published.
+- On the hosted server for the pay page: the Supabase publishable key and `/pay` as a redirect address.
 - Publish the Google sign-in setup before real users. Register the share extension id and the app group
   with Apple; create a Sign in with Apple key for revocation.
 - An Android upload keystore kept outside the repository, and Play App Signing.
