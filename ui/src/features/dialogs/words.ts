@@ -7,5 +7,5 @@ export function deletionWords(result: AccountDeletion): { title: string; body: s
   if (result.auth_deletion === 'pending') {
     return { title: 'Your library is deleted', body: result.detail || 'Your sign-in could not be removed just yet. The service keeps trying until it is gone; there is nothing more you need to do.' };
   }
-  return { title: 'Your library is deleted', body: 'This service is not set up to remove sign-ins, so your email is still registered with its sign-in provider. Ask whoever runs the service to remove it.' };
+  return { title: 'Your library is deleted', body: 'This service is not set up to remove sign-ins, so your sign-in is still registered with its sign-in provider. Ask whoever runs the service to remove it.' };
 }
