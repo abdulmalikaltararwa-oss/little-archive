@@ -65,7 +65,10 @@ jobs:
 
           # Checked here, apart from the build script that made the folder: this is the rule for what goes public.
           root = Path('dist-demo')
-          fixed = {'index.html', 'theme-init.js', 'icon.svg', 'LICENSE', '.nojekyll', '.little-archive-demo-build'}
+          # The plain pages the apps link to, their stylesheet and its one font: fixed names, nothing else.
+          pages = {'privacy.html', 'terms.html', 'support.html', 'delete-account.html'}
+          fixed = {'index.html', 'theme-init.js', 'icon.svg', 'LICENSE', '.nojekyll', '.little-archive-demo-build',
+                   'pages.css', 'fonts/fraunces-soft.woff2'} | pages
           hashed = re.compile(r'assets/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?|webp)')
           paths = list(root.rglob('*'))
           if any(path.is_symlink() for path in paths):
@@ -73,8 +76,8 @@ jobs:
           dirs = {str(path.relative_to(root)) for path in paths if path.is_dir()}
           files = [path for path in paths if not path.is_dir()]
           names = {str(path.relative_to(root)) for path in files}
-          if dirs != {'assets'}:
-              raise SystemExit(f'Unexpected demo artifact folders: {sorted(dirs ^ {"assets"})}')
+          if dirs != {'assets', 'fonts'}:
+              raise SystemExit(f'Unexpected demo artifact folders: {sorted(dirs ^ {"assets", "fonts"})}')
           unexpected = sorted(name for name in names if name not in fixed and not hashed.fullmatch(name))
           if unexpected:
               raise SystemExit(f'Unexpected demo artifact files: {unexpected}')
@@ -92,6 +95,23 @@ jobs:
           page = (root / 'index.html').read_text(encoding='utf-8')
           if "connect-src 'none'" not in page or re.search(r'rel="(?:manifest|apple-touch-icon)"', page):
               raise SystemExit('The demo page must forbid every connection and must not link the installable app.')
+          # The plain pages run no script and load only the stylesheet and the icon beside them.
+          for name in sorted(pages):
+              text = (root / name).read_text(encoding='utf-8')
+              if "default-src 'none'" not in text or re.search(r'<script\b|<iframe\b|<form\b', text, re.I):
+                  raise SystemExit(f'{name} must be a plain page: no script, frame or form, and nothing loaded by default.')
+              loaded = set(re.findall(r'<(?:link|img)\b[^>]*\s(?:href|src)="([^"]*)"', text))
+              if loaded != {'./icon.svg', './pages.css'}:
+                  raise SystemExit(f'{name} loads {sorted(loaded)}; only ./icon.svg and ./pages.css are published for it.')
+              for link in re.findall(r'<a\b[^>]*\shref="([^"]*)"', text):
+                  target = link.split('#')[0]
+                  if link.startswith('https://') or target in {'', './'}:
+                      continue
+                  if not target.startswith('./') or target[2:] not in pages:
+                      raise SystemExit(f'{name} links to {link}, which is not published.')
+          styles = (root / 'pages.css').read_text(encoding='utf-8')
+          if '@import' in styles or re.findall(r'url\(([^)]*)\)', styles) != ["'./fonts/fraunces-soft.woff2'"]:
+              raise SystemExit('pages.css must load only its own font file.')
           # No credential-shaped text in anything published.
           for path in files:
               if path.suffix in {'.js', '.css', '.html', '.svg'}:
