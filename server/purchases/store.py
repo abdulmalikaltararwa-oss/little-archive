@@ -10,6 +10,9 @@ The rules, each in one place here:
 * Deleting an account releases what it held, so the person can unlock a new account with the same purchase, except a purchase
   the store took back: that stays marked, with no account on it, and can never unlock anyone.
 * A refund can arrive before the person ever redeems the purchase. It is recorded the same way, so redeeming it afterwards fails.
+* A payment at Tap is started by this server, so it has a row of its own first (`tap_attempts`): which account asked, for how much,
+  and the charge Tap made for it. Only a charge with such a row can unlock anyone, and only the account in the row. The row is
+  deleted with the account, so the charge of a deleted account can never be presented again.
 * A store's events carry their own time. An older event than the one that last set a purchase's state is ignored, and an event
   is acted on once (the store may send it again).
 """
@@ -27,6 +30,10 @@ CREATE TABLE IF NOT EXISTS purchases(
  state_at INTEGER NOT NULL DEFAULT 0, reason TEXT NOT NULL DEFAULT '', tag_matched INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(provider, purchase_key));
 CREATE INDEX IF NOT EXISTS purchases_by_user ON purchases(user_id);
+CREATE TABLE IF NOT EXISTS tap_attempts(
+ order_ref TEXT PRIMARY KEY, idempotent_ref TEXT NOT NULL, user_id TEXT NOT NULL, charge_id TEXT UNIQUE, amount TEXT NOT NULL, currency TEXT NOT NULL,
+ live INTEGER NOT NULL, url TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'INITIATED', created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS tap_attempts_by_user ON tap_attempts(user_id, created_at);
 CREATE TABLE IF NOT EXISTS purchase_events(provider TEXT NOT NULL, event_id TEXT NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(provider, event_id));
 """
 EVENT_DAYS = 30
@@ -131,3 +138,31 @@ class PurchaseStore:
         with self._transaction() as c:
             c.execute("DELETE FROM purchases WHERE user_id=? AND state<>'revoked'", (user_id,))
             c.execute("UPDATE purchases SET user_id='' WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM tap_attempts WHERE user_id=?", (user_id,))
+
+    # -- payments started at Tap -------------------------------------------------------------------------------
+    def tap_begin(self, order_ref, idempotent_ref, user_id, amount, currency, live):
+        """Write down a payment before Tap is asked for it. Attempts that never reached a paid charge are dropped after a month."""
+        now = int(self.clock())
+        with self._transaction() as c:
+            c.execute("DELETE FROM tap_attempts WHERE created_at<? AND status<>'CAPTURED'", (now - EVENT_DAYS * 86400,))
+            c.execute("INSERT INTO tap_attempts(order_ref,idempotent_ref,user_id,amount,currency,live,created_at) VALUES(?,?,?,?,?,?,?)", (order_ref, idempotent_ref, user_id, amount, currency, int(live), now))
+
+    def tap_attach(self, order_ref, charge_id, url):
+        with self._transaction() as c:
+            c.execute("UPDATE tap_attempts SET charge_id=?,url=? WHERE order_ref=? AND charge_id IS NULL", (charge_id, url, order_ref))
+
+    def tap_attempt(self, charge_id):
+        with self._transaction() as c:
+            row = c.execute("SELECT * FROM tap_attempts WHERE charge_id=?", (charge_id,)).fetchone()
+            return dict(row) if row else None
+
+    def tap_latest(self, user_id):
+        """The account's most recent payment that reached Tap, or None."""
+        with self._transaction() as c:
+            row = c.execute("SELECT * FROM tap_attempts WHERE user_id=? AND charge_id IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1", (user_id,)).fetchone()
+            return dict(row) if row else None
+
+    def tap_status(self, charge_id, status):
+        with self._transaction() as c:
+            c.execute("UPDATE tap_attempts SET status=? WHERE charge_id=?", (status[:40], charge_id))

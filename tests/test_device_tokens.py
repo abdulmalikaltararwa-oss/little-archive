@@ -34,7 +34,9 @@ PUBLIC = {("GET", "/api/health"), ("GET", "/api/discovery"), ("GET", "/api/auth/
 IMPORT_ONLY = {("GET", "/api/extension/status"), ("POST", "/api/extension/imports"),
                ("POST", "/api/extension/imports/{rid}/batches"), ("POST", "/api/extension/imports/{rid}/finish")}
 HOSTED_ONLY = {("POST", "/api/account/delete"), ("GET", "/api/purchases"), ("POST", "/api/purchases/apple"), ("POST", "/api/purchases/google"),
-               ("POST", "/api/purchases/apple/notifications"), ("POST", "/api/purchases/google/notifications")}  # answer 404 on a self-hosted library, whoever asks
+               ("POST", "/api/purchases/apple/notifications"), ("POST", "/api/purchases/google/notifications"),
+               ("POST", "/api/purchases/tap/start"), ("POST", "/api/purchases/tap/confirm"), ("GET", "/api/purchases/tap/return"),
+               ("POST", "/api/purchases/tap/notifications")}  # answer 404 on a self-hosted library, whoever asks
 
 
 def api_routes(app):

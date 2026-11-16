@@ -85,6 +85,12 @@ class Config:
     google_allow_test_purchases: bool = False
     google_rtdn_audience: str = ""
     google_rtdn_service_account: str = ""
+    # The same unlock sold on the web through Tap Payments (server/purchases/tap.py). Off until both the key and the price are set.
+    tap_secret_key: str = field(default="", repr=False)   # sk_test_... or sk_live_...; never logged, shown or returned by any route
+    tap_price: str = ""                      # what the unlock costs, as a decimal in the currency's own places: "2.500" for KWD
+    tap_currency: str = "KWD"
+    tap_return_url: str = ""                 # where Tap sends the buyer afterwards; empty means this server's own small page
+    tap_merchant_id: str = ""                # only for a Tap account with more than one merchant
 
     @classmethod
     def from_env(cls, values=None):
@@ -135,6 +141,11 @@ class Config:
             google_allow_test_purchases=str(values.get("LA_GOOGLE_ALLOW_TEST_PURCHASES", "")).strip().lower() in {"1", "true", "yes", "on"},
             google_rtdn_audience=values.get("LA_GOOGLE_RTDN_AUDIENCE", "").strip(),
             google_rtdn_service_account=values.get("LA_GOOGLE_RTDN_SERVICE_ACCOUNT", "").strip(),
+            tap_secret_key=values.get("LA_TAP_SECRET_KEY", "").strip(),
+            tap_price=values.get("LA_TAP_PRICE", "").strip(),
+            tap_currency=values.get("LA_TAP_CURRENCY", "").strip().upper() or "KWD",
+            tap_return_url=values.get("LA_TAP_RETURN_URL", "").strip(),
+            tap_merchant_id=values.get("LA_TAP_MERCHANT_ID", "").strip(),
         )
 
     def validate(self):
@@ -250,6 +261,33 @@ class Config:
             raise ValueError("LA_GOOGLE_SERVICE_ACCOUNT_FILE must be an absolute path.")
         if self.google_service_account_file and Path(self.google_service_account_file).resolve().is_relative_to((Path(__file__).resolve().parent.parent).resolve()):
             raise ValueError("LA_GOOGLE_SERVICE_ACCOUNT_FILE must be outside the source tree: a key file does not belong in the repository.")
+        self._validate_tap()
+
+    def _validate_tap(self):
+        """Tap is off unless LA_TAP_SECRET_KEY and LA_TAP_PRICE are both set. No message here ever contains the key."""
+        from .purchases.tap import DECIMALS, KEY, money
+        if self.tap_secret_key and not KEY.fullmatch(self.tap_secret_key):
+            raise ValueError("LA_TAP_SECRET_KEY must be a Tap secret key (sk_test_... or sk_live_...), on one line. A publishable key (pk_...) cannot make a charge.")
+        if bool(self.tap_secret_key) != bool(self.tap_price):
+            raise ValueError("Set both LA_TAP_SECRET_KEY and LA_TAP_PRICE, or neither.")
+        if self.tap_currency not in DECIMALS:
+            raise ValueError("LA_TAP_CURRENCY must be one of " + ", ".join(sorted(DECIMALS)) + ".")
+        if self.tap_price:
+            places = DECIMALS[self.tap_currency]
+            amount = money(self.tap_price, self.tap_currency)
+            if amount is None or len(self.tap_price) > 16 or not re.fullmatch(r"[0-9]+(\.[0-9]+)?", self.tap_price):
+                raise ValueError(f"LA_TAP_PRICE must be a positive amount with at most {places} decimal places for {self.tap_currency}, such as {'2.500' if places == 3 else '9.99'}.")
+            if self.tap_currency == "KWD" and amount * 10 < 1:
+                raise ValueError("LA_TAP_PRICE must be at least 0.100 KWD, the smallest charge Tap makes.")
+        if self.tap_merchant_id and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.tap_merchant_id):
+            raise ValueError("LA_TAP_MERCHANT_ID must be the merchant id from the Tap dashboard.")
+        if self.tap_return_url:
+            if _unsafe_text(self.tap_return_url) or len(self.tap_return_url) > 2048:
+                raise ValueError("LA_TAP_RETURN_URL must be bounded text without control characters.")
+            r = urlsplit(self.tap_return_url)
+            _ = r.port
+            if r.scheme not in {"http", "https"} or not r.hostname or r.username or r.password or r.query or r.fragment or (r.scheme == "http" and r.hostname not in LOOPBACK):
+                raise ValueError("LA_TAP_RETURN_URL must be an HTTPS page address without a query; Tap adds ?tap_id=... to it.")
 
     def require_account_deletion(self):
         """Hosted mode must be able to delete a person's sign-in with their library (App Store guideline 5.1.1(v)).

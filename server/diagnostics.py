@@ -66,6 +66,11 @@ def _hosted_checks(database, config):
         rows.append(check("database", "failed", "single_owner_library_present", "The data location holds a single-owner library, which hosted mode refuses to start beside.", "Choose a separate data directory for hosted mode."))
     else:
         rows.append(check("database", "passed", "per_account_libraries", "Hosted mode keeps one library per account. Diagnostics did not open or count them."))
+    # Only whether it is set: the key, the price and Tap itself are never printed or contacted.
+    if config.tap_secret_key and config.tap_price:
+        rows.append(check("tap_payments", "passed", "tap_configured", "Tap Payments is configured for the web unlock. Tap was not contacted."))
+    else:
+        rows.append(check("tap_payments", "passed", "tap_not_configured", "Tap Payments is not configured, so the web unlock is off and its routes say so."))
     rows.append(check("owner_access", "passed", "identity_provider_sign_in", "Hosted mode verifies identity-provider access tokens; there is no owner password. Signing keys were not requested."))
     for name in HOSTED_DEPENDENCIES:
         try:

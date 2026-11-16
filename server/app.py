@@ -155,7 +155,7 @@ class BodyLimitMiddleware:
 
 
 def create_app(config: Config | None = None, *, identity=None, entitlements=None, auth_admin=None, purchase_clients=None):
-    """`identity`, `entitlements`, `auth_admin` and `purchase_clients` (`apple`, `google`, `push`) replace the hosted defaults (tests, future providers)."""
+    """`identity`, `entitlements`, `auth_admin` and `purchase_clients` (`apple`, `google`, `push`, `tap`) replace the hosted defaults (tests, future providers)."""
     config = config or Config.from_env()
     config.validate()
     config.require_account_deletion()
