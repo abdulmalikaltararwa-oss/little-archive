@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -50,9 +51,11 @@ interface Setup { pinned?: boolean; features: Features | null; settings?: Partia
 
 /** The section and the pinned bar the way the save's detail holds them: one answer, shared. */
 function Pinned() {
-  const state = useSaveRecipe(ITEM.id);
+  const [visit, setVisit] = useState(1);
+  const state = useSaveRecipe(ITEM.id, visit);
   return (
     <>
+      <button type="button" onClick={() => setVisit(count => count + 1)}>Reopen</button>
       <RecipeSection item={ITEM} state={state} pinned />
       <footer><CookBar item={ITEM} state={state} /></footer>
     </>
@@ -220,6 +223,18 @@ describe('the way into cook mode pinned to a save’s detail', () => {
     expect(screen.queryByTestId('cook-facts')).toBeNull();
     await userEvent.click(look);
     expect(await screen.findByRole('button', { name: 'Start cooking' })).toBeInTheDocument();
+  });
+
+  it('asks again when the save is opened again, and drops the bar if the card is no longer a recipe', async () => {
+    const get = vi.fn()
+      .mockResolvedValueOnce(answer('extracted', recipe()))
+      .mockResolvedValue({ ...answer('not_a_recipe', recipe({ is_recipe: false, reason: 'not_a_recipe' })), edited: true });
+    const { request } = view({ pinned: true, features: features({}), get });
+    expect(await screen.findByRole('button', { name: 'Start cooking' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Reopen' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Start cooking' })).toBeNull());
+    expect(screen.getByText(/You marked this save as not a recipe/)).toBeInTheDocument();
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it('is not shown for a save marked as not a recipe', async () => {

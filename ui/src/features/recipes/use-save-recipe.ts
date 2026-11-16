@@ -25,8 +25,13 @@ export interface SaveRecipe {
   retry(): void;
 }
 
-/** Asks once whether a save has a recipe. Nothing is asked without an id, or while recipes are locked or not offered here. */
-export function useSaveRecipe(id: string): SaveRecipe {
+/**
+ * Asks whether a save has a recipe. Nothing is asked without an id, or while recipes are locked or not offered here.
+ * `visit` is for a caller that outlives the save's time on screen (the detail panel stays mounted): a new value asks
+ * again, so a card that was edited or marked not a recipe since is not shown as it was. The last answer stays on
+ * show until the new one arrives.
+ */
+export function useSaveRecipe(id: string, visit = 0): SaveRecipe {
   const archive = useArchive();
   const feature = useFeature('recipes');
   const [known, setKnown] = useState<Known | null>(null);
@@ -40,7 +45,7 @@ export function useSaveRecipe(id: string): SaveRecipe {
       (error: unknown) => { if (!stale) setKnown(isLocked(error) ? { id, phase: 'locked' } : { id, phase: 'error', message: errorMessage(error) }); },
     );
     return () => { stale = true; };
-  }, [archive, feature, id, reload]);
+  }, [archive, feature, id, reload, visit]);
 
   const current = known && known.id === id ? known : null;
   const response = current?.phase === 'ready' ? current.response : null;

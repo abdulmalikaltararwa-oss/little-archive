@@ -408,10 +408,14 @@ export function DetailPanel() {
   const [opener, setOpener] = useState<FocusMemory | null>(null);
   const [dirty, setDirtyState] = useState(false);
   const [seenId, setSeenId] = useState('');
+  // Counts the times a save has been opened. The panel stays mounted between them, so what it asks once per save
+  // (its recipe) is asked again on each opening.
+  const [visit, setVisit] = useState(0);
   if (id !== seenId) {
     setSeenId(id);
     if (id) {
       setViewId(id);
+      setVisit(count => count + 1);
       setDirtyState(false);
       // Focus returns to whatever opened the panel, found again by its save if the card was re-rendered.
       // Moving from one open save straight to the next keeps the original opener.
@@ -452,8 +456,8 @@ export function DetailPanel() {
 
   const current = loaded.id === viewId ? loaded : null;
   const item = current?.item ?? known ?? null;
-  // Whether this save has a recipe to cook from. Asked once, for the section in the body and the bar in the footer.
-  const recipe = useSaveRecipe(item?.id ?? '');
+  // Whether this save has a recipe to cook from. Asked once per opening, for the section in the body and the bar in the footer.
+  const recipe = useSaveRecipe(item?.id ?? '', visit);
   const cook = canCook(recipe);
   const error = current?.error ?? '';
   const version = current?.version ?? 0;
