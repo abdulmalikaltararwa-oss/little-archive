@@ -27,10 +27,13 @@ in the linked docs, not here. Last updated: 2026-11-16.
   native purchase sheet.
 - Release validation is green on main at `4cd0fae`.
 
-## Built, not merged
+## Built, merged locally, not pushed
 
-- Google and Apple sign-in in the phone app: on a branch, under review fixes. Proven against a local stand-in
-  only; Apple's sheet has never been shown.
+- Google and Apple sign-in in the phone app (`6ee5138`). The gate passed on that commit. Proven against a local
+  stand-in only: Google on an iOS simulator, the interrupted-sign-in notice on an Android emulator. Apple's
+  sheet has never been shown, and no real Supabase, Google or Apple account has been used.
+- Known fault: on the account screen the keyboard slides the logo under the status bar. It needs the web
+  view's keyboard handling (a keyboard plugin), not CSS.
 
 ## Running
 
