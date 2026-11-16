@@ -94,12 +94,12 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 
 /* "Continue with Apple" and "Continue with Google" (ui.js, the account screen), above the email form. They are drawn here,
    modelled on each brand's button guidelines: the brands' colours and wording ("Continue with …"), finger sized (48px), and pills
-   like the app's other buttons. They are not the brands' own components. Known differences, not yet fixed: the Apple logo is an
-   Apple mark as an SVG path, not the artwork Apple supplies for this button; the title is 16px in a 48px button, below the
-   proportion Apple suggests (about 43% of the height); and the Google button uses the system font where the phone has no Roboto.
-   The Apple button is a small App Review risk for those reasons (docs/mobile-app.md, the risks). */
+   like the app's other buttons. They are not the brands' own components. Known differences: the Apple logo is an Apple mark as
+   an SVG path, not the artwork Apple supplies for this button (that artwork may not be redistributed here), and the Google
+   button uses the system font where the phone has no Roboto. The Apple button stays a small App Review risk for the first
+   reason (docs/mobile-app.md, the risks). */
 .native-socials { display: flex; flex-direction: column; gap: 12px; margin-bottom: 4px; }
-.native-social { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid transparent; font-family: inherit; font-size: 1rem; font-weight: 500; line-height: 1.25; -webkit-tap-highlight-color: transparent; transition: transform var(--dur-1, 120ms) ease, opacity var(--dur-2, 200ms) ease; }
+.native-social { --social-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: var(--social-height); padding: 0 20px; border-radius: 999px; border: 1px solid transparent; font-family: inherit; font-size: 1rem; font-weight: 500; line-height: 1.25; -webkit-tap-highlight-color: transparent; transition: transform var(--dur-1, 120ms) ease, opacity var(--dur-2, 200ms) ease; }
 .native-social svg { flex: none; }
 .native-social:active { transform: scale(.98); }
 .native-social:disabled { opacity: .55; cursor: not-allowed; }
@@ -109,8 +109,12 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
    notice that takes focus when its view appears is not a control and never draws one. */
 .native-screen .native-quiet:focus, .native-screen .native-quiet:focus-visible { outline: none; }
 .native-screen h1:focus, .native-screen .notice:focus { outline: none; }
-/* Apple: black with a white logo; white with a black logo where the background is dark. The system font. */
-.native-social-apple { background: #000; color: #fff; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; }
+/* Apple: black with a white logo; white with a black logo where the background is dark. The system font, with the title at
+   43% of the button's height as Apple's guidelines for a custom Sign in with Apple button ask (20.64px in 48px). The mark is
+   16px high with about 8px between it and the title, which is what Apple's own button measures at this height (ui.js draws the
+   mark in a 16px box with 2px of empty space on each side, hence the 6px gap). The title stays on one line; the side padding
+   keeps Apple's minimum margin (8% of the width) on the narrowest phone. */
+.native-social-apple { gap: 6px; padding: 0 8%; background: #000; color: #fff; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: calc(var(--social-height) * .43); line-height: 1.2; white-space: nowrap; }
 :root[data-theme='dark'] .native-social-apple { background: #fff; color: #000; }
 /* Google: white with a 1px #747775 stroke and #1F1F1F text; #131314 with an #8E918F stroke and #E3E3E3 text on dark. The G keeps its colours. */
 .native-social-google { background: #fff; border-color: #747775; color: #1f1f1f; font-family: Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif; }
