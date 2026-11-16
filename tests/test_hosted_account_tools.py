@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+import warnings
 import tempfile
 from threading import Thread
 import unittest
@@ -89,8 +90,10 @@ class DeleteAccountCommandTests(unittest.TestCase):
 
     def run_command(self, *arguments, typed=None, environment=None):
         out, err = io.StringIO(), io.StringIO()
-        with patch.dict(os.environ, environment or self.environment, clear=True), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+        # The interpreter's own warnings (an unclosed database noticed at collection time) are not the command's words.
+        with warnings.catch_warnings(), patch.dict(os.environ, environment or self.environment, clear=True), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
              patch("builtins.input", side_effect=[typed] if typed is not None else AssertionError("no question may be asked")):
+            warnings.simplefilter("ignore")
             code = cli.main(["delete-account", *arguments, "--env-file", str(self.root / "absent.env")])
         return code, out.getvalue(), err.getvalue()
 
