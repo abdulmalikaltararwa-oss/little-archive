@@ -65,6 +65,17 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
   document.addEventListener('pointerdown', () => { touched = true; }, true);
   document.addEventListener('keydown', () => { touched = false; }, true);
 
+  // The app ends the web view at the keyboard, so the page changes size when the keyboard comes up, changes height or the phone
+  // is turned. The web view shows a field when it takes focus, not after a later change of size, so keep the field that is being
+  // typed in on screen. This stays for the interface too, once it has replaced these screens. On Android the keyboard changes the
+  // size of the visual viewport only, which has its own event.
+  const showField = () => {
+    const field = document.activeElement;
+    if (field?.matches?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) field.scrollIntoView({ block: 'nearest' });
+  };
+  document.defaultView?.addEventListener('resize', showField);
+  document.defaultView?.visualViewport?.addEventListener('resize', showField);
+
   /** Focus a control from script. After a touch it gets no focus ring (native.css, .native-quiet), until focus next leaves it. */
   function focusQuietly(node) {
     if (!node?.isConnected) return;

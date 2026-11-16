@@ -268,3 +268,14 @@ test('after "we sent you a message" the screen is redrawn on Sign in and focus i
   assert.equal(usable(page).length, page.buttons.length, 'and the new screen is not left locked');
   assert.equal(page.$('input[name=password]').value, '');
 });
+
+test('when the page changes size (the keyboard, a turned phone) the field being typed in is brought back on screen, and nothing else is', { skip }, t => {
+  const page = open(t, { social: async () => null });
+  const shown = [];
+  page.window.Element.prototype.scrollIntoView = function scrollIntoView(options) { shown.push([this.getAttribute('name') || this.tagName, options]); };
+  page.window.dispatchEvent(new page.window.Event('resize'));
+  assert.deepEqual(shown, [], 'focus is on the heading: nothing to bring back');
+  page.$('input[name=email]').focus();
+  page.window.dispatchEvent(new page.window.Event('resize'));
+  assert.deepEqual(shown, [['email', { block: 'nearest' }]]);
+});
