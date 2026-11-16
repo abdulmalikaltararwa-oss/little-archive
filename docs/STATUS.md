@@ -73,10 +73,8 @@ in the linked docs, not here. Last updated: 2026-11-16.
   with Apple; create a Sign in with Apple key for revocation.
 - An Android upload keystore kept outside the repository, and Play App Signing.
 - Check the Supabase reset-password email template and try one reset against staging.
-- Arabic: the interface is English only today.
-- Store accounts: agreements, tax and banking, sandbox testers, listings (text is in `docs/store/`).
+- Arabic (the interface is English only today). Store accounts: agreements, tax and banking, sandbox testers, listings (text is in `docs/store/`).
 
 ## Rules of the road
 
-[AGENTS.md](../AGENTS.md), "Working rules for builders and reviewers": the gate, the candidate-branch push,
-quoted proof steps, the task sheet, the fresh reviewer.
+[AGENTS.md](../AGENTS.md), "Working rules for builders and reviewers".
