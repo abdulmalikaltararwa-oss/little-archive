@@ -51,6 +51,12 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-has-band.native-band-tall { --band-h: calc(var(--safe-top) + 292px); }
 .native-band { position: relative; box-sizing: border-box; flex: none; display: flex; flex-direction: column; min-height: var(--band-h); margin: 0 calc(-24px - var(--safe-end)) 16px calc(-24px - var(--safe-start)); padding: calc(var(--safe-top) + 28px) calc(var(--safe-end) + 24px) 0 calc(var(--safe-start) + 24px); overflow: hidden; }
 .native-band, .native-has-band::before { background-color: var(--card-2); background-image: var(--hero-paper); background-position: 0 0; background-size: 100% var(--band-h); background-repeat: no-repeat; }
+/* The band's own paper covers all of it. That is --band-h, and the strip's size, unless larger text has made the band taller. */
+.native-band { background-size: 100% 100%; }
+/* compact: the logo and the garden side by side, with the space under the logo kept inside the band (so a taller logo line,
+   with larger text, makes the band taller and the grass stays under it). */
+.native-band-compact .native-band { flex-direction: row; align-items: flex-start; padding-bottom: 18px; padding-inline-end: 0; }
+.native-band-compact .native-brand { flex: none; }
 .native-has-band::before { left: 50%; right: auto; width: min(440px, 100%); transform: translateX(-50%); }
 .native-band .native-brand { margin-bottom: 0; }
 .native-tagline { margin: 18px 0 0; font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 2.125rem; line-height: 1.06; letter-spacing: -.02em; font-variation-settings: 'SOFT' 100, 'WONK' 0; color: var(--ink); max-width: 9em; }
@@ -58,15 +64,19 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 /* The garden. Decoration: it takes no tap and no selection, and is drawn faintly from the flower tokens (the stems in sage,
    each head in its species' colour), with opacity doing the fading so the tokens are used as they are in both themes. Plants
    stand on one baseline, each a <pre> in the mono face, so their columns line up.
-   compact: the bed lies along the band's foot, out of the flow. Its first row, grass, takes the width under the logo; the
-   flowers are the second row, at the end of the band, beside the name and never behind it.
+   compact: the bed fills the width the name leaves and adds no height. The grass (the first row) lies along the band's foot
+   under the logo. The flowers (the second row) stand in the width the name leaves, beside it and never behind it: the row wraps upward and is clipped to one line, so
+   with a longer name (larger text) or a narrower phone the flowers that do not fit are left out whole.
    tall: one full row under the line, in the flow, so a longer line pushes it down and never runs over it. */
 .native-garden { display: flex; align-items: flex-end; opacity: .6; pointer-events: none; -webkit-user-select: none; user-select: none; }
 :root[data-theme='dark'] .native-garden { opacity: .68; }
 .native-garden-row { display: flex; align-items: flex-end; }
-.native-band-compact .native-garden { position: absolute; inset: auto 0 0 0; }
-.native-band-compact .native-garden-row:first-child { flex: 1; justify-content: space-around; }
-.native-band-compact .native-garden-row:last-child { flex: none; gap: 9px; padding-inline: 4px 12px; }
+.native-band-compact .native-garden { position: relative; flex: 1; min-width: 0; align-self: stretch; margin: -24px 0 -18px; }
+.native-band-compact .native-garden-row:first-child { position: absolute; inset: auto 100% 0 auto; width: 176px; justify-content: space-between; padding-inline: 8px; }
+.native-band-compact .native-garden-row:last-child { position: absolute; inset: auto 0 0 0; height: 78px; overflow: hidden; flex-wrap: wrap-reverse; justify-content: flex-end; align-items: flex-start; align-content: flex-start; gap: 0 9px; padding-inline: 5px 12px; }
+/* An empty first item, as tall as the row: a line that already holds something wraps a plant that does not fit, where an
+   empty line would keep it and show half of it, and the line it holds is the one line that shows. */
+.native-band-compact .native-garden-row:last-child::before { content: ''; flex: none; width: 0; height: 78px; }
 .native-band-tall .native-garden { margin: auto calc(-24px - var(--safe-end)) 0 calc(-24px - var(--safe-start)); padding-top: 12px; }
 .native-band-tall .native-garden-row { flex: 1; justify-content: space-around; }
 .native-plant { flex: none; margin: 0; padding: 0; border: 0; background: none; font-family: var(--font-mono, 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace); font-size: 10px; line-height: 1.12; letter-spacing: 0; font-variant-ligatures: none; white-space: pre; text-align: left; color: var(--sage); }
@@ -80,7 +90,7 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 /* A narrow phone has no room for every plant; the ones marked for it are left out whole, so none is cut in half. */
 @media (max-width: 359px) { .native-plant-roomy { display: none; } }
 /* The keyboard is up (the iOS app marks the root, MainViewController.swift): the bed goes, so nothing decorative shares the
-   short screen with the field being typed in. On the compact band it is out of the flow, so no field moves when it goes. */
+   short screen with the field being typed in. On the compact band it adds no height, so no field moves when it goes. */
 :root[data-keyboard] .native-garden { display: none; }
 /* A slow sway of the flower heads, only for someone who has not asked for less motion, and never while there is an error or a
    notice to read: then the garden is completely still. Still is also what a web view without :has() gets (iOS before 15.4),
