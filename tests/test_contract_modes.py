@@ -248,7 +248,7 @@ class LibraryContract(ContractScenarios):
 
     def test_settings_demo_seed_and_ai_disabled_state(self):
         self.assertEqual(self.ok("GET", "/api/settings").json(), {
-            "remote_previews": False, "ai_enabled": False, "ai_available": False, "ai_model": "", "ai_provider": "", "ai_hosted": False,
+            "remote_previews": False, "ai_sharing_allowed": False, "ai_enabled": False, "ai_available": False, "ai_model": "", "ai_provider": "", "ai_hosted": False,
             "page_fetch_enabled": False, "transcription_available": False, "shared_cache_enabled": False})
         self.assertTrue(self.ok("PATCH", "/api/settings", {"remote_previews": True}).json()["remote_previews"])
         self.assertEqual(self.ok("POST", "/api/demo").json(), {"created": 15})

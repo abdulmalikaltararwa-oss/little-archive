@@ -459,6 +459,18 @@ class APIIntegrationTests(unittest.TestCase):
         changed = self.write("PATCH", "/api/settings", {"remote_previews": True})
         self.assertTrue(changed.json()["remote_previews"])
 
+    def test_ai_sharing_permission_is_off_until_given_and_patches_touch_only_what_they_name(self):
+        self.assertFalse(self.client.get("/api/settings").json()["ai_sharing_allowed"])
+        self.write("PATCH", "/api/settings", {"remote_previews": True})
+        allowed = self.write("PATCH", "/api/settings", {"ai_sharing_allowed": True}).json()
+        self.assertTrue(allowed["ai_sharing_allowed"])
+        self.assertTrue(allowed["remote_previews"])  # naming one setting leaves the other as it was
+        withdrawn = self.write("PATCH", "/api/settings", {"remote_previews": False, "ai_sharing_allowed": False}).json()
+        self.assertEqual((withdrawn["remote_previews"], withdrawn["ai_sharing_allowed"]), (False, False))
+        self.assertTrue(self.write("PATCH", "/api/settings", {"remote_previews": True}).json()["remote_previews"])
+        self.assertFalse(self.client.get("/api/settings").json()["ai_sharing_allowed"])
+        self.assertEqual(self.write("PATCH", "/api/settings", {"ai_sharing_allowed": "yes please", "extra": 1}).status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

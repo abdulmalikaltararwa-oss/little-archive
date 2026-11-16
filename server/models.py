@@ -123,7 +123,8 @@ class ImportFinish(StrictModel):
 
 
 class SettingsPatch(StrictModel):
-    remote_previews: bool
+    remote_previews: bool | None = None
+    ai_sharing_allowed: bool | None = None  # the owner's yes to sending saved content to a third-party AI service
 
 
 class AIJobs(StrictModel):
