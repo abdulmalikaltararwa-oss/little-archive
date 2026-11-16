@@ -209,7 +209,7 @@ export interface Account {
   storage: { used_bytes: number; quota_bytes: number | null };
   entitlements: {
     unlocked: boolean;
-    unlocked_via?: null | 'apple' | 'google' | 'manual' | 'owner';
+    unlocked_via?: null | 'apple' | 'google' | 'tap' | 'manual' | 'owner';
     deep_reads: AllowanceWindow;
     suggestions?: { daily: AllowanceWindow; monthly: AllowanceWindow };
     feature_calls?: { daily: AllowanceWindow; monthly: AllowanceWindow };
@@ -227,8 +227,8 @@ export interface AccountDeletion {
 /** GET /api/purchases (hosted only). */
 export interface Purchases {
   unlocked: boolean;
-  unlocked_via: null | 'apple' | 'google' | 'manual' | 'owner';
-  purchases: { provider: 'apple' | 'google'; product_id: string; status: 'active' | 'revoked'; environment?: string }[];
+  unlocked_via: null | 'apple' | 'google' | 'tap' | 'manual' | 'owner';
+  purchases: { provider: 'apple' | 'google' | 'tap'; product_id: string; status: 'active' | 'revoked'; environment?: string }[];
 }
 
 /** What a store hands the app after a purchase; the server verifies it and nothing else can unlock an account. */

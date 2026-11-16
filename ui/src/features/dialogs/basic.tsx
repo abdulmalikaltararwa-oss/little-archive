@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { AccountDeletion } from '@/data/types';
+import { LegalLink } from '@/components/legal-links';
 import { APPLE_SIGN_IN_NOTE, deletionWords } from './words';
 
 export interface DialogProps<K extends OpenDialog['kind']> {
@@ -291,6 +292,7 @@ export function DeleteAccountDialog({ spec, close }: DialogProps<'delete-account
         <p role="status" className="text-sm leading-relaxed text-ink-soft">{words.body}</p>
         <p className="mt-3 text-sm leading-relaxed text-ink-soft">Copies you exported or backed up are yours and are not affected.</p>
         <p className="mt-3 text-sm leading-relaxed text-ink-soft">{APPLE_SIGN_IN_NOTE}</p>
+        <LegalLink to="privacy" className="mt-1" />
       </Modal>
     );
   }

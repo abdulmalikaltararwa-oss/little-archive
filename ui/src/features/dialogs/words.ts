@@ -3,7 +3,7 @@ import type { AccountDeletion } from '@/data/types';
 
 /** What the server did, in the words for each outcome. The library is always gone; the sign-in may lag behind or stay. */
 export function deletionWords(result: AccountDeletion): { title: string; body: string } {
-  if (result.auth_user_deleted) return { title: 'Your account is deleted', body: 'Your library and your sign-in are both gone. There is nothing left on the service.' };
+  if (result.auth_user_deleted) return { title: 'Your account is deleted', body: 'Your library, your unlock and your sign-in are removed. The service keeps a short record with none of your content: when the deletion happened, for 30 days, and this month’s usage counts until the month ends. A purchase the store took back stays on record, and backups the service made earlier are not changed.' };
   if (result.auth_deletion === 'pending') {
     return { title: 'Your library is deleted', body: result.detail || 'Your sign-in could not be removed just yet. The service keeps trying until it is gone; there is nothing more you need to do.' };
   }

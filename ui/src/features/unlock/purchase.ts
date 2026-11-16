@@ -95,4 +95,8 @@ export async function restore(store: PurchaseBridge, submit: Submit): Promise<Pu
   return fallback;
 }
 
-export const VIA: Record<string, string> = { apple: 'the App Store', google: 'Google Play', manual: 'the service’s operator', owner: 'your own server' };
+/** How an unlock came about, after "through". A web payment is only named, never pointed at. */
+export const VIA: Record<string, string> = { apple: 'the App Store', google: 'Google Play', tap: 'a payment on the web', manual: 'the service’s operator', owner: 'your own server' };
+
+/** One purchase in the list under "Unlocked". */
+export const PURCHASE_NAMES: Record<string, string> = { apple: 'The App Store', google: 'Google Play', tap: 'Bought on the web' };

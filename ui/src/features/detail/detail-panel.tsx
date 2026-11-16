@@ -346,7 +346,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
         <p className="mt-3 text-xs leading-relaxed text-ink-soft">{aiHelp}</p>
         {!demo && deepRead && (deepRead.available || ['queued', 'running'].includes(deepRead.state)) ? (
           <p className="mt-2 text-xs leading-relaxed text-ink-soft">
-            {deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the audio to a transcription service, then reads this save again from what is said. The video itself is never stored.'}
+            {deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the post’s media file (sound and picture) to a transcription service, then reads this save again from what is said. The video itself is never stored.'}
           </p>
         ) : null}
       </section>

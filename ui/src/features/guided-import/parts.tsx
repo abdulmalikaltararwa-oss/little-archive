@@ -4,12 +4,18 @@ import { Fragment, useId, useState, type DragEvent, type ReactNode } from 'react
 import { safeURL } from '@web/utils.js';
 import { cn } from 'cn';
 import { Check, ChevronRight, ExternalLink as ExternalLinkIcon, FileArchive } from 'lucide-react';
+import { useServerWords } from '@/app/archive-context';
 import { Whisper } from '@/components/field';
 import { Ascii } from '@/components/fx/ascii';
 import { NumberTicker } from '@/components/fx/number-ticker';
 import type { ImportState } from './api';
 import { STEPS } from './flow';
 import { formatBytes, STATE_WORDS } from './words';
+
+/** "your server" inside a sentence, or "the service" on a hosted account. */
+export function ServerName({ capital = false }: { capital?: boolean }) {
+  return <>{useServerWords()(capital ? 'Your server' : 'your server')}</>;
+}
 
 /** The five stages, so a person always knows where they are. Not a control: each view has its own way back. */
 export function Rail({ current, done }: { current: number; done: boolean }) {
@@ -66,11 +72,12 @@ export function Panel({ children, className, tone = 'plain', ...props }: { child
 
 /** A view's heading. It takes focus when the step changes, so a screen reader announces where it is now. */
 export function StepHeading({ whisper, title, lede, className }: { whisper?: string; title: string; lede?: ReactNode; className?: string }) {
+  const w = useServerWords();
   return (
     <header className={cn('mb-5', className)}>
-      {whisper ? <Whisper>{whisper}</Whisper> : null}
-      <h2 data-step-heading tabIndex={-1} dir="auto" className={cn('display text-2xl text-ink outline-none sm:text-3xl', whisper && 'mt-1.5')}>{title}</h2>
-      {lede ? <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-soft sm:text-base">{lede}</p> : null}
+      {whisper ? <Whisper>{w(whisper)}</Whisper> : null}
+      <h2 data-step-heading tabIndex={-1} dir="auto" className={cn('display text-2xl text-ink outline-none sm:text-3xl', whisper && 'mt-1.5')}>{w(title)}</h2>
+      {lede ? <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-soft sm:text-base">{typeof lede === 'string' ? w(lede) : lede}</p> : null}
     </header>
   );
 }
@@ -207,11 +214,12 @@ export function DropZone({ accept, disabled, onFile, title, hint, compact = fals
 
 /** Something went wrong: what happened, what it means for the file, what to do. An alert, so it is read out when it appears. */
 export function Problem({ title, what, next, children, className }: { title: string; what: string; next?: string; children?: ReactNode; className?: string }) {
+  const w = useServerWords();
   return (
     <div role="alert" className={cn('rounded-md border border-danger/30 bg-danger-pale px-4 py-3.5 text-sm leading-relaxed text-danger', className)}>
       <p dir="auto" className="font-semibold">{title}</p>
-      <p dir="auto" className="mt-1">{what}</p>
-      {next ? <p dir="auto" className="mt-1.5 text-ink">{next}</p> : null}
+      <p dir="auto" className="mt-1">{w(what)}</p>
+      {next ? <p dir="auto" className="mt-1.5 text-ink">{w(next)}</p> : null}
       {children}
     </div>
   );

@@ -174,7 +174,7 @@ describe('a save’s recipe section', () => {
   it('asks before looking when the text could go to a hosted AI service, and sends nothing on "Not now"', async () => {
     const { request } = view({ features: features({ ai: true }), settings: { ai_enabled: true, ai_hosted: true, ai_provider: 'gemini', ai_sharing_allowed: false } });
     await userEvent.click(await screen.findByRole('button', { name: 'Look for a recipe' }));
-    expect(await screen.findByRole('dialog', { name: 'Send this to an AI service?' })).toHaveTextContent('Google’s Gemini service');
+    expect(await screen.findByRole('dialog', { name: 'Allow sending saves to an AI service?' })).toHaveTextContent('Google’s Gemini service');
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(request.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);

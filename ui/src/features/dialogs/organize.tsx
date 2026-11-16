@@ -119,17 +119,17 @@ export function OrganizeDialog({ spec, close }: DialogProps<'organize'>) {
 
         {feedback ? <p role="status" className="mb-6 rounded-md bg-sage-pale px-4 py-3 text-sm text-ink">{feedback}</p> : null}
 
-        <Section title={settings.ai_hosted ? 'Let AI suggest topics' : 'Let local AI suggest topics'}>
+        <Section title={settings.ai_hosted || archive.backend.mode === 'hosted' ? 'Let AI suggest topics' : 'Let local AI suggest topics'}>
           <p>
             {settings.ai_hosted
-              ? 'Queue the complete scope. Your server’s hosted AI service receives each save’s caption, creator and any transcript, not your notes or collection names. You review every suggestion before it changes your organization.'
+              ? 'Queue the complete scope. A hosted AI service receives each save’s title, caption, creator and any transcript. You review every suggestion before it changes your organization.'
               : 'Queue the complete scope. Suggestions use available titles, captions, notes, and collection names. You review them before they change your organization.'}
           </p>
           {demo || !settings.ai_enabled ? (
             <p className="text-xs">
               {demo
                 ? 'Local AI is unavailable in the synthetic demo. Manual topics and collections work in memory.'
-                : 'Local AI is not configured. Manual topics and collections work now; your server can optionally connect a local Ollama model.'}
+                : archive.backend.mode === 'hosted' ? 'AI suggestions are not offered on this service. Manual topics and collections work now.' : 'Local AI is not configured. Manual topics and collections work now; your server can optionally connect a local Ollama model.'}
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
