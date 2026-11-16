@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { countLabel, errorMessage } from '@web/utils.js';
 import { cn } from 'cn';
-import { Archive, ArrowRight, Check, ChevronsUpDown, CircleCheck, FolderPlus, Heart, HeartOff, Inbox, LayoutGrid, Plus, Search, ShieldCheck, Shuffle, Sparkles, Tag as TagIcon, X } from 'lucide-react';
+import { Archive, ArrowRight, Check, ChevronsUpDown, CircleCheck, FolderPlus, Heart, HeartOff, Inbox, LayoutGrid, List, Plus, Search, ShieldCheck, Shuffle, Sparkles, Tag as TagIcon, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { openDialog, toast } from '@/app/ui-state';
 import { AsciiSpinner, Garden } from '@/components/fx/ascii';
@@ -19,7 +19,9 @@ import { VIEW_TITLE_ID } from '@/lib/focus';
 import { StateCard } from '../feature-kit';
 import { EmptyLibrary } from './empty-library';
 import { Gallery } from './gallery';
+import { useShownItems } from './held-deletes';
 import { Hero } from './hero';
+import { useLayout, type Layout } from './layout';
 import { WallEnd } from './wall-end';
 import { keptLine } from './words';
 
@@ -211,14 +213,23 @@ function BulkBar() {
   );
 }
 
+const LAYOUTS = [
+  { value: 'wall', label: <span className="sr-only">Wall</span>, icon: <LayoutGrid aria-hidden="true" /> },
+  { value: 'list', label: <span className="sr-only">List</span>, icon: <List aria-hidden="true" /> },
+] as const;
+
 export function LibraryScreen({ demo }: { demo: boolean }) {
   const archive = useArchive();
   const loc = useArchiveState(state => state.loc);
   const filters = useArchiveState(state => state.filters);
   const collections = useArchiveState(state => state.collections);
   const stats = useArchiveState(state => state.stats);
-  const count = useArchiveState(state => state.items.length);
-  const total = useArchiveState(state => state.total);
+  // A save whose delete can still be undone is already out of the list and out of its count.
+  const { items: shown, held } = useShownItems();
+  const count = shown.length;
+  const total = useArchiveState(state => state.total) - held;
+  const layout = useLayout(state => state.layout);
+  const setLayout = useLayout(state => state.set);
   const list = useArchiveState(state => state.list);
   const listError = useArchiveState(state => state.listError);
   const loadingMore = useArchiveState(state => state.loadingMore);
@@ -251,6 +262,7 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
             <CircleCheck />
             {selecting ? 'Cancel selection' : 'Select'}
           </Button>
+          <Segmented<Layout> label="Layout" value={layout} options={LAYOUTS} onValueChange={next => setLayout(next, !demo)} className="[&_[role=radio]]:px-3" />
         </div>
       </div>
 
@@ -262,6 +274,8 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
         </div>
       </div>
       <div className="mb-6"><SourceTabs /></div>
+      {/* Only a finger swipes; with a mouse or a keyboard the same actions are in each row's menu. */}
+      {layout === 'list' && list === 'ready' && count > 0 ? <p className="-mt-2 mb-3 hidden text-xs text-ink-soft coarse:block">Swipe a row, or use the ··· button.</p> : null}
 
       {list === 'error' ? (
         <StateCard art="cloud" title="A little interruption." actions={<Button variant="primary" aria-busy={retrying || undefined} onClick={() => void runRetry(() => archive.refreshLibrary())}><ArrowRight />Try again</Button>}>

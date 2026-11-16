@@ -2,7 +2,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { hostLabel, PLATFORM_NAMES, safeURL, stableHue } from '@web/utils.js';
 import { cn } from 'cn';
-import { Play } from 'lucide-react';
+import { Bookmark, Play } from 'lucide-react';
 import { useArchive } from '@/app/archive-context';
 import type { Item } from '@/data/types';
 
@@ -39,14 +39,26 @@ export function TextCover({ item, detail = false }: { item: Pick<Item, 'id' | 't
   );
 }
 
+/** A paper cover the size of a thumbnail: the paper and one mark, since a title set in type would not be readable. */
+function MiniCover({ item }: { item: Pick<Item, 'id' | 'title' | 'content_type'> }) {
+  const Mark = item.content_type === 'video' ? Play : Bookmark;
+  return (
+    <div aria-hidden="true" className={cn('grid size-full place-items-center', PAPERS[stableHue(item.title || item.id)])}>
+      <Mark className="size-5" strokeWidth={1.8} />
+    </div>
+  );
+}
+
 interface CoverProps {
   item: Item;
   remotePreviews: boolean;
   detail?: boolean;
+  /** A thumbnail beside a line of text (the list): no labels over it. */
+  mini?: boolean;
   className?: string;
 }
 
-export const Cover = memo(function Cover({ item, remotePreviews, detail = false, className }: CoverProps) {
+export const Cover = memo(function Cover({ item, remotePreviews, detail = false, mini = false, className }: CoverProps) {
   const { backend } = useArchive();
   const thumbnail = backend.thumbnail(item.thumbnail_url);
   const remote = !thumbnail && remotePreviews ? safeURL(item.preview_url) : null;
@@ -80,11 +92,13 @@ export const Cover = memo(function Cover({ item, remotePreviews, detail = false,
           onError={() => setFailed(key)}
           className={cn('size-full object-cover transition-opacity duration-300', ready === key ? 'opacity-100' : 'opacity-0')}
         />
+      ) : mini ? (
+        <MiniCover item={item} />
       ) : (
         <TextCover item={item} detail={detail} />
       )}
-      {!hasImage && !detail ? <span className="label-mono absolute start-2.5 bottom-2 rounded-full bg-card/85 px-2 py-0.5 !text-[0.56rem] !text-ink-soft">Text preview</span> : null}
-      {item.content_type === 'video' && !detail ? (
+      {!hasImage && !detail && !mini ? <span className="label-mono absolute start-2.5 bottom-2 rounded-full bg-card/85 px-2 py-0.5 !text-[0.56rem] !text-ink-soft">Text preview</span> : null}
+      {item.content_type === 'video' && !detail && !mini ? (
         <span title="Video link" className="absolute end-2.5 bottom-2.5 grid size-7 place-items-center rounded-full bg-card/90 text-ink shadow-xs">
           <Play className="size-3 fill-current" aria-hidden="true" />
           <span className="sr-only">Video</span>

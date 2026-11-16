@@ -11,7 +11,11 @@ import type { Item } from '@/data/types';
 import { recoverFocus } from '@/lib/focus';
 import { COVER_TRANSITION, useMorph } from '@/lib/transition';
 import { Cover } from './cover';
-import { BODY_HEIGHT, CARD_PADDING, layoutWall, windowRange, type Tile } from './masonry';
+import { useShownItems } from './held-deletes';
+import { useLayout } from './layout';
+import { BODY_HEIGHT, CARD_PADDING, layoutList, layoutWall, windowRange, type Tile } from './masonry';
+import { SaveRow } from './save-row';
+import type { Side } from './swipe';
 
 const OVERSCAN = 900;
 /** How far below the screen the end of the wall may be before the next page is asked for. */
@@ -145,9 +149,11 @@ const GHOSTS = Array.from({ length: 10 }, (_, index) => ({ id: `ghost-${index * 
 
 export function Gallery() {
   const archive = useArchive();
-  const items = useArchiveState(state => state.items);
-  const total = useArchiveState(state => state.total);
+  // A save whose delete is being held (it can still be undone) is not on the wall and not in its count.
+  const { items, held } = useShownItems();
+  const total = useArchiveState(state => state.total) - held;
   const list = useArchiveState(state => state.list);
+  const rows = useLayout(state => state.layout) === 'list';
   const busy = useArchiveState(state => state.busy);
   const revision = useArchiveState(state => state.revision);
   const selected = useArchiveState(state => state.selected);
@@ -164,7 +170,19 @@ export function Gallery() {
   const [width, setWidth] = useState(0);
   const loading = list === 'loading';
   const source = loading ? GHOSTS : items;
-  const wall = useMemo(() => layoutWall(source, width), [source, width]);
+  const wall = useMemo(() => (rows ? layoutList(source, width) : layoutWall(source, width)), [rows, source, width]);
+  // The one row whose swipe actions are uncovered. A press anywhere else covers them again.
+  const [openRow, setOpenRow] = useState<{ id: string; side: Side } | null>(null);
+  const setSide = useCallback((id: string, side: Side) => setOpenRow(current => (side ? { id, side } : current?.id === id ? null : current)), []);
+  const openId = rows ? openRow?.id : undefined;
+  useEffect(() => {
+    if (!openId) return;
+    const close = (event: Event) => {
+      if (!(event.target as Element | null)?.closest?.(`[data-item-id="${CSS.escape(openId)}"]`)) setOpenRow(null);
+    };
+    addEventListener('pointerdown', close, true);
+    return () => removeEventListener('pointerdown', close, true);
+  }, [openId]);
   const [range, setRange] = useState<[number, number]>([0, -1]);
   const [focused, setFocused] = useState(-1);
   // The reading position: the first card on screen and where its top edge sits, for the view it was read in.
@@ -231,8 +249,10 @@ export function Gallery() {
       aria-label="Saved items"
       aria-busy={busy || undefined}
       data-selecting={selecting || selected.size > 0 || undefined}
-      className="relative w-full"
-      style={{ height: wall.height }}
+      data-layout={rows ? 'list' : 'wall'}
+      className={cn('relative w-full', rows && wall.height > 0 && 'overflow-hidden rounded-lg border border-line bg-card')}
+      // The list's border is inside its box, so the box is two pixels taller than its rows.
+      style={{ height: rows && wall.height > 0 ? wall.height + 2 : wall.height }}
       onFocusCapture={event => {
         const id = (event.target as HTMLElement).closest<HTMLElement>('[data-item-id]')?.dataset.itemId;
         setFocused(id ? items.findIndex(item => item.id === id) : -1);
@@ -248,7 +268,7 @@ export function Gallery() {
                 aria-hidden="true"
                 data-skeleton
                 style={{ insetInlineStart: tile.x, top: tile.y, width: tile.width, height: tile.height }}
-                className="absolute animate-shimmer rounded-lg border border-line bg-[linear-gradient(110deg,var(--card-2)_25%,var(--card)_40%,var(--card-2)_55%)] bg-[length:200%_100%]"
+                className={cn('absolute animate-shimmer bg-[linear-gradient(110deg,var(--card-2)_25%,var(--card)_40%,var(--card-2)_55%)] bg-[length:200%_100%]', rows ? 'border-t border-line first:border-t-0' : 'rounded-lg border border-line')}
               />
             ) : null;
           })
@@ -256,6 +276,22 @@ export function Gallery() {
             const item = items[index];
             const tile = wall.tiles[index];
             if (!item || !tile) return null;
+            if (rows) {
+              return (
+                <SaveRow
+                  key={item.id}
+                  item={item}
+                  tile={tile}
+                  index={index}
+                  total={total}
+                  selected={selected.has(item.id)}
+                  selecting={selecting || selected.size > 0}
+                  remotePreviews={remotePreviews}
+                  side={openRow?.id === item.id ? openRow.side : ''}
+                  onSide={setSide}
+                />
+              );
+            }
             return (
               <SaveCard
                 key={item.id}

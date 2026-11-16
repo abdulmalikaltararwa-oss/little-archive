@@ -4,7 +4,7 @@
 // tones, the bloom, live-region roles) is Little Archive's.
 import { useEffect, useState } from 'react';
 import { cn } from 'cn';
-import { Check, TriangleAlert, X } from 'lucide-react';
+import { Check, TriangleAlert, Undo2, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useIsland, type IslandMessage } from '@/app/ui-state';
 import { Bloom } from './brand';
@@ -51,6 +51,16 @@ function Pill({ message }: { message: IslandMessage }) {
       >
         <span className={cn('block', !wide && 'whitespace-nowrap')}>{message.text}</span>
       </motion.span>
+      {wide && message.action ? (
+        <button
+          type="button"
+          onClick={() => { message.action?.run(); dismiss(message.id); }}
+          className="hit-44 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-on-island/10 px-3 text-sm font-semibold text-on-island transition-colors hov:bg-on-island/20"
+        >
+          <Undo2 className="size-3.5" aria-hidden="true" />
+          {message.action.label}
+        </button>
+      ) : null}
       {wide ? (
         <button
           type="button"

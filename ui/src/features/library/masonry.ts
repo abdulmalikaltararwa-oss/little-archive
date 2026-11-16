@@ -81,3 +81,11 @@ export function windowRange(tiles: readonly Tile[], top: number, bottom: number)
   }
   return first < 0 ? [0, -1] : [first, last];
 }
+
+export const ROW_HEIGHT = 64;
+
+/** The list: one save to a line, each line the same height. The same shape as the wall, so the same window draws it. */
+export function layoutList(items: readonly unknown[], width: number): Wall {
+  const tiles = items.map((_, index) => ({ x: 0, y: index * ROW_HEIGHT, width: Math.round(width), height: ROW_HEIGHT }));
+  return { tiles, height: items.length * ROW_HEIGHT, columns: 1, columnWidth: width, gap: 0, compact: width < 560 };
+}

@@ -8,15 +8,22 @@ import type { Collection, SharedLink } from '@/data/types';
 
 export type IslandTone = 'ok' | 'error' | 'saved';
 
+export interface IslandAction {
+  label: string;
+  run(): void;
+}
+
 export interface IslandMessage {
   id: number;
   text: string;
   tone: IslandTone;
+  /** One thing that can be done about the message (Undo). Pressing it also puts the message away. */
+  action?: IslandAction;
 }
 
 interface IslandState {
   messages: IslandMessage[];
-  push(text: string, tone: IslandTone): number;
+  push(text: string, tone: IslandTone, extra?: { action?: IslandAction; duration?: number }): number;
   dismiss(id: number): void;
 }
 
@@ -25,11 +32,11 @@ const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
 export const useIsland = create<IslandState>((set, get) => ({
   messages: [],
-  push(text, tone) {
+  push(text, tone, extra = {}) {
     const id = ++messageSeq;
-    // The island holds one thought at a time, plus any errors still waiting to be read.
-    set(state => ({ messages: [...state.messages.filter(message => message.tone === 'error'), { id, text, tone }].slice(-3) }));
-    timers.set(id, setTimeout(() => get().dismiss(id), tone === 'error' ? 10_000 : tone === 'saved' ? 4_200 : 5_000));
+    // The island holds one thought at a time, plus any errors still waiting to be read and a message that can still be undone.
+    set(state => ({ messages: [...state.messages.filter(message => message.tone === 'error' || message.action), { id, text, tone, ...(extra.action ? { action: extra.action } : {}) }].slice(-3) }));
+    timers.set(id, setTimeout(() => get().dismiss(id), extra.duration ?? (tone === 'error' ? 10_000 : tone === 'saved' ? 4_200 : 5_000)));
     return id;
   },
   dismiss(id) {
@@ -40,8 +47,8 @@ export const useIsland = create<IslandState>((set, get) => ({
 }));
 
 /** Short feedback for something that just happened. Errors stay twice as long and are announced assertively. */
-export function toast(text: string, options: { error?: boolean; tone?: IslandTone } = {}) {
-  return useIsland.getState().push(text, options.tone ?? (options.error ? 'error' : 'ok'));
+export function toast(text: string, options: { error?: boolean; tone?: IslandTone; action?: IslandAction; duration?: number } = {}) {
+  return useIsland.getState().push(text, options.tone ?? (options.error ? 'error' : 'ok'), { action: options.action, duration: options.duration });
 }
 
 /* Dialogs ---------------------------------------------------------------------------------------------- */

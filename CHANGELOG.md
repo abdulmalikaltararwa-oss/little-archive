@@ -8,6 +8,9 @@ The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e
 
 - Saving a link is answered by a tray that offers the collections with the most saves and "To revisit" as one-tap chips, with Undo; it leaves after five seconds unless touched, and the save is opened from it rather than by itself. A link that is already in the library says when and where the first copy is instead of looking like a new save.
 - Search (the palette) opens with the recent searches made in this browser, each with how many saves it finds now, and with searches built from the library's own counts: its most used topics, fullest collection, largest source, favorites and "To revisit, oldest first". Results mark the searched words and say where they were found; a search that finds nothing says what search looks at. On a phone it fills the screen with the field at the bottom edge and a Cancel beside it.
+### Tidying the library
+
+- **A list beside the wall, with swipe actions.** The library can be shown as a list, one save to a line. On a touch screen a row swipes towards the end of the line for Done and File and towards the start for Delete (mirrored right to left); every row also has a ··· menu with the same actions and favorites, for a mouse, a keyboard or a screen reader. A delete from the list leaves at once and can be undone from the island for eight seconds; the server is told only after that.
 
 ### Permission before anything is sent to an AI service
 
