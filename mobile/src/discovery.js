@@ -1,8 +1,9 @@
 // Asking a server what it is, before anything secret is sent to it. GET /api/discovery needs no credentials.
 import { hostName, normalizeAddress } from './server-url.js';
 
+/** `code` names the kind of failure for a caller that has better words for it (setup.js, for a server someone typed). */
 export class AppError extends Error {
-  constructor(message, { field = '', cause } = {}) { super(message, { cause }); this.name = 'AppError'; this.field = field; }
+  constructor(message, { field = '', code = '', cause } = {}) { super(message, { cause }); this.name = 'AppError'; this.field = field; this.code = code; }
 }
 
 const decoder = new TextDecoder();
@@ -19,13 +20,15 @@ export async function discover(http, address, config) {
   const name = hostName(address);
   let reply;
   try { reply = await http({ url: `${address}/api/discovery`, method: 'GET', headers: { Accept: 'application/json' } }); }
-  catch (error) { throw new AppError(`Could not reach ${name}. Check the address and your connection.`, { field: 'server', cause: error }); }
+  catch (error) { throw new AppError(`Could not reach ${name}. Check the address and your connection.`, { field: 'server', code: 'unreachable', cause: error }); }
   if (reply.status === 400 && /invalid host/i.test(bodyText(reply))) throw new AppError(`${name} refused the request because it does not recognise this address. On the server, set LA_PUBLIC_URL to the address you typed.`, { field: 'server' });
   if (reply.status === 401 || reply.status === 403) throw new AppError(`${name} asked for a sign-in before saying what it is. Something in front of the server (a proxy or a private network gate) is blocking the app.`, { field: 'server' });
-  if (reply.status === 404) throw new AppError(`${name} does not look like a Little Archive server, or it is too old for the app. Update the server and try again.`, { field: 'server' });
+  if (reply.status === 404) throw new AppError(`${name} does not look like a Little Archive server, or it is too old for the app. Update the server and try again.`, { field: 'server', code: 'not-archive' });
+  // The native client is told not to follow redirects (the token must never travel to a second address), so one shows up here.
+  if (reply.status >= 300 && reply.status < 400) throw new AppError(`${name} sent the app on to another address, and the app does not follow redirects. Enter the address it ends at, usually the one that starts with https://.`, { field: 'server', code: 'redirect' });
   if (reply.status < 200 || reply.status >= 300) throw new AppError(`${name} answered with an error (${reply.status}). Try again in a moment.`, { field: 'server' });
   const info = bodyJson(reply);
-  if (!info || typeof info !== 'object' || info.name !== 'little-archive') throw new AppError(`${name} is a web server, but not a Little Archive server.`, { field: 'server' });
+  if (!info || typeof info !== 'object' || info.name !== 'little-archive') throw new AppError(`${name} is a web server, but not a Little Archive server.`, { field: 'server', code: 'not-archive' });
   if (info.api !== 1) throw new AppError(`${name} speaks a version of the Little Archive API that this app does not understand. Update the app or the server.`, { field: 'server' });
   const version = typeof info.version === 'string' ? info.version : '';
   if (info.mode === 'hosted') {
@@ -33,7 +36,7 @@ export async function discover(http, address, config) {
     let pinned;
     try { pinned = normalizeAddress(advertised); } catch { pinned = ''; }
     // The email and password go to the sign-in service this server names. The app only sends them to the one it was built for.
-    if (!pinned || pinned !== normalizeAddress(config.supabaseUrl)) throw new AppError(`${name} uses a sign-in service that this app does not trust, so it will not send your email or password there.`, { field: 'server' });
+    if (!pinned || pinned !== normalizeAddress(config.supabaseUrl)) throw new AppError(`${name} uses a sign-in service that this app does not trust, so it will not send your email or password there.`, { field: 'server', code: 'untrusted-service' });
     return { mode: 'hosted', url: address, version, supabaseUrl: pinned };
   }
   if (info.mode === 'self-hosted') {

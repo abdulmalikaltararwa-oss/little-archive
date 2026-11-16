@@ -32,10 +32,25 @@ For "Continue with Google" and "Continue with Apple" (see docs/mobile-app.md):
     STUB_APPLE_CLIENT_IDS  comma list of bundle ids the Apple settings accept (default app.littlearchive.mobile)
     STUB_CODE_TTL          seconds a PKCE code lasts (default 300, Supabase's five minutes)
 
-Routes: signup, token (password, refresh_token, pkce and id_token grants), settings, authorize (with a stand-in Google), logout, an empty
-key set, and the admin call that deletes a user (`DELETE /auth/v1/admin/users/<id>`, which needs the secret key in the `apikey`
-header). The routes the real service answers to a browser (authorize and the stand-in Google's own pages) need no key; the
-others require the publishable key in the `apikey` header, as the real service does.
+For a forgotten password (see docs/mobile-app.md):
+
+    STUB_OTP_TTL           seconds an emailed link lasts (default 3600)
+    STUB_MAIL_GAP          seconds before the same address can be sent another link (default 60, Supabase's)
+
+No email is sent. What would have been sent is listed at http://127.0.0.1:<port>/stand-in-mail (a page of links; open it in the
+simulator's browser and tap one). That page exists only here: the real service has nothing like it.
+
+Routes: signup, token (password, refresh_token, pkce and id_token grants), settings, authorize (with a stand-in Google), recover,
+verify (the emailed link), user (PUT, a new password), logout, an empty key set, and the admin call that deletes a user
+(`DELETE /auth/v1/admin/users/<id>`, which needs the secret key in the `apikey` header). The routes the real service answers to a
+browser (authorize, verify and the stand-in's own pages) need no key; the others require the publishable key in the `apikey`
+header, as the real service does.
+
+A reset link follows the real server's source (internal/api/recover.go, verify.go, user.go, mail.go): an unknown address is
+answered like a known one (200, an empty object) and nothing is sent; a known one asked again too soon is a 429; with a code
+challenge the link's token starts with `pkce_` and the link redirects with `?code=`, without one it redirects with a session in the
+fragment; a link that is too old or was already opened redirects with `error_code=otp_expired`; and the code of a PKCE link is
+measured from when the link was asked for, not from when it was opened (models/flow_state.go), so STUB_CODE_TTL covers both.
 
 The id_token grant takes an Apple identity token such as `apple_token` below makes. It reads the claims and does NOT check the
 signature: only the real service can check Apple's.
@@ -58,6 +73,8 @@ USERS = {}      # key -> {"id", "password", "email"}: the key is the email of a 
 REFRESH = {}    # refresh token -> key
 FLOWS = {}      # state -> {"redirect", "challenge", "method", "prompt"}: a browser sign-in that has started
 CODES = {}      # auth code -> {"key", "challenge", "method", "made"}: one that Google approved and that waits to be traded
+OTPS = {}       # the token of an emailed link -> {"key", "challenge", "method", "made"}: a reset link that has not been opened
+MAILS = []      # {"to", "link"}: what would have been emailed, newest last (see /stand-in-mail)
 
 
 def b64(data):
@@ -107,6 +124,8 @@ class Handler(BaseHTTPRequestHandler):
     site_url = "http://localhost:3000"
     apple_client_ids = {"app.littlearchive.mobile"}
     code_ttl = 300
+    otp_ttl = 3600
+    mail_gap = 60
 
     def log_message(self, *args):
         pass
@@ -155,6 +174,103 @@ class Handler(BaseHTTPRequestHandler):
             self.send(401, {"code": 401, "error_code": "no_authorization", "msg": "No API key found in request"})
             return False
         return True
+
+    def bearer(self):
+        """The account an access token of this stand-in belongs to (its key in USERS), or None after answering 401."""
+        header = self.headers.get("Authorization", "")
+        token = header[7:] if header.lower().startswith("bearer ") else ""
+        parts = token.split(".")
+        claims = token_claims(token) if len(parts) == 3 else None
+        signed = claims is not None and hmac.compare_digest(parts[2], b64(hmac.new(self.secret.encode(), f"{parts[0]}.{parts[1]}".encode(), hashlib.sha256).digest()))
+        if not token:
+            self.send(401, {"code": 401, "error_code": "no_authorization", "msg": "This endpoint requires a Bearer token"})
+            return None
+        if not signed or claims.get("exp", 0) < time.time():
+            self.send(403, {"code": 403, "error_code": "bad_jwt", "msg": "invalid JWT: unable to parse or verify signature, or token is expired"})
+            return None
+        for key, user in USERS.items():
+            if user["id"] == claims.get("sub"):
+                return key
+        self.send(403, {"code": 403, "error_code": "user_not_found", "msg": "User from sub claim in JWT does not exist"})
+        return None
+
+    def do_PUT(self):
+        """PUT /auth/v1/user: the signed-in account changes its own password (internal/api/user.go)."""
+        if urlsplit(self.path).path != "/auth/v1/user":
+            return self.send(404, {"msg": "not found"})
+        if not self.authorised():
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except ValueError:
+            return self.send(400, {"code": 400, "error_code": "bad_json", "msg": "Could not parse request body as JSON"})
+        key = self.bearer()
+        if key is None:
+            return
+        user = USERS[key]
+        if "password" in body:
+            password = str(body["password"])
+            if len(password) < 8:
+                return self.send(422, {"code": 422, "error_code": "weak_password", "msg": "Password should be at least 8 characters."})
+            if user["password"] is not None and user["password"] == password:
+                return self.send(422, {"code": 422, "error_code": "same_password", "msg": "New password should be different from the old password."})
+            user["password"] = password
+        self.send(200, {"id": user["id"], "email": user.get("email", key)})
+
+    def recover(self, query, body):
+        """POST /auth/v1/recover: email a reset link (internal/api/recover.go). The answer never says whether the address has an account."""
+        email = str(body.get("email", "")).strip().lower()
+        challenge, method = str(body.get("code_challenge") or ""), str(body.get("code_challenge_method") or "")
+        if "@" not in email:
+            return self.send(400, {"code": 400, "error_code": "validation_failed", "msg": "Unable to validate email address: invalid format"})
+        if bool(challenge) != bool(method):
+            return self.send(400, {"code": 400, "error_code": "validation_failed", "msg": "PKCE flow requires code_challenge_method and code_challenge"})
+        if challenge and (not 43 <= len(challenge) <= 128 or not re.fullmatch(r"[A-Za-z0-9._~-]+", challenge) or method.lower() not in ("s256", "plain")):
+            return self.send(400, {"code": 400, "error_code": "validation_failed", "msg": "code challenge has to be between 43 and 128 characters"})
+        # Any account with this address, however it signs in: the real server looks the user up by email alone.
+        key = next((name for name, user in USERS.items() if user.get("email", name) == email), None)
+        if key is None:
+            return self.send(200, {})
+        user = USERS[key]
+        wait = self.mail_gap - (time.time() - user.get("recovery_sent", 0))
+        if wait > 0:
+            return self.send(429, {"code": 429, "error_code": "over_email_send_rate_limit", "msg": f"For security purposes, you can only request this after {int(wait) + 1} seconds."})
+        for token in [token for token, otp in OTPS.items() if otp["key"] == key]:
+            del OTPS[token]  # an account has one reset token at a time: a new link ends the old one
+        token = ("pkce_" if challenge else "") + uuid4().hex
+        OTPS[token] = {"key": key, "challenge": challenge, "method": method.lower(), "made": time.time()}
+        user["recovery_sent"] = time.time()
+        wanted = query.get("redirect_to", [""])[0]
+        redirect = wanted if wanted in self.redirect_allow else self.site_url
+        link = f"http://{self.headers.get('Host', '127.0.0.1')}/auth/v1/verify?{urlencode({'token': token, 'type': 'recovery', 'redirect_to': redirect})}"
+        MAILS.append({"to": email, "link": link})
+        self.send(200, {})
+
+    def verify(self, query):
+        """GET /auth/v1/verify, which the emailed link opens in a browser with no key (internal/api/verify.go)."""
+        token, kind = query.get("token", [""])[0], query.get("type", [""])[0]
+        if not token:
+            return self.send(400, {"code": 400, "error_code": "validation_failed", "msg": "Verify requires a token or a token hash"})
+        if kind != "recovery":
+            return self.send(400, {"code": 400, "error_code": "validation_failed", "msg": "Unsupported verification type"})
+        wanted = query.get("redirect_to", [""])[0]
+        target = urlsplit(wanted if wanted in self.redirect_allow else self.site_url)
+        base = f"{target.scheme}://{target.netloc}{target.path}"
+        pkce = token.startswith("pkce_")
+        otp = OTPS.pop(token, None)  # a link is good once
+        if otp is None or otp["key"] not in USERS or time.time() - otp["made"] > self.otp_ttl:
+            problem = urlencode({"error": "access_denied", "error_code": "otp_expired", "error_description": "Email link is invalid or has expired"})
+            # The error is always in the fragment, and in the query as well for a PKCE link (prepErrorRedirectURL).
+            return self.redirect(f"{base}?{problem}#{problem}" if pkce else f"{base}#{problem}")
+        if pkce:
+            code = uuid4().hex
+            # Measured from when the link was asked for: the flow state was made then (models/flow_state.go, IsExpired).
+            CODES[code] = {"key": otp["key"], "challenge": otp["challenge"], "method": otp["method"], "made": otp["made"]}
+            return self.redirect(f"{base}?{urlencode({'code': code})}")
+        session = self.session(otp["key"])
+        fragment = urlencode({"access_token": session["access_token"], "expires_in": session["expires_in"], "refresh_token": session["refresh_token"], "token_type": "bearer", "type": "recovery"})
+        self.redirect(f"{base}#{fragment}")
 
     def do_DELETE(self):
         match = re.fullmatch(r"/auth/v1/admin/users/([0-9a-f-]{36})", urlsplit(self.path).path)
@@ -233,6 +349,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"external": external, "disable_signup": False, "mailer_autoconfirm": not self.confirm})
         if url.path == "/auth/v1/authorize":
             return self.authorize(query)
+        if url.path == "/auth/v1/verify":
+            return self.verify(query)
+        if url.path == "/stand-in-mail":
+            # Development only: what would have been emailed, newest first. `?to=` narrows it to one address.
+            to = query.get("to", [""])[0].strip().lower()
+            mails = [mail for mail in reversed(MAILS) if not to or mail["to"] == to]
+            rows = "".join(f"<li>To {escape(mail['to'])}: <a href='{escape(mail['link'])}' style='font-size:22px'>Reset your password</a></li>" for mail in mails)
+            return self.page(
+                "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Stand-in mail</title>"
+                "<body style='font:17px system-ui;margin:2rem'><h1>Stand-in mail</h1><p>Development only. Nothing was sent; these are the links an email would carry.</p>"
+                f"<ul>{rows}</ul>" + ("" if mails else "<p>No mail.</p>"))
         if url.path == "/stand-in-google":
             state = escape(query.get("state", [""])[0])
             chooser = "<h2>Choose an account</h2>" if FLOWS.get(query.get("state", [""])[0], {}).get("prompt") == "select_account" else ""
@@ -311,9 +438,11 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/auth/v1/token":
             grant = parse_qs(url.query).get("grant_type", [""])[0]
             if grant == "password":
-                if email not in USERS or USERS[email]["password"] is None or USERS[email]["password"] != password:
+                # By address, whatever the account was made with: one made by Google can be given a password by a reset link.
+                key = next((name for name, user in USERS.items() if user.get("email", name) == email), None) if email else None
+                if key is None or USERS[key]["password"] is None or USERS[key]["password"] != password:
                     return self.send(400, {"code": 400, "error_code": "invalid_credentials", "msg": "Invalid login credentials"})
-                return self.send(200, self.session(email))
+                return self.send(200, self.session(key))
             if grant == "refresh_token":
                 owner = REFRESH.pop(str(body.get("refresh_token", "")), None)
                 if owner is None:
@@ -324,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
             if grant == "id_token":
                 return self.id_token_grant(body)
             return self.send(400, {"code": 400, "error_code": "validation_failed", "msg": "unsupported grant type"})
+        if url.path == "/auth/v1/recover":
+            return self.recover(parse_qs(url.query), body)
         if url.path == "/auth/v1/logout":
             for refresh in [r for r, e in REFRESH.items()]:
                 del REFRESH[refresh]
@@ -351,6 +482,8 @@ def main():
     Handler.site_url = os.environ.get("STUB_SITE_URL", Handler.site_url)
     Handler.apple_client_ids = {item.strip() for item in os.environ.get("STUB_APPLE_CLIENT_IDS", "app.littlearchive.mobile").split(",") if item.strip()}
     Handler.code_ttl = int(os.environ.get("STUB_CODE_TTL", "300"))
+    Handler.otp_ttl = int(os.environ.get("STUB_OTP_TTL", "3600"))
+    Handler.mail_gap = int(os.environ.get("STUB_MAIL_GAP", "60"))
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"Stub Supabase Auth on http://127.0.0.1:{args.port} (development only)", flush=True)
     server.serve_forever()

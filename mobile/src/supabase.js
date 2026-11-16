@@ -8,6 +8,8 @@
 //   GET  /auth/v1/settings                      which providers the project has switched on (asked before the browser opens)
 //   GET  /auth/v1/authorize?provider=google&…   the address the system browser opens for Google (PKCE), see social.js
 //   POST /auth/v1/token?grant_type=pkce         trade the code that came back for a session
+//   POST /auth/v1/recover?redirect_to=…         ask for a password-reset link by email (PKCE), see recovery.js
+//   PUT  /auth/v1/user                          set a new password, with the session the reset link gave
 //
 // Every request carries the project's publishable key in `apikey`. That key is public by design (it only identifies
 // the project; what a person can do is set by their own access token), so it lives in app.config.json. No other
@@ -31,6 +33,7 @@ const KNOWN = {
   flow_state_expired: 'That sign-in took too long. Try again.',
   bad_oauth_callback: 'That sign-in did not finish. Try again.',
   bad_oauth_state: 'That sign-in did not finish. Try again.',
+  same_password: 'That is the password this account already has. Choose a different one.',
 };
 
 /**
@@ -53,7 +56,8 @@ function problem(reply, label = '') {
   // Apple's identity token names the app it was made for; the project accepts only the bundle ids listed in its Apple settings.
   if (label && /unacceptable audience/i.test(String(body.error_description || body.msg || ''))) return new AppError(`${label} sign-in is not set up for this app yet. Use your email and password for now.`);
   const code = body.error_code || body.code;
-  if (typeof code === 'string' && KNOWN[code]) return new AppError(KNOWN[code]);
+  // The code travels with the sentence, for a caller that has its own words for it (a reset link's code exchange, recovery.js).
+  if (typeof code === 'string' && KNOWN[code]) return new AppError(KNOWN[code], { code });
   if (reply.status === 429) return new AppError(KNOWN.over_request_rate_limit);
   if (reply.status >= 500) return new AppError('The sign-in service is having trouble. Try again in a moment.');
   const message = body.msg || body.message || body.error_description;
@@ -87,10 +91,10 @@ export function callbackProblem(errorCode, label) {
 
 export function createSupabase({ url, publishableKey, http, now = Date.now }) {
   const base = String(url).replace(/\/+$/, '');
-  async function call(path, { body, token } = {}) {
+  async function call(path, { body, token, method = 'POST' } = {}) {
     const headers = { apikey: publishableKey, Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    try { return await http({ url: `${base}${path}`, method: 'POST', headers, body: JSON.stringify(body ?? {}) }); }
-    catch (error) { throw new AppError('Could not reach the sign-in service. Check your connection and try again.', { cause: error }); }
+    try { return await http({ url: `${base}${path}`, method, headers, body: JSON.stringify(body ?? {}) }); }
+    catch (error) { throw new AppError('Could not reach the sign-in service. Check your connection and try again.', { code: 'unreachable', cause: error }); }
   }
   /** A session from a token grant, or the reason in words. */
   async function granted(reply, label) {
@@ -147,6 +151,26 @@ export function createSupabase({ url, publishableKey, http, now = Date.now }) {
       const session = sessionFrom(body, now);
       // With email confirmation on, Supabase answers with the new user and no session.
       return session ? { session } : { confirmationSent: true };
+    },
+    /**
+     * Ask the project to email a password-reset link. `codeChallenge` makes it a PKCE link: it comes back to `redirectTo` with a
+     * code that is of use only with the verifier this phone kept (recovery.js). The address goes in the query, as auth-js sends it.
+     *
+     * Whatever the service answers, this returns without a word, because the answers differ by whether the address has an
+     * account: an unknown address is a 200 with nothing sent, while a known one asked twice within a minute is a 429. Saying
+     * either apart from the other would tell a stranger which addresses are registered. Only not reaching the service throws.
+     */
+    async recover({ email, redirectTo, codeChallenge }) {
+      await call(`/auth/v1/recover?${new URLSearchParams({ redirect_to: redirectTo })}`, { body: { email, code_challenge: codeChallenge, code_challenge_method: 's256' } });
+    },
+    /** Set the password of the account `accessToken` belongs to. Used with the session a reset link gave. */
+    async setPassword({ accessToken, password }) {
+      const reply = await call('/auth/v1/user', { method: 'PUT', token: accessToken, body: { password } });
+      if (reply.status === 200) return;
+      // The session the link gave has ended (it lasts as long as any access token): only a new link helps.
+      if (reply.status === 401 || reply.status === 403) throw new AppError('This reset has run out. Go back and ask for a new link.', { code: 'session-ended' });
+      const refusal = problem(reply);
+      throw refusal.code === 'weak_password' || refusal.code === 'same_password' ? new AppError(refusal.message, { field: 'password', code: refusal.code }) : refusal;
     },
     /** A rejected refresh token means the session is over (null); anything else that goes wrong throws. */
     async refresh(refreshToken) {

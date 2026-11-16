@@ -3,7 +3,8 @@
 //
 // Form practice: one <form> per screen with real labels; type, autocomplete, inputmode and enterkeyhint set so the
 // keyboard and password managers behave (an email is autocomplete="username", a sign-in password "current-password", a
-// new one "new-password"); required fields; no double entry of a password, and a show-password toggle; an error is shown
+// new one "new-password"); required fields; a show-password toggle, and no double entry of a password except where a typing
+// slip would lock the person out again (choosing a new password after a reset); an error is shown
 // as text with an icon, announced once through a live region, tied to its field with aria-invalid and aria-describedby
 // only while it applies, and focus moves to the first field that needs attention.
 //
@@ -12,6 +13,10 @@
 // is for the keyboard, so a control that is focused by script after a touch is focused quietly (no ring; see focusQuietly).
 
 export const BACK = Symbol('back');
+
+// The guide for running a server of your own. The project publishes its guides in its public repository (README.md), so this
+// is that repository's address with the guide's path; the app has no other documentation site.
+export const SELF_HOSTING_GUIDE = 'https://github.com/abdulmalikaltararwa-oss/little-archive/blob/main/docs/self-hosting.md';
 
 function h(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -100,23 +105,32 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
    * One action at a time on a screen. While it is held every button on the screen is disabled, and the handlers check `held`
    * as well (Return in a field submits a form without touching a button). Text fields are left alone: disabling the one being
    * typed in would drop focus and the keyboard. `seal` holds it for good, once the screen has given its answer.
+   *
+   * The lock belongs to the view it was last given (`over`, the node frame() returns), and touches only that view's buttons while
+   * it is on the page. A screen can be replaced while something of its is still on its way (a reset link opening the app,
+   * onboarding.js); when that answer comes, it must not disable or enable the buttons of the screen that took its place.
    */
   function createLock() {
     let held = false;
     let sealed = false;
-    const apply = () => root.querySelectorAll('.native-screen button').forEach(button => { button.disabled = held; });
+    let view = null;
+    const apply = () => { if (view?.isConnected) view.querySelectorAll('button').forEach(button => { button.disabled = held; }); };
     return {
       get held() { return held; },
+      over(node) { view = node; apply(); },
       set(on) { if (sealed) return; held = on; apply(); },
       seal() { sealed = true; held = true; apply(); },
     };
   }
 
+  /** Draws a screen in place of whatever was there, and returns its node. */
   function frame(...content) {
-    root.replaceChildren(h('main', { class: 'native-screen', id: 'main' },
+    const view = h('main', { class: 'native-screen', id: 'main' },
       h('div', { class: 'native-brand' }, h('img', { src: iconUrl, alt: '', width: 38, height: 38 }), h('span', {}, 'little archive')),
-      ...content));
+      ...content);
+    root.replaceChildren(view);
     document.title = 'Little Archive';
+    return view;
   }
 
   // An input with its label, hint and error. The error is linked to the field only while it is showing.
@@ -215,15 +229,31 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       });
     },
 
-    /** Own server, step one. `submit(addressText)` checks it; the screen resolves with what it returns. */
+    /**
+     * Own server, step one. `submit(addressText)` checks it; the screen resolves with what it returns.
+     *
+     * Under the form is what someone needs to know before the address can work: the phone has to reach the server, only https is
+     * accepted, and where the guide is. The guide opens in the phone's browser (a link with target="_blank" leaves the web view,
+     * as "Open original" does in the interface). On arrival focus is on the heading, not the field: the keyboard would cover the
+     * guidance, and a screen reader starts at the top of the screen.
+     */
     server({ value = '', submit }) {
       return new Promise(done => {
-        const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser. It must start with https://.' });
+        const address = field({ label: 'Server address', name: 'server', type: 'url', inputmode: 'url', autocomplete: 'url', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', required: true, placeholder: 'https://archive.example.com', value, hint: 'The address you open Little Archive at in a browser, for example https://archive.example.com. It must start with https://.' });
+        const guideId = nextId('native-guide');
+        const heading = landing(h('h1', {}, 'Connect to your server'));
         frame(
           h('p', { class: 'native-whisper' }, 'your own server'),
-          h('h1', {}, 'Connect to your server'),
-          form({ fields: { server: address }, submitLabel: 'Connect', busyLabel: 'Connecting…', submit: async values => { done(await submit(values.server)); }, extra: [backButton(done)] }));
-        address.control.focus();
+          heading,
+          h('p', { class: 'native-lede' }, 'Type the address of the Little Archive you run. The app asks it what it is before you enter a password.'),
+          form({ fields: { server: address }, submitLabel: 'Connect', busyLabel: 'Connecting…', submit: async values => { done(await submit(values.server)); }, extra: [backButton(done)] }),
+          h('section', { class: 'native-guide', 'aria-labelledby': guideId },
+            h('h2', { class: 'native-whisper', id: guideId }, 'before you connect'),
+            h('ul', {},
+              h('li', {}, 'This phone has to be able to reach the server. A public https:// address works from anywhere. An address on your home network works only while the phone is on the same Wi-Fi.'),
+              h('li', {}, 'Plain http:// is refused, on a home network too, because your password would travel unencrypted.')),
+            h('a', { class: 'native-link', href: SELF_HOSTING_GUIDE, target: '_blank', rel: 'noopener noreferrer' }, 'Self-hosting guide (opens in your browser)')));
+        heading.focus();
       });
     },
 
@@ -253,8 +283,11 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
      * was sent) the tabs, both "Continue with" buttons, the form's button and Back cannot be pressed and Return does not send
      * the form, so two sign-ins cannot overlap and leave a session that nothing holds. Once the screen has its answer the lock
      * stays, until the app draws the next screen.
+     *
+     * With `forgot`, the Sign in view has a "Forgot your password?" button under the form. It is under the same lock, and the
+     * screen then resolves with `{ forgot: <the email typed so far> }`, for the caller to show the reset screen.
      */
-    account({ mode = 'in', host, notice, signIn, signUp, providers = {}, social }) {
+    account({ mode = 'in', host, notice, signIn, signUp, providers = {}, social, forgot = false }) {
       return new Promise(done => {
         let creating = mode === 'up';
         const lock = createLock();
@@ -301,7 +334,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
           };
           const heading = landing(h('h1', {}, creating ? 'Create your account' : 'Welcome back'));
           const said = message && landing(h('div', { class: 'notice', role: 'status' }, message));
-          frame(
+          lock.over(frame(
             h('p', { class: 'native-whisper' }, 'a little archive account'),
             heading,
             h('p', { class: 'native-lede' }, creating ? 'A library of your own, kept on your account.' : `Sign in to your account on ${host}.`),
@@ -313,7 +346,9 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
               const result = await (creating ? signUp : signIn)(values.email.trim(), values.password);
               if (result?.confirmationSent) { creating = false; render(`We sent a message to ${values.email.trim()}. Open it to confirm your email, then sign in here.`, 'notice'); return; }
               finish(result);
-            }, extra: [backButton(finish)] }));
+            }, extra: [
+              forgot && !creating && h('button', { type: 'button', class: 'btn ghost small', onClick: () => { if (!lock.held) finish({ forgot: email.control.value.trim() }); } }, 'Forgot your password?'),
+              backButton(finish)] })));
           // The view was redrawn, so whatever had focus is gone. A notice is what the person needs to hear first; after a tab
           // switch it is the new heading. On arrival the email field takes focus only when there are no "Continue with" buttons:
           // with them showing, the keyboard would cover them, so it stays down until the person goes to a field.
@@ -325,11 +360,62 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
       });
     },
 
+    /**
+     * A forgotten password, step one: the email to send a reset link to. `submit(email)` asks for the link and says nothing
+     * about the address; the screen resolves with 'sent' when it returns, or BACK. What is said next is the caller's, and is
+     * the same for every address.
+     */
+    forgot({ host, email = '', submit }) {
+      return new Promise(done => {
+        const address = field({ label: 'Email', name: 'email', type: 'email', inputmode: 'email', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'send', required: true, value: email });
+        const heading = landing(h('h1', {}, 'Reset your password'));
+        frame(
+          h('p', { class: 'native-whisper' }, 'a little archive account'),
+          heading,
+          h('p', { class: 'native-lede' }, `Enter the email of your account on ${host}. If it has an account, we send it a link that lets you choose a new password.`),
+          form({ fields: { email: address }, submitLabel: 'Send reset link', busyLabel: 'Sending…', submit: async values => { await submit(values.email.trim()); done('sent'); }, extra: [
+            h('p', { class: 'field-help native-fineprint' }, 'Signed up with Google or Apple? There is no password to reset: go back and use that button.'),
+            backButton(done, 'Back to sign in')] }));
+        heading.focus();
+      });
+    },
+
+    /**
+     * A forgotten password, step two, reached from the emailed link: choose the new one. `submit(password)` sets it; the screen
+     * resolves with 'saved' when it returns, or BACK for Cancel. The rules are the sign-up form's (8 characters, a show-password
+     * toggle on each field); the password is typed twice here, because a slip would lock the person out a second time.
+     */
+    newPassword({ email = '', submit }) {
+      return new Promise(done => {
+        const rule = 'At least 8 characters. A password manager can make and keep one for you.';
+        const password = passwordField({ label: 'New password', name: 'password', autocomplete: 'new-password', enterkeyhint: 'next', minlength: 8, hint: rule });
+        const confirm = passwordField({ label: 'New password, again', name: 'confirm', autocomplete: 'new-password', enterkeyhint: 'go', hint: undefined });
+        const heading = landing(h('h1', {}, 'Choose a new password'));
+        frame(
+          h('p', { class: 'native-whisper' }, 'a little archive account'),
+          heading,
+          h('p', { class: 'native-lede' }, email ? `For ${email}. When it is saved you are signed in.` : 'When it is saved you are signed in.'),
+          form({ fields: { password, confirm }, submitLabel: 'Save password and sign in', busyLabel: 'Saving…', submit: async values => {
+            // Checked here as well as by the field: a value a password manager fills in is not always measured by minlength.
+            if (values.password.length < 8) throw Object.assign(new Error('Use at least 8 characters.'), { field: 'password' });
+            if (values.password !== values.confirm) throw Object.assign(new Error('The two passwords are not the same. Type the new password again.'), { field: 'confirm' });
+            await submit(values.password);
+            done('saved');
+          }, extra: [
+            // For a password manager: which account the new password belongs to.
+            email && h('input', { type: 'email', name: 'email', autocomplete: 'username', value: email, readonly: true, hidden: true }),
+            backButton(done, 'Cancel')] }));
+        heading.focus();
+      });
+    },
+
     /** A problem with choices: `actions` is [{label, value, primary?}] and the screen resolves with the chosen value. */
     problem({ title, message, actions }) {
       return new Promise(done => {
-        frame(h('h1', {}, title), h('p', { class: 'native-lede', role: 'alert' }, message),
+        const heading = landing(h('h1', {}, title));
+        frame(heading, h('p', { class: 'native-lede', role: 'alert' }, message),
           h('div', { class: 'native-actions' }, actions.map(action => h('button', { type: 'button', class: `btn ${action.primary ? 'primary' : 'ghost'}`, onClick: () => done(action.value) }, action.label))));
+        heading.focus();
       });
     },
 

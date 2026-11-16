@@ -21,7 +21,7 @@ import { createOnboarding } from './onboarding.js';
 import { createBridge } from './bridge.js';
 import { createPurchases } from './purchases.js';
 import { createShareInbox } from './share.js';
-import { interruptedSignIn } from './social.js';
+import { createLinkInbox, launchCallback } from './recovery.js';
 import { createStore, secureBackend } from './store.js';
 import { createUi } from './ui.js';
 
@@ -66,7 +66,11 @@ async function main() {
 
   // First launch, or signed out: choose a server and sign in (onboarding.js, which keeps the order: ask the server what it is,
   // and only then offer a sign-in).
-  const { firstLaunch, signInAgain } = createOnboarding({ http, config, ui, store, platform, plugin: SocialSignIn });
+  // A password-reset link opens the app from the browser, with the app running or not (recovery.js). Whatever it opened the app
+  // with waits in `links` until a sign-in screen is about to be drawn; with someone already signed in it is never looked at.
+  const links = createLinkInbox({ platform, plugin: SocialSignIn, App, backend });
+  links.push(await launchCallback({ platform, plugin: SocialSignIn, App, storage: sessionStorage }));
+  const { firstLaunch, signInAgain } = createOnboarding({ http, config, ui, store, platform, plugin: SocialSignIn, backend, links });
 
   async function whoAmI(transport) {
     const response = await transport.fetch('/api/auth/me', { headers: { Accept: 'application/json' } });
@@ -77,7 +81,7 @@ async function main() {
 
   // Loops until there is a signed-in record that the server accepts.
   let record = await store.load();
-  let notice = takeNotice() || await interruptedSignIn({ platform, plugin: SocialSignIn, App, storage: sessionStorage });
+  let notice = takeNotice();
   let session;
   while (!session) {
     if (!record) { record = await firstLaunch(notice); notice = ''; continue; }
@@ -106,6 +110,7 @@ async function main() {
     }
     session = { record, credentials, transport, supabase };
   }
+  links.close();
 
   // Ending a session. Best effort on the server (revoke the device token, or end the Supabase session), certain on the phone.
   async function endSession({ forget, message }) {
