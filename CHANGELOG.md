@@ -4,9 +4,10 @@
 
 The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` in [run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). Six installation/recovery reports are retained with their provenance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence, corrected initial failures, and boundaries.
 
-### Filing a link while saving it
+### Filing a link while saving it, and search that starts with what you want
 
 - Saving a link is answered by a tray that offers the collections with the most saves and "To revisit" as one-tap chips, with Undo; it leaves after five seconds unless touched, and the save is opened from it rather than by itself. A link that is already in the library says when and where the first copy is instead of looking like a new save.
+- Search (the palette) opens with the recent searches made in this browser, each with how many saves it finds now, and with searches built from the library's own counts: its most used topics, fullest collection, largest source, favorites and "To revisit, oldest first". Results mark the searched words and say where they were found; a search that finds nothing says what search looks at. On a phone it fills the screen with the field at the bottom edge and a Cancel beside it.
 
 ### Permission before anything is sent to an AI service
 

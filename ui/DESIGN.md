@@ -123,6 +123,12 @@ has `dir="auto"`.
   leaves after five seconds unless it is touched or a key is pressed in it, then stays until Done or Escape; it
   steps aside for any dialog, an opened save or another view. A link that was already in the library gets the
   same card with when and where the first copy is, and no countdown. It is never drawn over a dialog.
+- **Search** is the palette (`features/palette/`). Before anything is typed it lists the recent searches kept in
+  this browser (`recent.ts`; forgotten on sign-out, in memory only in the demo) and "from your library", a row of
+  pills built only from counts the library holds (`suggest.ts`). A result marks the searched words with the butter
+  tint and says under the title where they were found; text is quoted only when the interface holds it. On a
+  phone the palette is the whole screen down to the keyboard (sized to the visual viewport) with the field at the
+  bottom edge beside Cancel; on a wide screen it is the card it always was, field at the top.
 - **The wall** is a shortest-column masonry computed from data (`features/library/masonry.ts`). A card's
   height is known before it is drawn, so nothing shifts and only the cards near the screen exist in the page.
 - **RTL-safe.** Use logical utilities only: `ps-`/`pe-`, `ms-`/`me-`, `start-`/`end-`, `text-start`,

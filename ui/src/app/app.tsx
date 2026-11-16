@@ -9,6 +9,7 @@ import { BootScreen, LoginScreen } from '@/features/auth/screens';
 import { DetailPanel } from '@/features/detail/detail-panel';
 import { DialogHost } from '@/features/dialogs/host';
 import { LibraryScreen, SEARCH_INPUT_ID } from '@/features/library/library-screen';
+import { clearRecent } from '@/features/palette/recent';
 import { SaveTray } from '@/features/save-moment/tray';
 import { FeatureScreen } from '@/features/screens';
 import { Shell } from '@/features/shell/shell';
@@ -42,7 +43,9 @@ export function App({ archive }: { archive: Archive }) {
     if (phase !== 'signed-out') return;
     useDialogs.getState().closeAll();
     useConfirm.getState().settle(false);
-  }, [phase]);
+    // The searches made here belong to whoever was signed in.
+    clearRecent(archive.backend.remembers);
+  }, [archive, phase]);
 
   useEffect(() => {
     const focusSearch = () => {
