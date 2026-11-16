@@ -36,6 +36,8 @@ from ..limits import Refusal, retry_after
 log = logging.getLogger("little_archive")
 STORE_SOURCES = {"apple", "google", "tap"}
 TAP_PRODUCT = "unlock"
+TAP_PAGE_SECONDS = 60 * 60    # Tap's page lives 30 minutes; a charge still "open" an hour on has a page nobody can pay on any more
+TAP_STUCK_SECONDS = 24 * 3600  # how long a payment Tap will not decide, or cannot be asked about, holds off a new one
 TAP_REPLAY_SECONDS = 10 * 60  # how long a charge Tap may or may not have made is asked for again with the same references (its page lives 30 minutes)
 
 
@@ -244,9 +246,12 @@ class PurchaseService:
     def start_tap(self, user_id, name, email):
         """Begin a payment for this account. Returns Tap's hosted page to send the buyer to, or says the account is already unlocked.
 
-        One account has at most one payment that can still be paid. While the last one is not decided at Tap, no other is made:
-        its page is given again if it is still the open page at today's price, and otherwise the answer is 409 `payment_open`.
-        A new charge is made only after the last one ended unpaid (or was taken back).
+        One account has one payment that can still be paid. While the last one is not decided at Tap, no other is made: its
+        page is given again while that page can still be open (an hour), and a payment the buyer has taken to their bank, or one
+        Tap cannot be asked about, answers 409 `payment_open` or 503. Neither lasts for ever, because a buyer must not be left with
+        no way to pay: after an hour of a page nobody paid on, and after a day of anything else undecided, a new charge is made.
+        The old one stays on file, so if it is captured after all it still unlocks this account, and is noted for a refund if
+        both were paid.
         """
         tap = self._tap()
         with self._tap_locks[hash(user_id) % len(self._tap_locks)]:  # two requests at once must not both find "no payment yet"
@@ -256,19 +261,22 @@ class PurchaseService:
             price = amount_text(self.tap_amount, self.tap_currency)
             last = self.store.tap_latest(user_id)
             if last and last["status"] not in ENDED_UNPAID:
+                age = self.store.clock() - last["created_at"]
                 try:
                     answer, charge = self._settle_tap(last["charge_id"], user_id)
                 except Refusal as refusal:
-                    if refusal.code == "purchase_invalid":
-                        raise self._payment_open() from None  # it does not match what was started, so it is for an operator to look at, not to be paid twice
-                    if refusal.code not in {"purchase_not_paid", "purchase_revoked", "purchase_wrong_environment"}:
+                    over = refusal.code in {"purchase_not_paid", "purchase_revoked", "purchase_wrong_environment"}
+                    if not over and age < TAP_STUCK_SECONDS:
+                        if refusal.code == "purchase_invalid":
+                            raise self._payment_open() from None  # it does not match what was started: for an operator to look at, not to be paid twice
                         raise  # Tap could not be asked: nothing is decided, so nothing new is started
                 else:
                     if answer["unlocked"]:
                         return unlocked
-                    if charge.status == OPEN and last["url"] and (last["amount"], last["currency"]) == (price, self.tap_currency):
-                        return {"unlocked": False, "provider": "tap", "status": "pending", "url": last["url"]}
-                    raise self._payment_open()  # the buyer is at their bank, or the open page is at an earlier price
+                    if charge.status == OPEN and last["url"] and age < TAP_PAGE_SECONDS:
+                        return {"unlocked": False, "provider": "tap", "status": "pending", "url": last["url"]}  # at the price it was started at
+                    if charge.status != OPEN and age < TAP_STUCK_SECONDS:
+                        raise self._payment_open()  # the buyer is at their bank
             # A request Tap may or may not have received (a timeout) is sent again with the same references, so that Tap answers
             # with the charge it already made instead of making a second one. Only while such a charge's page would still be open.
             waiting = self.store.tap_unattached(user_id, price, self.tap_currency, tap.live, self.store.clock() - TAP_REPLAY_SECONDS)
@@ -318,11 +326,11 @@ class PurchaseService:
         if charge.id == charge_id and charge.status in ENDED_UNPAID:
             self.store.tap_status(charge_id, charge.status)
             raise Refusal(409, "That payment was not completed, so nothing was unlocked.", "purchase_not_paid", status=charge.status.lower())
-        # Required: the id, the amount and currency (both the ones written down when the payment was started and the ones configured
-        # now), the mode, and the order reference this server made. Tap's copy of the metadata is refused only when it is there and
-        # says something else; a payment is not lost because Tap left it out.
-        price = (amount_text(self.tap_amount, self.tap_currency), self.tap_currency)
-        same = (charge.id == charge_id and (amount_text(charge.amount, charge.currency), charge.currency) == price == (attempt["amount"], attempt["currency"])
+        # Required: the id, the amount and currency written down when the payment was started (this server wrote them itself, from
+        # the price configured at that moment, so a price changed while the buyer was paying does not lose what they paid), the
+        # mode, and the order reference this server made. Tap's copy of the metadata is refused only when it is there and says
+        # something else; a payment is not lost because Tap left it out.
+        same = (charge.id == charge_id and (amount_text(charge.amount, charge.currency), charge.currency) == (attempt["amount"], attempt["currency"])
                 and charge.live_mode == tap.live and charge.order == attempt["order_ref"]
                 and charge.account in (None, user_id) and charge.metadata_order in (None, attempt["order_ref"]))
         if not same:
@@ -335,6 +343,9 @@ class PurchaseService:
         if outcome in {"other_account", "revoked"}:
             raise self._refuse(outcome)
         self._unlock(user_id, "tap")
+        others = [key for key in self.store.held_keys("tap", user_id) if key != charge_id]
+        if others:  # an earlier charge was given up on, a new one made, and then both were paid: the account is unlocked once, and one is owed back
+            log.warning("Tap charges %s and %s were both captured for one account; refund one of them by hand in Tap's dashboard.", charge_id, ", ".join(others))
         return {"unlocked": True, "provider": "tap", "status": "active", "restored": outcome == "restored"}, charge
 
     def tap_notification(self, raw, header):
@@ -365,7 +376,7 @@ class PurchaseService:
         noticed: when the account is next seen, at most once a minute at first and less often as the payment ages.
         """
         try:
-            if self.tap is not None and self.tap_amount is not None and not self.entitlements.is_unlocked(user_id):
+            if self.tap is not None and self.tap_amount is not None:
                 charge_id = self.store.tap_due(user_id)
                 if charge_id:
                     self.settle_tap(charge_id)

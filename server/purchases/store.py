@@ -183,16 +183,23 @@ class PurchaseStore:
             c.execute("UPDATE tap_attempts SET status=? WHERE charge_id=?", (status[:40], charge_id))
 
     def tap_due(self, user_id):
-        """The account's latest charge if Tap has not decided it and it is time to ask again, else None. Asking is spaced out:
+        """One of the account's charges that Tap has not decided and that it is time to ask about again, else None. Any of them,
+        not only the latest: one that was given up on and replaced can still be paid. Asking is spaced out for each charge:
         a minute after the last look, then two, four and so on up to an hour, and not at all once the payment is a month old."""
         now = int(self.clock())
         with self._transaction() as c:
             c.execute("BEGIN IMMEDIATE")
-            row = c.execute("SELECT order_ref,charge_id,status,checks,next_check_at,created_at FROM tap_attempts WHERE user_id=? AND charge_id IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1", (user_id,)).fetchone()
-            if row is None or row["status"] != "INITIATED" or row["next_check_at"] > now or row["created_at"] < now - EVENT_DAYS * 86400:
+            row = c.execute("SELECT order_ref,charge_id,checks FROM tap_attempts WHERE user_id=? AND charge_id IS NOT NULL AND status='INITIATED' AND next_check_at<=? AND created_at>=? "
+                            "ORDER BY next_check_at, rowid LIMIT 1", (user_id, now, now - EVENT_DAYS * 86400)).fetchone()
+            if row is None:
                 return None
             c.execute("UPDATE tap_attempts SET checks=checks+1,next_check_at=? WHERE order_ref=?", (now + min(3600, 60 * 2 ** min(row["checks"], 6)), row["order_ref"]))
             return row["charge_id"]
+
+    def held_keys(self, provider, user_id):
+        """The keys of the active purchases this account holds from one provider."""
+        with self._transaction() as c:
+            return [row[0] for row in c.execute("SELECT purchase_key FROM purchases WHERE provider=? AND user_id=? AND state='active' ORDER BY first_verified_at, rowid", (provider, user_id))]
 
     def tap_test_holders(self):
         """Accounts holding an active Tap purchase that was paid for with a test card."""

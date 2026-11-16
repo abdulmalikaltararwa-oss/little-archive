@@ -338,8 +338,9 @@ class TenantIsolationTests(HostedCase):
                     elif path not in public:
                         self.assertIn("owner", guards, "route does not resolve its library from the authenticated caller")
                         if node.name == "delete_account":
-                            calls = [ast.unparse(n) for n in ast.walk(node) if isinstance(n, ast.Call) and "libraries" in ast.unparse(n.func)]
-                            self.assertEqual(calls, ["libraries.delete(auth.user_id)"], "deletion must target the caller only")
+                            # The route and the operator's command share one deletion path (account_deletion.remove_account); here it is given the caller.
+                            calls = [ast.unparse(n) for n in ast.walk(node) if isinstance(n, ast.Call) and ("libraries" in ast.unparse(n) or "remove_account" in ast.unparse(n.func))]
+                            self.assertEqual(calls, ["remove_account(libraries, auth_deletions, auth.user_id)"], "deletion must target the caller only")
                         else:
                             self.assertFalse(names & {"libraries", "identity", "enrichment", "worker"}, "route chooses a library, identity or service itself")
         self.assertGreaterEqual(routes, 45)
