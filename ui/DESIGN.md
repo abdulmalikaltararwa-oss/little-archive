@@ -31,7 +31,7 @@ nothing competing with the content. Spectacle is saved for moments:
 | Saving a link | The island shows the flower opening petal by petal, then widens to say it is kept; the new card gets a one-off ring when you return to the wall |
 | Counts | Numbers in the hero and in an import result count up once |
 | Import, AI jobs | An ASCII progress bar that is also a real `progressbar` |
-| Nothing to show | A small ASCII drawing above the words |
+| Nothing to show | A small ASCII drawing above the words. A library with no saves at all shows how to save instead: three steps, worded for where it is open (`emptyLibraryWords`) |
 | The end of a page | The border garden: one row of text-art flowers. Static: it never moves, in any motion setting |
 | An AI suggestion | A slow beam travels the card's border, beside the evidence label in words |
 
@@ -114,6 +114,9 @@ has `dir="auto"`.
 - **Narrow:** no sidebar. A floating dock at the bottom (Library, Search, Save, Browse, Settings) with Save in
   the middle. Dialogs are sheets rising from the bottom edge; the detail is full screen. While a selection is
   active the dock steps aside for the bulk bar.
+- **The detail's footer** holds Save changes, and for a save with a recipe to cook from, Start cooking beside it
+  with a line of what the cooking takes. One of the two is the strong button: Start cooking while the form is clean,
+  Save once there is something to save.
 - **The wall** is a shortest-column masonry computed from data (`features/library/masonry.ts`). A card's
   height is known before it is drawn, so nothing shifts and only the cards near the screen exist in the page.
 - **RTL-safe.** Use logical utilities only: `ps-`/`pe-`, `ms-`/`me-`, `start-`/`end-`, `text-start`,
@@ -173,6 +176,10 @@ A new screen is a default export in `src/features/<name>/screen.tsx`, registered
 - A transcript says it is automatic and says nothing about what is on screen.
 - An import says what the file establishes and what it does not.
 - A placeholder says it is a placeholder. A locked feature says it is locked and what stays free.
+- Instructions describe the place they are read in. The share sheet is taught only inside the phone app, and it says
+  the app opens on the save dialog and keeps nothing until Save is tapped.
+- A way into a feature is shown only when the data says it leads somewhere: "Start cooking" is pinned to a save's
+  detail only for a recipe card with steps, and never on a locked account, which is not asked about the save.
 - The demo says, on every screen, that it is synthetic.
 
 ## Performance budget
