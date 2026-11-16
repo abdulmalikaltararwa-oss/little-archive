@@ -85,6 +85,17 @@ class Config:
     google_allow_test_purchases: bool = False
     google_rtdn_audience: str = ""
     google_rtdn_service_account: str = ""
+    # The same unlock sold on the web through Tap Payments (server/purchases/tap.py). Off until both the key and the price are set.
+    tap_secret_key: str = field(default="", repr=False)   # sk_test_... or sk_live_...; never logged, shown or returned by any route
+    tap_price: str = ""                      # what the unlock costs, as a decimal in the currency's own places: "2.500" for KWD
+    tap_currency: str = "KWD"
+    tap_return_url: str = ""                 # where Tap sends the buyer afterwards; empty means this server's own small page
+    tap_merchant_id: str = ""                # only for a Tap account with more than one merchant
+    tap_allow_test_purchases: bool = False   # with a live key: keep counting unlocks that were paid for with a test card
+    # The pay page (/pay, server/purchases/pay.py) signs a buyer in at the Supabase project from a browser, which needs the project's
+    # publishable key. That key is public by design (the phone app ships with it); it is not the secret key above.
+    supabase_publishable_key: str = ""
+    public_site_url: str = "https://abdulmalikaltararwa-oss.github.io/little-archive"   # where privacy.html and terms.html are published
     # Sign in with Apple, revoked when an account is deleted (server/apple_signin.py). All four or none: the team id, the id of the
     # team's Sign in with Apple key, the client id (the app's bundle id) and the key itself, given inline or as a path to the .p8 file.
     apple_signin_team_id: str = ""
@@ -142,6 +153,14 @@ class Config:
             google_allow_test_purchases=str(values.get("LA_GOOGLE_ALLOW_TEST_PURCHASES", "")).strip().lower() in {"1", "true", "yes", "on"},
             google_rtdn_audience=values.get("LA_GOOGLE_RTDN_AUDIENCE", "").strip(),
             google_rtdn_service_account=values.get("LA_GOOGLE_RTDN_SERVICE_ACCOUNT", "").strip(),
+            tap_secret_key=values.get("LA_TAP_SECRET_KEY", "").strip(),
+            tap_price=values.get("LA_TAP_PRICE", "").strip(),
+            tap_currency=values.get("LA_TAP_CURRENCY", "").strip().upper() or "KWD",
+            tap_return_url=values.get("LA_TAP_RETURN_URL", "").strip(),
+            tap_merchant_id=values.get("LA_TAP_MERCHANT_ID", "").strip(),
+            tap_allow_test_purchases=str(values.get("LA_TAP_ALLOW_TEST_PURCHASES", "")).strip().lower() in {"1", "true", "yes", "on"},
+            supabase_publishable_key=values.get("LA_SUPABASE_PUBLISHABLE_KEY", "").strip(),
+            public_site_url=values.get("LA_PUBLIC_SITE_URL", "").strip().rstrip("/") or "https://abdulmalikaltararwa-oss.github.io/little-archive",
             apple_signin_team_id=values.get("LA_APPLE_SIGNIN_TEAM_ID", "").strip(),
             apple_signin_key_id=values.get("LA_APPLE_SIGNIN_KEY_ID", "").strip(),
             apple_signin_client_id=values.get("LA_APPLE_SIGNIN_CLIENT_ID", "").strip(),
@@ -184,7 +203,7 @@ class Config:
             raise ValueError("LA_MODE must be self-hosted (the default) or hosted.")
         if self.mode == SELF_HOSTED:
             # A half-configured identity provider must never look like it is in effect.
-            if self.supabase_url or self.supabase_jwt_secret or self.supabase_jwt_issuer or self.supabase_service_key:
+            if self.supabase_url or self.supabase_jwt_secret or self.supabase_jwt_issuer or self.supabase_service_key or self.supabase_publishable_key:
                 raise ValueError("LA_SUPABASE_* settings apply only with LA_MODE=hosted. Remove them or set LA_MODE=hosted.")
             return
         if self.admin_password:
@@ -263,6 +282,34 @@ class Config:
             raise ValueError("LA_GOOGLE_SERVICE_ACCOUNT_FILE must be an absolute path.")
         if self.google_service_account_file and Path(self.google_service_account_file).resolve().is_relative_to((Path(__file__).resolve().parent.parent).resolve()):
             raise ValueError("LA_GOOGLE_SERVICE_ACCOUNT_FILE must be outside the source tree: a key file does not belong in the repository.")
+        self._validate_tap()
+
+    def _validate_tap(self):
+        """Tap is off unless LA_TAP_SECRET_KEY and LA_TAP_PRICE are both set. No message here ever contains the key."""
+        from .purchases.tap import DECIMALS, KEY, money
+        if self.tap_secret_key and not KEY.fullmatch(self.tap_secret_key):
+            raise ValueError("LA_TAP_SECRET_KEY must be a Tap secret key (sk_test_... or sk_live_...), on one line. A publishable key (pk_...) cannot make a charge.")
+        if bool(self.tap_secret_key) != bool(self.tap_price):
+            raise ValueError("Set both LA_TAP_SECRET_KEY and LA_TAP_PRICE, or neither.")
+        if self.tap_currency not in DECIMALS:
+            raise ValueError("LA_TAP_CURRENCY must be one of " + ", ".join(sorted(DECIMALS)) + ".")
+        if self.tap_price:
+            places = DECIMALS[self.tap_currency]
+            amount = money(self.tap_price, self.tap_currency)
+            if amount is None or len(self.tap_price) > 16 or not re.fullmatch(r"[0-9]+(\.[0-9]+)?", self.tap_price):
+                raise ValueError(f"LA_TAP_PRICE must be a positive amount with at most {places} decimal places for {self.tap_currency}, such as {'2.500' if places == 3 else '9.99'}.")
+            if self.tap_currency == "KWD" and amount * 10 < 1:
+                raise ValueError("LA_TAP_PRICE must be at least 0.100 KWD, the smallest charge Tap makes.")
+        self._validate_pay_page()
+        if self.tap_merchant_id and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.tap_merchant_id):
+            raise ValueError("LA_TAP_MERCHANT_ID must be the merchant id from the Tap dashboard.")
+        if self.tap_return_url:
+            if _unsafe_text(self.tap_return_url) or len(self.tap_return_url) > 2048:
+                raise ValueError("LA_TAP_RETURN_URL must be bounded text without control characters.")
+            r = urlsplit(self.tap_return_url)
+            _ = r.port
+            if r.scheme not in {"http", "https"} or not r.hostname or r.username or r.password or r.query or r.fragment or (r.scheme == "http" and r.hostname not in LOOPBACK):
+                raise ValueError("LA_TAP_RETURN_URL must be an HTTPS page address without a query; Tap adds ?tap_id=... to it.")
 
     def _validate_apple_signin(self):
         key, key_file = self.apple_signin_private_key, self.apple_signin_private_key_file
@@ -293,6 +340,28 @@ class Config:
     @property
     def apple_signin_configured(self):
         return bool(self.apple_signin_team_id and self.apple_signin_key_id and self.apple_signin_client_id and (self.apple_signin_private_key or self.apple_signin_private_key_file))
+
+    def _validate_pay_page(self):
+        """The two values the pay page shows a browser. The publishable key is public; anything that could be a secret key is refused,
+        because this value is written into a page anyone can open."""
+        key = self.supabase_publishable_key
+        if key:
+            role = ""
+            if key.count(".") == 2:  # a legacy key is a JWT whose payload names its role: "anon" is public, "service_role" is the secret one
+                import base64
+                import json
+                try:
+                    payload = key.split(".")[1]
+                    role = str(json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))).get("role", ""))
+                except (ValueError, AttributeError, UnicodeError):
+                    role = "unreadable"
+            if (_unsafe_text(key) or len(key) > 4096 or len(key) < 20 or any(c.isspace() for c in key) or key.startswith("sb_secret_") or key == self.supabase_service_key
+                    or (key.count(".") == 2 and role != "anon") or (key.count(".") != 2 and not key.startswith("sb_publishable_"))):
+                raise ValueError("LA_SUPABASE_PUBLISHABLE_KEY must be the project's publishable key (sb_publishable_...) or its legacy anon key. It is shown to browsers, so a secret key is refused.")
+        site = self.public_site_url
+        s = urlsplit(site)
+        if _unsafe_text(site) or len(site) > 2048 or s.scheme != "https" or not s.hostname or s.username or s.password or s.query or s.fragment or any(c in site for c in "\"<>'"):
+            raise ValueError("LA_PUBLIC_SITE_URL must be the HTTPS address of the public site, without a query.")
 
     def require_account_deletion(self):
         """Hosted mode must be able to delete a person's sign-in with their library (App Store guideline 5.1.1(v)).

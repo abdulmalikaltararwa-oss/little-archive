@@ -1,0 +1,127 @@
+{
+	"id": "chg_TS050120220958Bk240709704",
+	"object": "charge",
+	"live_mode": false,
+	"api_version": "V2",
+	"method": "GET",
+	"status": "CAPTURED",
+	"amount": 1.000,
+	"currency": "KWD",
+	"threeDSecure": false,
+	"card_threeDSecure": false,
+	"save_card": false,
+	"merchant_id": "",
+	"product": "GOSELL",
+	"description": "Test Description",
+	"metadata": {
+		"udf1": "Metadata 1"
+	},
+	"transaction": {
+		"authorization_id": "321387",
+		"timezone": "UTC+03:00",
+		"created": "1662544753039",
+		"expiry": {
+			"period": 30,
+			"type": "MINUTE"
+		},
+		"asynchronous": false,
+		"amount": 1.030,
+		"currency": "KWD"
+	},
+	"reference": {
+		"track": "tck_TS050120220958Xx440709704",
+		"payment": "1707220958097045920",
+		"gateway": "123456789",
+		"acquirer": "225006321387",
+		"transaction": "txn_01",
+		"order": "ord_01"
+	},
+	"response": {
+		"code": "000",
+		"message": "Captured"
+	},
+	"acquirer": {
+		"response": {
+			"code": "00",
+			"message": "Approved"
+		}
+	},
+	"gateway": {
+		"response": {
+			"code": "0",
+			"message": "Transaction Approved"
+		}
+	},
+	"card": {
+		"object": "card",
+		"first_six": "511111",
+		"scheme": "MASTERCARD",
+		"brand": "MASTERCARD",
+		"type": "DEBIT",
+		"category": "STANDARD",
+		"last_four": "1118"
+	},
+	"receipt": {
+		"id": "202007220958092921",
+		"email": true,
+		"sms": true
+	},
+	"customer": {
+		"id": "cus_TS051320220959Di9e0709722",
+		"first_name": "test",
+		"last_name": "test",
+		"email": "test@test.com",
+		"phone": {
+			"country_code": "965",
+			"number": "51234567"
+		}
+	},
+	"merchant": {
+		"country": "KW",
+		"currency": "KWD",
+		"id": "599424"
+	},
+	"source": {
+		"object": "token",
+		"type": "CARD_NOT_PRESENT",
+		"payment_type": "DEBIT",
+		"payment_method": "MASTERCARD",
+		"channel": "INTERNET",
+		"id": "tok_Xx1e922659l00Z7gI8b577"
+	},
+	"redirect": {
+		"status": "SUCCESS",
+		"url": "http://your_website.com/redirect_url"
+	},
+	"post": {
+		"status": "SUCCESS",
+		"url": "http://your_website.com/post_url"
+	},
+	"issuer": {
+		"id": "bnk_TS052820221011q2O50709262",
+		"name": "U.S. BANK, N.A.",
+		"country": "US",
+		"region": "global"
+	},
+	"activities": [
+		{
+			"id": "activity_TS061320220959h2J50709738",
+			"object": "activity",
+			"created": 1662544753039,
+			"status": "INITIATED",
+			"currency": "KWD",
+			"amount": 1.000,
+			"remarks": "charge - created"
+		},
+		{
+			"id": "activity_TS071520220959Rg120709744",
+			"object": "activity",
+			"created": 1662544755744,
+			"status": "CAPTURED",
+			"currency": "KWD",
+			"amount": 1.030,
+			"remarks": "charge - captured"
+		}
+	],
+	"auto_reversed": false
+}

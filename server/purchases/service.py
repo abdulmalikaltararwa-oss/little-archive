@@ -4,6 +4,13 @@
 nothing in the request path does that from what a client says: a client sends a signed proof, this verifies it with the store's own
 certificates or API, and only then does the account change.
 
+A payment on the web (Tap) differs in one way: the server starts it, so it knows beforehand which account is paying and how much.
+Whoever says a charge was paid (the buyer's browser coming back, Tap's webhook, the account asking), the answer comes from one
+function, `settle_tap`: find the payment this server started, ask Tap for the charge, and unlock only if Tap says it was captured,
+for that amount, in that currency, for that account. A payment Tap has not decided is never treated as failed, and an account
+has one payable charge at a time. A refund made in Tap's dashboard is not followed: an operator takes the
+purchase back with `revoke("tap", charge_id)`.
+
 Refunds and revocations arrive three ways, each tested here with stand-ins:
 
 * an App Store Server Notification V2 (REFUND, REVOKE; REFUND_REVERSED undoes a refund);
@@ -16,20 +23,32 @@ undone by a refund of something else.
 from __future__ import annotations
 
 import logging
+import secrets
+import time
 
 from .apple import AppleVerificationError
 from .google import PlayError, account_tag, token_key
+from threading import Lock
+
+from .tap import CHARGE_ID, ENDED_UNPAID, OPEN, PAID, TapError, amount_text, read_charge
 from ..limits import Refusal, retry_after
 
 log = logging.getLogger("little_archive")
-STORE_SOURCES = {"apple", "google"}
+STORE_SOURCES = {"apple", "google", "tap"}
+TAP_PRODUCT = "unlock"
+TAP_REPLAY_SECONDS = 10 * 60  # how long a charge Tap may or may not have made is asked for again with the same references (its page lives 30 minutes)
 
 
 class PurchaseService:
-    def __init__(self, store, entitlements, *, apple=None, google=None, google_package="", google_product="", google_allow_test=False, push=None):
+    def __init__(self, store, entitlements, *, apple=None, google=None, google_package="", google_product="", google_allow_test=False, push=None,
+                 tap=None, tap_amount=None, tap_currency="", tap_redirect="", tap_post="", tap_allow_test=False):
         self.store, self.entitlements = store, entitlements
         self.apple, self.google, self.push = apple, google, push
         self.google_package, self.google_product, self.google_allow_test = google_package, google_product, google_allow_test
+        self.tap, self.tap_amount, self.tap_currency, self.tap_redirect, self.tap_post = tap, tap_amount, tap_currency, tap_redirect, tap_post
+        self.tap_allow_test = bool(tap_allow_test) or (tap is not None and not tap.live)
+        self.pay_page = False  # set when the service is built: is the pay page (pay.py) offered?
+        self._tap_locks = [Lock() for _ in range(64)]  # one of these per account, by hash: a fixed number, so it cannot grow
 
     # -- the unlock follows the purchases --------------------------------------------------
     def _unlock(self, user_id, provider):
@@ -37,7 +56,8 @@ class PurchaseService:
             self.entitlements.set_unlocked(user_id, True, source=provider)
 
     def _relock_if_nothing_holds_it(self, user_id):
-        if user_id and not self.store.active_for(user_id) and self.entitlements.unlock_source(user_id) in STORE_SOURCES:
+        holding = [row for row in self.store.active_for(user_id) if row["provider"] != "tap" or self._tap_counts(row["environment"])] if user_id else []
+        if user_id and not holding and self.entitlements.unlock_source(user_id) in STORE_SOURCES:
             self.entitlements.set_unlocked(user_id, False, source="purchase-ended")
 
     def purchases(self, user_id):
@@ -197,9 +217,181 @@ class PurchaseService:
             self.store.done("google", event)
         return {"received": True, "action": action}
 
+    # -- Tap ---------------------------------------------------------------------------------------
+    def _tap(self):
+        if self.tap is None or self.tap_amount is None:
+            raise self._unavailable("tap", "not_configured")
+        return self.tap
+
+    def _ask_tap(self, call, *arguments, **named):
+        """Ask Tap. Whatever goes wrong, nothing is decided: the caller is told to try again, never that the payment failed."""
+        try:
+            return call(*arguments, **named)
+        except TapError as problem:
+            if problem.kind in {"refused", "not_found"}:
+                # 'not_found' for a charge this server made is not an answer about the payment (a key for another account or mode, or Tap's own trouble).
+                log.warning("Tap refused a request (%s); nothing was decided.", "create a charge" if problem.kind == "refused" else "read a charge this server started")
+            raise self._unavailable("tap", "forbidden" if problem.kind == "forbidden" else "unavailable") from None
+
+    def _tap_counts(self, environment):
+        """Does a Tap purchase made in this environment unlock? One paid for with a test card does not, once the key is a live one."""
+        return environment != "test" or self.tap_allow_test
+
+    @staticmethod
+    def _payment_open():
+        return Refusal(409, "A payment for this account is already open. If you paid, the unlock arrives by itself; you do not need to pay twice.", "payment_open")
+
+    def start_tap(self, user_id, name, email):
+        """Begin a payment for this account. Returns Tap's hosted page to send the buyer to, or says the account is already unlocked.
+
+        One account has at most one payment that can still be paid. While the last one is not decided at Tap, no other is made:
+        its page is given again if it is still the open page at today's price, and otherwise the answer is 409 `payment_open`.
+        A new charge is made only after the last one ended unpaid (or was taken back).
+        """
+        tap = self._tap()
+        with self._tap_locks[hash(user_id) % len(self._tap_locks)]:  # two requests at once must not both find "no payment yet"
+            unlocked = {"unlocked": True, "provider": "tap", "status": "unlocked", "url": None}
+            if self.entitlements.is_unlocked(user_id):
+                return unlocked
+            price = amount_text(self.tap_amount, self.tap_currency)
+            last = self.store.tap_latest(user_id)
+            if last and last["status"] not in ENDED_UNPAID:
+                try:
+                    answer, charge = self._settle_tap(last["charge_id"], user_id)
+                except Refusal as refusal:
+                    if refusal.code == "purchase_invalid":
+                        raise self._payment_open() from None  # it does not match what was started, so it is for an operator to look at, not to be paid twice
+                    if refusal.code not in {"purchase_not_paid", "purchase_revoked", "purchase_wrong_environment"}:
+                        raise  # Tap could not be asked: nothing is decided, so nothing new is started
+                else:
+                    if answer["unlocked"]:
+                        return unlocked
+                    if charge.status == OPEN and last["url"] and (last["amount"], last["currency"]) == (price, self.tap_currency):
+                        return {"unlocked": False, "provider": "tap", "status": "pending", "url": last["url"]}
+                    raise self._payment_open()  # the buyer is at their bank, or the open page is at an earlier price
+            # A request Tap may or may not have received (a timeout) is sent again with the same references, so that Tap answers
+            # with the charge it already made instead of making a second one. Only while such a charge's page would still be open.
+            waiting = self.store.tap_unattached(user_id, price, self.tap_currency, tap.live, self.store.clock() - TAP_REPLAY_SECONDS)
+            if waiting:
+                order, idempotent = waiting["order_ref"], waiting["idempotent_ref"]
+            else:
+                order, idempotent = "la_" + secrets.token_hex(12), secrets.token_hex(16)
+                self.store.tap_begin(order, idempotent, user_id, price, self.tap_currency, tap.live)
+            charge = self._ask_tap(tap.create_charge, self.tap_amount, self.tap_currency, order=order, idempotent=idempotent, account=user_id, name=name, email=email,
+                                   redirect_url=self.tap_redirect, post_url=self.tap_post)
+            if (charge.status, charge.amount, charge.currency, charge.live_mode, charge.order) != (OPEN, self.tap_amount, self.tap_currency, tap.live, order) or not charge.url:
+                log.warning("Tap answered a new charge that is not the one asked for; the buyer was not sent to it.")
+                raise self._unavailable("tap", "unavailable")
+            self.store.tap_attach(order, charge.id, charge.url)
+            return {"unlocked": False, "provider": "tap", "status": "pending", "url": charge.url}
+
+    def settle_tap(self, charge_id, caller=None):
+        """What became of a charge, by asking Tap, and the unlock if it was paid. The one place a Tap payment unlocks an account.
+
+        `caller` is the signed-in account when one is asking; the buyer's return and Tap's webhook have none. The account unlocked
+        is always the one the payment was started for. Returns `{unlocked, provider, status: 'active' | 'pending', restored}`:
+        `pending` is everything Tap has not decided (the page is open, the buyer is at their bank, a status this code does not
+        know). Refuses a payment that ended unpaid (`purchase_not_paid`) and one that is not what was started.
+        """
+        return self._settle_tap(charge_id, caller)[0]
+
+    def _settle_tap(self, charge_id, caller=None):
+        """`settle_tap`, and beside its answer the charge as Tap gave it (None when Tap was not asked)."""
+        tap = self._tap()
+        attempt = self.store.tap_attempt(charge_id) if isinstance(charge_id, str) and CHARGE_ID.fullmatch(charge_id) else None
+        if attempt is None:
+            raise self._refuse("invalid")  # not a payment this server started: Tap is not even asked
+        user_id = attempt["user_id"]
+        if caller is not None and caller != user_id:
+            raise self._refuse("other_account")
+        held = self.store.purchase("tap", charge_id)
+        if held is not None:  # settled before: the answer is on file and stays the same however often it is asked
+            if held["state"] == "revoked":
+                raise self._refuse("revoked")
+            if not self._tap_counts(held["environment"]):
+                raise self._refuse("wrong_environment")
+            self._unlock(user_id, "tap")  # the purchase and the unlock are two writes: one that was stopped between them is finished here
+            return {"unlocked": True, "provider": "tap", "status": "active", "restored": True}, None
+        if bool(attempt["live"]) != tap.live:
+            raise self._refuse("wrong_environment")  # started with the other kind of key: this key cannot ask about it
+        charge = self._ask_tap(tap.retrieve_charge, charge_id)
+        if charge.id == charge_id and charge.status in ENDED_UNPAID:
+            self.store.tap_status(charge_id, charge.status)
+            raise Refusal(409, "That payment was not completed, so nothing was unlocked.", "purchase_not_paid", status=charge.status.lower())
+        # Required: the id, the amount and currency (both the ones written down when the payment was started and the ones configured
+        # now), the mode, and the order reference this server made. Tap's copy of the metadata is refused only when it is there and
+        # says something else; a payment is not lost because Tap left it out.
+        price = (amount_text(self.tap_amount, self.tap_currency), self.tap_currency)
+        same = (charge.id == charge_id and (amount_text(charge.amount, charge.currency), charge.currency) == price == (attempt["amount"], attempt["currency"])
+                and charge.live_mode == tap.live and charge.order == attempt["order_ref"]
+                and charge.account in (None, user_id) and charge.metadata_order in (None, attempt["order_ref"]))
+        if not same:
+            log.warning("Tap charge %s does not match the payment that was started for it; nothing was unlocked.", charge_id)
+            raise self._refuse("invalid")
+        if charge.status != PAID:
+            return {"unlocked": False, "provider": "tap", "status": "pending", "restored": False}, charge
+        self.store.tap_status(charge_id, PAID)
+        outcome = self.store.claim("tap", charge_id, user_id, TAP_PRODUCT, "" if tap.live else "test", True, int(time.time() * 1000))
+        if outcome in {"other_account", "revoked"}:
+            raise self._refuse(outcome)
+        self._unlock(user_id, "tap")
+        return {"unlocked": True, "provider": "tap", "status": "active", "restored": outcome == "restored"}, charge
+
+    def tap_notification(self, raw, header):
+        """Tap's webhook: the charge as JSON, signed in the `hashstring` header. It is only a prompt to ask Tap about that charge.
+
+        Answers 200 once the charge has been looked at (whatever was found, and for a charge this server never started), 400 for
+        a body that is not a charge, 401 for a wrong signature, and 503 when Tap could not be asked, so that Tap sends it again.
+        """
+        tap = self._tap()
+        try:
+            charge = read_charge(raw)
+        except TapError:
+            raise Refusal(400, "That is not a notification for this service.", "notification_invalid") from None
+        if not tap.signed(charge, header):
+            raise Refusal(401, "This notification is not signed for this service.", "notification_unauthenticated")
+        try:
+            answer = self.settle_tap(charge.id)
+        except Refusal as refusal:
+            if refusal.status_code == 503:
+                raise  # Tap could not be asked: answer so that it sends the notification again
+            return {"received": True, "action": "ignored"}
+        return {"received": True, "action": "unlocked" if answer["unlocked"] else "pending"}
+
+    def recheck_tap(self, user_id):
+        """Look again at this account's payment if Tap has not decided it yet and it is time to. Never raises.
+
+        The buyer's return and Tap's webhook can both be missed (a closed tab, an outage). This is the third way a paid charge is
+        noticed: when the account is next seen, at most once a minute at first and less often as the payment ages.
+        """
+        try:
+            if self.tap is not None and self.tap_amount is not None and not self.entitlements.is_unlocked(user_id):
+                charge_id = self.store.tap_due(user_id)
+                if charge_id:
+                    self.settle_tap(charge_id)
+        except Refusal:
+            pass  # ended unpaid, a mismatch (already noted for the operator), or Tap could not be asked: the next look is already scheduled
+        except Exception:  # a look at a payment must never fail the request that prompted it
+            log.warning("A pending Tap payment could not be re-checked.")
+
+    def apply_tap_environment(self):
+        """Keep accounts in step with the kind of key in use (called once, when the service is built).
+
+        A purchase paid for with a test card unlocks while the key is a test key, or while the operator allows it. With a live key
+        it does not count: an account that only such a purchase holds open is locked again. Nothing is deleted, so going back
+        to a test key, or allowing test purchases, opens it again.
+        """
+        if self.tap is None:
+            return  # Tap is not configured here at all: nothing is decided about what was bought through it
+        for user_id in self.store.tap_test_holders():
+            if self.tap_allow_test:
+                self._unlock(user_id, "tap")
+            else:
+                self._relock_if_nothing_holds_it(user_id)
+
     # -- an operator's seam ---------------------------------------------------------------------------------
     def revoke(self, provider, purchase_key, reason="operator"):
-        """Take a purchase back by hand (support, a chargeback learned elsewhere). The key is Apple's original transaction id, or for Google the token's hash."""
+        """Take a purchase back by hand (support, a chargeback learned elsewhere). The key is Apple's original transaction id, for Google the token's hash, for Tap the charge id."""
         changed, holder = self.store.revoke(provider, purchase_key, 2 ** 53, reason)
         self._relock_if_nothing_holds_it(holder)
         return changed

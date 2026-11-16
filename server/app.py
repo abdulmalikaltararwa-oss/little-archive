@@ -155,7 +155,7 @@ class BodyLimitMiddleware:
 
 
 def create_app(config: Config | None = None, *, identity=None, entitlements=None, auth_admin=None, purchase_clients=None, apple_signin=None):
-    """`identity`, `entitlements`, `auth_admin`, `purchase_clients` (`apple`, `google`, `push`) and `apple_signin` (the client that
+    """`identity`, `entitlements`, `auth_admin`, `purchase_clients` (`apple`, `google`, `push`, `tap`) and `apple_signin` (the client that
     talks to Apple about Sign in with Apple) replace the hosted defaults (tests, future providers)."""
     config = config or Config.from_env()
     config.validate()
@@ -505,6 +505,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     @app.get("/api/account")
     def account(auth=Depends(owner)):
         store = auth.store
+        if purchases is not None:
+            purchases.recheck_tap(auth.user_id)  # a payment Tap had not decided when it was last looked at is looked at again here
         return {
             "mode": config.mode, "user_id": auth.user_id,
             "storage": {"used_bytes": store.used_bytes(), "quota_bytes": quota},
@@ -1047,6 +1049,9 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         purchases = build_purchases(config, entitlements, libraries, purchase_clients)
     app.state.purchases = purchases
     install_purchase_routes(app, owner=owner, service=purchases, hosted_route=hosted_route, entitlements=entitlements)
+    if hosted:
+        from .purchases.pay import install_pay_routes
+        install_pay_routes(app, config=config, service=purchases)  # the one page a hosted server has; 404 unless Tap and the publishable key are set
 
     if not hosted:
         # The bundled web interface signs in with the owner password, so a hosted service is API-only. It is the

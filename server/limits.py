@@ -210,7 +210,8 @@ IDENTITY = "little_archive.identity"
 RELEASES = "little_archive.releases"
 # Routes whose caller is not a signed-in account: they must not be refused for want of a bearer token, and are judged by
 # their own proof (a store's signature) instead.
-NO_EARLY_AUTH = ("/api/auth/", "/api/extension/", "/api/health", "/api/discovery", "/api/purchases/apple/notifications", "/api/purchases/google/notifications")
+NO_EARLY_AUTH = ("/api/auth/", "/api/extension/", "/api/health", "/api/discovery", "/api/purchases/apple/notifications", "/api/purchases/google/notifications",
+                 "/api/purchases/tap/notifications")
 BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 

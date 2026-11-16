@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Unlock - Little Archive</title>
+<link rel="stylesheet" href="/pay/pay.css">
+<script src="/pay/pay.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the page</a>
+<div class="wrap">
+<header class="site-header"><span class="brand">Little Archive</span></header>
+<main id="main" data-supabase-url="{supabase_url}" data-supabase-key="{supabase_key}">
+<p class="whisper">a one-time unlock</p>
+<h1>Pay once, keep it.</h1>
+<p class="lede">Saving, searching, importing and exporting are free. A few extras open with a single payment: no subscription, nothing to cancel.</p>
+<section class="adds" aria-labelledby="adds-title">
+<p class="whisper" id="adds-title">the unlock adds</p>
+<ul>
+<li>Recipe cards and cook mode</li>
+<li>Places on a map</li>
+<li>Ask your archive</li>
+<li>Transcripts of saved videos, within a fair-use limit</li>
+</ul>
+</section>
+<p id="status" role="status" aria-live="polite"></p>
+<p id="error" role="alert"></p>
+<noscript><p>This page needs JavaScript to sign you in and start the payment.</p></noscript>
+
+<section id="signin" aria-labelledby="signin-title" hidden>
+<h2 id="signin-title" tabindex="-1">Sign in to pay</h2>
+<p>Use your Little Archive account, the same one as in the app. The unlock is attached to that account.</p>
+<form id="signin-form" method="post" action="/pay" novalidate>
+<label for="email">Email</label>
+<input id="email" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required>
+<label for="password">Password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit" class="btn primary">Sign in</button>
+</form>
+<button type="button" class="btn" id="google" hidden>Continue with Google</button>
+<p class="small">Sign in with Apple is not offered on this page yet.</p>
+</section>
+
+<section id="offer" aria-labelledby="offer-title" hidden>
+<h2 id="offer-title" tabindex="-1">One payment, once</h2>
+<div class="panel">
+<p class="price">{price} <small>{currency}</small></p>
+<p class="mono">one payment · once · no subscription</p>
+</div>
+<p>Signed in as <b id="who"></b>. The unlock is attached to this account, on the web and in the app.</p>
+<button type="button" class="btn primary" id="pay">Pay {price} {currency}</button>
+<p class="small">You pay on the page of Tap Payments, which shows the ways to pay it supports, such as KNET, Apple Pay or a card. Little Archive never sees your card. Nothing is charged until you confirm there.</p>
+</section>
+
+<section id="open" aria-labelledby="open-title" hidden>
+<h2 id="open-title" tabindex="-1">A payment is already open</h2>
+<p>A payment for this account is still being confirmed. If you paid, the unlock arrives by itself; you do not need to pay twice.</p>
+<button type="button" class="btn" id="check">Check again</button>
+</section>
+
+<section id="done" aria-labelledby="done-title" hidden>
+<h2 id="done-title" tabindex="-1">Everything is open</h2>
+<p>This account has the unlock. You can close this page and go back to Little Archive.</p>
+</section>
+
+<p><button type="button" class="link" id="signout" hidden>Sign out</button></p>
+</main>
+<footer class="site-footer">
+<ul>
+<li><a href="{site}/privacy.html">Privacy</a></li>
+<li><a href="{site}/terms.html">Terms</a></li>
+<li><a href="{site}/support.html">Support</a></li>
+</ul>
+</footer>
+</div>
+</body>
+</html>
