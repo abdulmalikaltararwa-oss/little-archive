@@ -108,7 +108,10 @@ test.describe('on a phone', () => {
     expect(size.x).toBeGreaterThan(field.x + field.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // The suggestions are finger-sized.
-    const chips = await dialog.getByRole('option').evaluateAll(options => options.map(option => Math.round(option.getBoundingClientRect().height)));
+    // Measured through a plain selector: Playwright's Firefox crashes the page on evaluateAll under a dialog found by its name.
+    await expect(dialog.getByRole('option').first()).toBeVisible();
+    const chips = await page.locator('[role="dialog"] [role="option"]').evaluateAll(options => options.map(option => Math.round(option.getBoundingClientRect().height)));
+    expect(chips.length).toBeGreaterThan(0);
     for (const height of chips) expect(height).toBeGreaterThanOrEqual(44);
     await cancel.tap();
     await expect(dialog).toHaveCount(0);

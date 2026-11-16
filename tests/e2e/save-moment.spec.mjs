@@ -21,7 +21,7 @@ async function saveFromDialog(page, { url, title = '', collection = '' }) {
   return response.json();
 }
 
-test('a saved link is answered by a tray that files it, and the same link saved again is not kept twice', async ({ page }) => {
+test('a saved link is answered by a tray that files it, and the same link saved again is not kept twice', async ({ page, browserName }) => {
   await login(page);
   const name = uniqueName('Shelf');
   const collection = await createCollection(page, name);
@@ -33,7 +33,8 @@ test('a saved link is answered by a tray that files it, and the same link saved 
   const tray = saveTray(page);
   // Focus moves to the tray, so the keyboard reaches it; a key pressed in it stops the countdown.
   await expect(tray).toBeFocused();
-  await page.keyboard.press('Tab');
+  // Safari on a Mac reaches buttons with Option+Tab unless full keyboard access is on.
+  await page.keyboard.press(browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab');
   await expect(tray.getByRole('button', { name: 'Done', exact: true })).toBeFocused();
   await expect(tray).toHaveAccessibleName('Just saved');
   await expect(tray.getByRole('status')).toContainText('Kept in your archive.');
