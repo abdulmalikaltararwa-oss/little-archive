@@ -36,6 +36,74 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-screen::before { content: ''; position: fixed; z-index: 10; inset: 0 0 auto 0; height: var(--safe-top); background: var(--paper) radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px) 0 0 / 26px 26px; pointer-events: none; }
 .native-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 34px; font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 1.3rem; letter-spacing: -.02em; }
 .native-brand img { border-radius: 12px; }
+
+/* The hero band and its garden (ui.js draw(), garden.js) ------------------------------------------------------------
+   On first launch and on the sign-in, reset and own-server screens the logo stands on the hero's paper (the interface's
+   .hero-paper, restated here from the same tokens: sage fading to oat, a butter sun in one corner, a petal blush in the other),
+   with a bed of text-art flowers along its foot. The band runs to the screen's edges and up under the status bar.
+
+   --band-h is the band's height. On the screens with a form ('compact') it is what the logo and the space under it took
+   before the band (28 + 38 + 34px, less the 16px now under the band), so nothing under it moved. On first launch ('tall') it
+   holds the logo, the line and a full row of flowers. The strip that stays over the status bar (above) shows the top of the
+   same paper, drawn at the same size, so there is no seam where the two meet. */
+.native-has-band { padding-top: 0; --band-h: calc(var(--safe-top) + 84px);
+  --hero-paper: radial-gradient(circle 220px at 100% 0, var(--butter-pale), transparent 70%), radial-gradient(circle 260px at 76% 125%, var(--petal-pale), transparent 70%), linear-gradient(115deg, var(--sage-pale), var(--card-2)); }
+.native-has-band.native-band-tall { --band-h: calc(var(--safe-top) + 292px); }
+.native-band { position: relative; box-sizing: border-box; flex: none; display: flex; flex-direction: column; min-height: var(--band-h); margin: 0 calc(-24px - var(--safe-end)) 16px calc(-24px - var(--safe-start)); padding: calc(var(--safe-top) + 28px) calc(var(--safe-end) + 24px) 0 calc(var(--safe-start) + 24px); overflow: hidden; }
+.native-band, .native-has-band::before { background-color: var(--card-2); background-image: var(--hero-paper); background-position: 0 0; background-size: 100% var(--band-h); background-repeat: no-repeat; }
+/* The band's own paper covers all of it. That is --band-h, and the strip's size, unless larger text has made the band taller. */
+.native-band { background-size: 100% 100%; }
+/* compact: the logo and the garden side by side, with the space under the logo kept inside the band (so a taller logo line,
+   with larger text, makes the band taller and the grass stays under it). */
+.native-band-compact .native-band { flex-direction: row; align-items: flex-start; padding-bottom: 18px; padding-inline-end: 0; }
+.native-band-compact .native-brand { flex: none; }
+.native-has-band::before { left: 50%; right: auto; width: min(440px, 100%); transform: translateX(-50%); }
+.native-band .native-brand { margin-bottom: 0; }
+.native-tagline { margin: 18px 0 0; font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 2.125rem; line-height: 1.06; letter-spacing: -.02em; font-variation-settings: 'SOFT' 100, 'WONK' 0; color: var(--ink); max-width: 9em; }
+
+/* The garden. Decoration: it takes no tap and no selection, and is drawn faintly from the flower tokens (the stems in sage,
+   each head in its species' colour), with opacity doing the fading so the tokens are used as they are in both themes. Plants
+   stand on one baseline, each a <pre> in the mono face, so their columns line up.
+   compact: the bed fills the width the name leaves and adds no height. The grass (the first row) lies along the band's foot
+   under the logo. The flowers (the second row) stand in the width the name leaves, beside it and never behind it: the row wraps upward and is clipped to one line, so
+   with a longer name (larger text) or a narrower phone the flowers that do not fit are left out whole.
+   tall: one full row under the line, in the flow, so a longer line pushes it down and never runs over it. */
+.native-garden { display: flex; align-items: flex-end; opacity: .6; pointer-events: none; -webkit-user-select: none; user-select: none; }
+:root[data-theme='dark'] .native-garden { opacity: .68; }
+.native-garden-row { display: flex; align-items: flex-end; }
+.native-band-compact .native-garden { position: relative; flex: 1; min-width: 0; align-self: stretch; margin: -24px 0 -18px; }
+.native-band-compact .native-garden-row:first-child { position: absolute; inset: auto 100% 0 auto; width: 176px; justify-content: space-between; padding-inline: 8px; }
+.native-band-compact .native-garden-row:last-child { position: absolute; inset: auto 0 0 0; height: 78px; overflow: hidden; flex-wrap: wrap-reverse; justify-content: flex-end; align-items: flex-start; align-content: flex-start; gap: 0 9px; padding-inline: 5px 12px; }
+/* An empty first item, as tall as the row: a line that already holds something wraps a plant that does not fit, where an
+   empty line would keep it and show half of it, and the line it holds is the one line that shows. */
+.native-band-compact .native-garden-row:last-child::before { content: ''; flex: none; width: 0; height: 78px; }
+.native-band-tall .native-garden { margin: auto calc(-24px - var(--safe-end)) 0 calc(-24px - var(--safe-start)); padding-top: 12px; }
+.native-band-tall .native-garden-row { flex: 1; justify-content: space-around; }
+.native-plant { flex: none; margin: 0; padding: 0; border: 0; background: none; font-family: var(--font-mono, 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace); font-size: 10px; line-height: 1.12; letter-spacing: 0; font-variant-ligatures: none; white-space: pre; text-align: left; color: var(--sage); }
+.native-plant-l { font-size: 12px; }
+.native-plant-xl { font-size: 15px; }
+.native-flower-head { display: inline-block; transform-origin: 50% 100%; color: var(--petal-ink); }
+.native-tone-butter .native-flower-head { color: var(--butter-ink); }
+.native-tone-lilac .native-flower-head { color: var(--lilac-ink); }
+.native-tone-clay .native-flower-head { color: var(--clay-ink); }
+.native-tone-sage .native-flower-head { color: var(--sage); }
+/* A narrow phone has no room for every plant; the ones marked for it are left out whole, so none is cut in half. */
+@media (max-width: 359px) { .native-plant-roomy { display: none; } }
+/* The keyboard is up (the iOS app marks the root, MainViewController.swift): the bed goes, so nothing decorative shares the
+   short screen with the field being typed in. On the compact band it adds no height, so no field moves when it goes. */
+:root[data-keyboard] .native-garden { display: none; }
+/* A slow sway of the flower heads, only for someone who has not asked for less motion, and never while there is an error or a
+   notice to read: then the garden is completely still. Still is also what a web view without :has() gets (iOS before 15.4),
+   since it could not tell when to stop. */
+@keyframes native-sway { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(3deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  @supports selector(:has(*)) {
+    .native-screen:not(:has(.native-error:not([hidden]), .notice, [role='alert']:not([hidden]))) .native-flower-head { animation: native-sway 7s ease-in-out infinite; }
+    .native-plant:nth-child(3n + 2) .native-flower-head { animation-delay: -2.3s; }
+    .native-plant:nth-child(3n) .native-flower-head { animation-delay: -4.6s; }
+    .native-garden-row:last-child .native-plant:nth-child(4n + 1) .native-flower-head { animation-delay: -5.9s; }
+  }
+}
 /* The terminal voice: a small mono line above a title (DESIGN.md). */
 .native-whisper { font-family: var(--font-mono, 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace); font-size: .6875rem; line-height: 1rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 8px; }
 .native-screen h1 { font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 2.25rem; line-height: 1.08; letter-spacing: -.02em; font-variation-settings: 'SOFT' 100, 'WONK' 0; color: var(--ink); margin: 0 0 10px; text-wrap: balance; }
