@@ -8,7 +8,7 @@ import sys
 from package_extension import extension_files
 
 root = Path(__file__).resolve().parent.parent
-required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "ui/index.html", "ui/demo.html", "ui/package.json", "ui/package-lock.json", "ui/src/main.tsx", "ui/src/data/archive.ts", "ui/public/icon.svg", "ui/public/theme-init.js", "ui/public/manifest.webmanifest", "ui/public/icons/icon-192.png", "ui/public/icons/icon-512.png", "ui/public/icons/icon-maskable-512.png", "ui/public/apple-touch-icon.png", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md", "docs/phone.md"]
+required = ["README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "Dockerfile", "compose.yaml", "requirements.txt", "requirements-lock.txt", ".env.example", "ui/index.html", "ui/demo.html", "ui/package.json", "ui/package-lock.json", "ui/src/main.tsx", "ui/src/data/archive.ts", "ui/public/icon.svg", "ui/public/theme-init.js", "ui/public/manifest.webmanifest", "ui/public/icons/icon-192.png", "ui/public/icons/icon-512.png", "ui/public/icons/icon-maskable-512.png", "ui/public/apple-touch-icon.png", "extension/manifest.json", "docs/launch-kit.md", "docs/self-hosting.md", "docs/phone.md", "web/privacy.html", "web/terms.html", "web/support.html", "web/delete-account.html", "web/pages.css", "web/fonts/fraunces-soft.woff2"]
 errors = ["Missing required file: " + p for p in required if not (root / p).is_file()]
 manifest_path = root / "extension/manifest.json"
 if manifest_path.is_file():

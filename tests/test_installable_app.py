@@ -11,7 +11,11 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 
 from fastapi.testclient import TestClient
@@ -26,6 +30,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "ui"
 PUBLIC = UI / "public"
 PASSWORD = "test-owner-password-2026"
+# The plain pages published beside the demo, and the only other files they load.
+SITE_FILES = {"privacy.html", "terms.html", "support.html", "delete-account.html", "pages.css", "fonts/fraunces-soft.woff2"}
 ORIGIN = {"Origin": "http://testserver"}
 
 
@@ -224,7 +230,8 @@ class DemoBoundaryTests(unittest.TestCase):
     """The public demo has no backend and must not advertise or depend on the phone-app files.
 
     scripts/build_demo.py works out the demo's files from the page and the build's manifest. The logic is tested on a
-    small synthetic build; the last test runs it on the real one."""
+    small synthetic build; the last tests run it on the real one. The same site carries the plain pages from web/
+    (privacy, terms, support, account deletion): fixed names, copied as they are."""
 
     def setUp(self):
         from scripts import build_demo
@@ -264,6 +271,24 @@ class DemoBoundaryTests(unittest.TestCase):
     def published(self):
         return {str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_file()}
 
+    def make_site(self):
+        return self.make_site_at("site")
+
+    def make_site_at(self, folder):
+        """A copy of the plain pages that a test may spoil."""
+        site = self.root / folder
+        for name in SITE_FILES:
+            (site / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / "web" / name, site / name)
+        return site
+
+    def workflow_check(self, folder):
+        """Run the publishing workflow's own check of the artifact, as written in the workflow, on `folder`."""
+        workflow = (ROOT / ".github" / "workflows" / "demo-pages.yml").read_text(encoding="utf-8")
+        script = re.search(r"python - <<'PY'\n(.*?)\n\s*PY\n", workflow, re.S).group(1)
+        self.assertEqual(folder.name, "dist-demo", "the workflow checks a folder of this name")
+        return subprocess.run([sys.executable, "-I", "-c", textwrap.dedent(script)], cwd=folder.parent, capture_output=True, text=True)
+
     def test_the_demo_is_the_demo_page_and_exactly_the_files_it_can_load(self):
         self.make_dist()
         self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
@@ -271,8 +296,11 @@ class DemoBoundaryTests(unittest.TestCase):
             "index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build",
             "assets/main-AAAAAAAA.js", "assets/shared-BBBBBBBB.js", "assets/screen-CCCCCCCC.js", "assets/demo-DDDDDDDD.js",
             "assets/main-EEEEEEEE.css", "assets/face-FFFFFFFF.woff2", "assets/001-GGGGGGGG.webp",
-        })
+        } | SITE_FILES)
         self.assertEqual((self.out / "index.html").read_bytes(), (self.dist / "demo.html").read_bytes())
+        for name in SITE_FILES:
+            self.assertEqual((self.out / name).read_bytes(), (ROOT / "web" / name).read_bytes(), name)
+        self.assertEqual({str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_dir()}, {"assets", "fonts"})
         self.assertEqual((self.out / "LICENSE").read_bytes(), (ROOT / "LICENSE").read_bytes())
         self.assertFalse(any(path.is_symlink() for path in self.out.rglob("*")))
 
@@ -314,6 +342,69 @@ class DemoBoundaryTests(unittest.TestCase):
         (self.root / "elsewhere.js").write_text("export {};")
         with self.assertRaises(SystemExit):
             self.build.main(["--dist", str(self.dist), "--output", str(self.out)])
+
+    def test_the_plain_pages_are_a_fixed_list_and_nothing_else_in_web_is_published(self):
+        self.assertEqual(set(self.build.SITE_FILES), SITE_FILES)
+        self.assertEqual(set(self.build.SITE_PAGES), {name for name in SITE_FILES if name.endswith(".html")})
+        self.assertLessEqual(SITE_FILES, self.build.FIXED)
+        self.make_dist()
+        site = self.make_site()
+        for name in ("notes.html", "fonts/Fraunces-OFL.txt", "fonts/other.woff2", "demo-data.js", "manifest.webmanifest"):
+            (site / name).write_text("x")
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+        self.assertEqual({name for name in self.published() if not name.startswith("assets/")},
+                         {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build"} | SITE_FILES)
+
+    def test_a_plain_page_that_is_missing_or_a_link_stops_the_build(self):
+        self.make_dist()
+        elsewhere = self.root / "elsewhere.html"
+        elsewhere.write_text((ROOT / "web" / "privacy.html").read_text(encoding="utf-8"), encoding="utf-8")
+        for name in sorted(SITE_FILES):
+            for spoil in ("missing", "link"):
+                with self.subTest(name=name, spoil=spoil):
+                    site = self.make_site()
+                    (site / name).unlink()
+                    if spoil == "link":
+                        (site / name).symlink_to(elsewhere)
+                    with self.assertRaises(SystemExit) as stopped:
+                        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+                    self.assertIn(name, str(stopped.exception))
+                    shutil.rmtree(site)
+        # A folder that is a link is refused too, whether it is the font folder or the pages' folder itself.
+        site = self.make_site()
+        (site / "fonts").rename(self.root / "real-fonts")
+        (site / "fonts").symlink_to(self.root / "real-fonts", target_is_directory=True)
+        with self.assertRaises(SystemExit):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+        (self.root / "linked-site").symlink_to(self.make_site_at("real-site"), target_is_directory=True)
+        with self.assertRaises(SystemExit):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(self.root / "linked-site")])
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(self.root / "real-site")])
+        self.assertLessEqual(SITE_FILES, self.published())
+
+    def test_a_plain_page_that_names_a_file_the_site_does_not_publish_stops_the_build(self):
+        self.make_dist()
+        cases = (
+            ("privacy.html", '<link rel="stylesheet" href="./pages.css">', '<link rel="stylesheet" href="./other.css">'),
+            ("terms.html", '<img src="./icon.svg"', '<img src="./icons/icon-192.png"'),
+            ("support.html", '<link rel="stylesheet" href="./pages.css">', '<link rel="stylesheet" href="./pages.css"><script src="./theme-init.js"></script>'),
+            ("support.html", 'href="./terms.html#refunds"', 'href="./pricing.html"'),
+            ("delete-account.html", 'href="./privacy.html"', 'href="/privacy.html"'),
+            ("delete-account.html", '<img src="./icon.svg"', '<img src="https://cdn.example.com/icon.svg"'),
+            ("pages.css", "url('./fonts/fraunces-soft.woff2')", "url('./fonts/other.woff2')"),
+            ("pages.css", "@font-face", "@import './more.css';\n@font-face"),
+        )
+        for name, old, new in cases:
+            with self.subTest(name=name, new=new):
+                site = self.make_site()
+                text = (site / name).read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                (site / name).write_text(text.replace(old, new), encoding="utf-8")
+                with self.assertRaises(SystemExit) as stopped:
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+                self.assertIn(name, str(stopped.exception))
+                shutil.rmtree(site)
+        self.assertFalse(self.out.exists())
 
     def test_a_missing_build_says_how_to_make_one(self):
         with self.assertRaises(SystemExit) as stopped:
@@ -359,6 +450,61 @@ class DemoBoundaryTests(unittest.TestCase):
         # Every file the page names is in the folder, so the demo is complete on a static host.
         for reference in re.findall(r'(?:src|href)="\./([^"]+)"', page):
             self.assertIn(reference, names)
+        # The plain pages are there under the names the apps link to, with everything they load or link to.
+        self.assertLessEqual(SITE_FILES, names)
+        self.assertEqual({name for name in names if "/" not in name},
+                         {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build"} | {name for name in SITE_FILES if "/" not in name})
+        self.assertEqual({name for name in names if name.startswith("fonts/")}, {"fonts/fraunces-soft.woff2"})
+        for name in sorted(name for name in SITE_FILES if name.endswith(".html")):
+            text = (self.out / name).read_text(encoding="utf-8")
+            for reference in re.findall(r'(?:src|href)="(\.?/?[^"#:]*)(?:#[^"]*)?"', text):
+                if reference in ("", "./"):
+                    continue
+                self.assertRegex(reference, r"^\./[a-z0-9.-]+$", f"{name}: {reference} is relative, so it works under any site path")
+                self.assertIn(reference[2:], names, f"{name}: {reference}")
+        self.assertIn("fonts/fraunces-soft.woff2", (self.out / "pages.css").read_text(encoding="utf-8"))
+
+    def test_the_publishing_workflow_accepts_the_real_demo_and_refuses_anything_added_to_it(self):
+        build = webui.find_build()
+        self.assertIsNotNone(build, webui.MISSING)
+        self.out = self.root / "dist-demo"
+        self.build.main(["--dist", str(build), "--output", str(self.out)])
+        passed = self.workflow_check(self.out)
+        self.assertEqual(passed.returncode, 0, passed.stderr)
+        self.assertIn("Verified the synthetic demo artifact", passed.stdout)
+
+        def refused(spoil, expected):
+            copy = self.root / "spoiled" / "dist-demo"
+            shutil.copytree(self.out, copy)
+            spoil(copy)
+            result = self.workflow_check(copy)
+            self.assertNotEqual(result.returncode, 0, expected)
+            self.assertIn(expected, result.stderr)
+            shutil.rmtree(copy.parent)
+
+        def append(name, text):
+            return lambda copy: (copy / name).write_text((copy / name).read_text(encoding="utf-8") + text, encoding="utf-8")
+
+        def replace(name, old, new):
+            def spoil(copy):
+                text = (copy / name).read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                (copy / name).write_text(text.replace(old, new), encoding="utf-8")
+            return spoil
+
+        refused(lambda copy: shutil.copy2(ROOT / "web" / "fonts" / "Fraunces-OFL.txt", copy / "fonts" / "Fraunces-OFL.txt"), "Unexpected demo artifact files")
+        refused(lambda copy: (copy / "notes.html").write_text("x"), "Unexpected demo artifact files")
+        refused(lambda copy: (copy / "pages").mkdir(), "Unexpected demo artifact folders")
+        refused(lambda copy: (copy / "support.html").unlink(), "Missing demo artifact files")
+        refused(lambda copy: shutil.rmtree(copy / "fonts"), "Unexpected demo artifact folders")
+        refused(lambda copy: ((copy / "terms.html").unlink(), (copy / "terms.html").symlink_to(copy / "privacy.html")), "symbolic links")
+        for name in ("privacy.html", "delete-account.html", "pages.css"):
+            for needle in ("LA_ADMIN_PASSWORD", "BEGIN PRIVATE KEY", "secrets.env"):
+                refused(append(name, f"\n<!-- /* {needle} */ -->\n"), f"mentions {needle}")
+        refused(append("privacy.html", '<script src="./theme-init.js"></script>'), "must be a plain page")
+        refused(replace("terms.html", '<img src="./icon.svg"', '<img src="./assets/x.webp"'), "terms.html loads")
+        refused(replace("support.html", 'href="./terms.html#refunds"', 'href="./pricing.html"'), "support.html links to")
+        refused(replace("pages.css", "./fonts/fraunces-soft.woff2", "./fonts/other.woff2"), "pages.css must load only its own font file")
 
 
 if __name__ == "__main__":
