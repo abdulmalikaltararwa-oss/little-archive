@@ -41,29 +41,71 @@ class RootViewController: UIViewController {
             bottom,
         ])
         main.didMove(toParent: self)
+        let center = NotificationCenter.default
         // Every change of the keyboard's place arrives as a frame change: showing, hiding, turning the phone, the bar of a
         // hardware keyboard.
-        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        center.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        // The web view listens for the keyboard too, and on hearing of it gives its scroll view room at the bottom for the part
+        // the keyboard covers. It works that out when the notification arrives, while it is still full height, and does not work
+        // it out again when its frame changes (WebKit, WKWebViewIOS.mm: the adjustment is made in _keyboardChangedWithInfo only,
+        // not in _frameOrBoundsMayHaveChanged). On iOS 26 the room is gone once the frame has changed; whether an older system
+        // keeps it, and so moves the page twice, could not be run. The web view ends at the keyboard and has nothing to make room
+        // for, so it is not told: the same four notifications Capacitor's keyboard plugin takes from it for its own resize
+        // (@capacitor/keyboard 8.0.6, Keyboard.m, load). If a later WebKit listens some other way this removes nothing and the web
+        // view behaves as it did.
+        if let webView = main.webView {
+            for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification, UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+                center.removeObserver(webView, name: name, object: nil)
+            }
+        }
     }
 
+    /// How much of a view the keyboard takes from its bottom edge: `keyboard` and `bounds` are in the view's own coordinates.
+    /// Only a keyboard docked to the bottom across the whole view takes room; a floating or split one (iPad) lies over the page,
+    /// and one that is off the screen or belongs to another part of it takes none.
+    static func keyboardCover(keyboard: CGRect, in bounds: CGRect) -> CGFloat {
+        let docked = keyboard.maxY >= bounds.maxY - 1 && keyboard.minX <= bounds.minX + 1 && keyboard.maxX >= bounds.maxX - 1
+        return docked ? min(max(0, bounds.maxY - keyboard.minY), bounds.height) : 0
+    }
+
+    /// Anything shorter than this is the bar a hardware keyboard leaves on screen (68pt on an iPhone), not a keyboard: the web
+    /// view still ends above it, but the page is not told a keyboard is up, so the dock stays.
+    static let tallestBar: CGFloat = 120
+
+    /// Where the keyboard last said it would be, in the screen's coordinates.
+    private var keyboardEnd: CGRect?
+    private var toldKeyboardUp: Bool?
+
     @objc private func keyboardWillChangeFrame(_ note: Notification) {
-        guard let info = note.userInfo, let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue, let window = view.window else { return }
-        // The keyboard's frame is in the screen's coordinates. Only a keyboard docked to the bottom across the whole view takes
-        // room from the page; a floating or split one (iPad) lies over it and the web view keeps its size.
-        let keyboard = view.convert(end, from: window.screen.coordinateSpace)
-        let docked = keyboard.maxY >= view.bounds.maxY - 1 && keyboard.minX <= 1 && keyboard.maxX >= view.bounds.maxX - 1
-        let covered = docked ? max(0, view.bounds.maxY - keyboard.minY) : 0
-        tellPage(keyboardUp: covered > 0)
+        guard let info = note.userInfo, let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+        keyboardEnd = end
+        toldKeyboardUp = nil // Say it again: the theme may have changed since.
+        fitToKeyboard(animation: info)
+    }
+
+    /// The view can change size with no word from the keyboard (Split View, Stage Manager, a turn of the phone that arrives
+    /// first), so the room the keyboard takes is worked out again from where it last was.
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        fitToKeyboard(animation: nil)
+    }
+
+    private func fitToKeyboard(animation info: [AnyHashable: Any]?) {
+        guard let end = keyboardEnd, let window = view.window else { return }
+        let covered = Self.keyboardCover(keyboard: view.convert(end, from: window.screen.coordinateSpace), in: view.bounds)
+        let keyboardUp = covered > Self.tallestBar
+        if keyboardUp != toldKeyboardUp { toldKeyboardUp = keyboardUp; tellPage(keyboardUp: keyboardUp) }
         guard bottom.constant != -covered else { return }
         bottom.constant = -covered
+        guard let info = info else { return }
         let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0
         let curve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? UInt(UIView.AnimationCurve.easeInOut.rawValue)
         UIView.animate(withDuration: duration, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) { self.view.layoutIfNeeded() }
     }
 
-    /// Marks the page while the keyboard takes room from it (`data-keyboard` on the root element; native.css moves the interface's
-    /// dock out of the way), and reads the page's theme back. The page can be set to light or dark whatever the phone is set to
-    /// (Settings in the interface), so the colour behind the keyboard follows the page's theme, not the system's.
+    /// Marks the page while a keyboard takes room from it (`data-keyboard` on the root element; the interface hides its dock,
+    /// ui/src/features/shell/shell.tsx), and reads the page's theme back. The page can be set to light or dark whatever the phone
+    /// is set to (Settings in the interface), so the colour behind the keyboard follows the page's theme, not the system's.
     private func tellPage(keyboardUp: Bool) {
         let script = "document.documentElement.toggleAttribute('data-keyboard', \(keyboardUp)); document.documentElement.dataset.theme"
         main.webView?.evaluateJavaScript(script) { [weak self] theme, _ in
