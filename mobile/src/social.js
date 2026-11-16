@@ -5,6 +5,11 @@
 // that string into the identity token it hands back. The token and the *raw* nonce go to the project
 // (POST /auth/v1/token?grant_type=id_token), which hashes the raw value the same way and compares. A token with no matching nonce
 // is refused by the project, so a stolen token is of no use without the raw nonce, which never left this function.
+// Apple's sheet also hands back a one-time authorization code. The project has no use for it; the Little Archive server does
+// (it trades the code with Apple so that deleting the account can revoke the Apple sign-in, see server/apple_signin.py). Once the
+// person is signed in, the code is handed to `appleCode`, which onboarding.js points at the server that was just checked. That
+// is a courtesy to a later deletion, not a step of the sign-in: it is not waited for, and nothing it does can fail the sign-in.
+// The code is good once, for five minutes, and is not kept or logged here.
 //
 // Google (iOS and Android, the system browser, PKCE). The app makes a random code verifier and keeps it. The system
 // authentication session opens the project's authorize address with the verifier's SHA-256 (the "code challenge"); the project
@@ -102,8 +107,9 @@ function nativeProblem(error, fallback) {
  * @param {ReturnType<import('./supabase.js').createSupabase>} options.supabase  pinned to the project this app was built for
  * @param {{apple(o: {nonce: string}): Promise<object>, browser(o: {url: string}): Promise<object>}} options.plugin  SocialSignIn
  * @param {'ios'|'android'|string} options.platform
+ * @param {(given: {code: string, session: object}) => unknown} [options.appleCode]  takes Apple's authorization code after an Apple sign-in
  */
-export function createSocialSignIn({ supabase, plugin, platform, subtle = globalThis.crypto?.subtle, fill = bytes => globalThis.crypto.getRandomValues(bytes) }) {
+export function createSocialSignIn({ supabase, plugin, platform, appleCode, subtle = globalThis.crypto?.subtle, fill = bytes => globalThis.crypto.getRandomValues(bytes) }) {
   // Sign in with Apple is part of iOS; Google works in any system browser.
   const available = Object.freeze({ apple: platform === 'ios', google: platform === 'ios' || platform === 'android' });
   let busy = false;
@@ -140,7 +146,13 @@ export function createSocialSignIn({ supabase, plugin, platform, subtle = global
       const token = answer?.identityToken;
       if (answer?.status !== 'signed_in' || typeof token !== 'string' || token.split('.').length !== 3) throw new AppError('Apple did not send back a sign-in. Try again.');
       onStage?.('signing-in');
-      return supabase.signInWithIdToken({ provider: 'apple', idToken: token, nonce, label: LABEL.apple });
+      const session = await supabase.signInWithIdToken({ provider: 'apple', idToken: token, nonce, label: LABEL.apple });
+      const code = answer.authorizationCode;
+      if (appleCode && typeof code === 'string' && code.length >= 8 && code.length <= 2048 && !/\s/.test(code)) {
+        // Not awaited, and every failure is swallowed: the person is signed in whatever becomes of this.
+        Promise.resolve().then(() => appleCode({ code, session })).catch(() => {});
+      }
+      return session;
     }),
 
     /** @returns {Promise<object|null>} the session, or null when the person closed the browser */

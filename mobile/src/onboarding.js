@@ -29,7 +29,15 @@ export function createOnboarding({ http, config, ui, store, platform, plugin }) 
     }
     const supabase = hostedClient({ http, config });
     // Apple and Google use the same pinned client as the email sign-in: their addresses are built from config.supabaseUrl.
-    const social = createSocialSignIn({ supabase, plugin, platform });
+    // After an Apple sign-in the server that was just checked is given Apple's authorization code, with the new session as its
+    // proof of who is asking, so that deleting the account later can revoke the Apple sign-in. social.js does not wait for this
+    // and ignores how it ends; a server that is not set up for it answers that it kept nothing.
+    const appleCode = ({ code, session }) => http({
+      url: `${normalizeAddress(found.url)}/api/account/apple-authorization`, method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
+      body: JSON.stringify({ authorization_code: code }),
+    });
+    const social = createSocialSignIn({ supabase, plugin, platform, appleCode });
     const result = await ui.account({
       host: hostName(found.url), notice,
       providers: social.available,

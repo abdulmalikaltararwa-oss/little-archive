@@ -398,3 +398,79 @@ test('Android, a callback that reached a fresh process with no sign-in waiting: 
   assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), '');
   assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(true), App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), INTERRUPTED);
 });
+
+// Apple's authorization code, for the server (so that deleting the account can revoke the Apple sign-in).
+const APPLE_CODE = 'c0de.synthetic-authorization-code.0.rrtq.Zx9';
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+const signedInWith = extra => fakePlugin({ apple: options => ({ status: 'signed_in', identityToken: appleToken(options.nonce), ...extra }) });
+
+test('Apple: the authorization code is handed over once, after the sign-in, with the session that proves who is asking', async () => {
+  const given = [];
+  const order = [];
+  const plugin = signedInWith({ authorizationCode: APPLE_CODE });
+  const { social, calls } = rig({ plugin, appleCode: handed => { order.push('code'); given.push(handed); }, routes: { [ID_TOKEN]: () => { order.push('sign-in'); return reply(200, session()); } } });
+  const result = await social.apple();
+  await settle();
+  assert.deepEqual(order, ['sign-in', 'code'], 'never before the project has accepted the sign-in');
+  assert.equal(given.length, 1);
+  assert.deepEqual(Object.keys(given[0]).sort(), ['code', 'session']);
+  assert.equal(given[0].code, APPLE_CODE);
+  assert.equal(given[0].session, result);
+  assert.equal(calls.length, 1, 'this module itself sends the code nowhere');
+  assert.ok(!calls[0].body.includes(APPLE_CODE), 'and the sign-in service is not sent it');
+});
+
+test('Apple: handing the code over cannot break or hold up the sign-in, however it ends', async () => {
+  const routes = { [ID_TOKEN]: reply(200, session()) };
+  for (const appleCode of [
+    () => { throw new Error('thrown at once'); },
+    async () => { throw new Error('the server is unreachable'); },
+    () => Promise.reject(new AppError('refused')),
+    () => new Promise(() => {}), // a server that never answers
+  ]) {
+    const rejections = [];
+    const note = reason => rejections.push(reason);
+    process.on('unhandledRejection', note);
+    try {
+      const { social } = rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), appleCode, routes });
+      assert.equal((await social.apple()).accessToken, session().access_token);
+      await settle();
+      assert.deepEqual(rejections, [], 'and nothing is left unhandled');
+      // The screen is usable again at once: the hand-over is not part of the attempt.
+      assert.equal((await social.apple()).accessToken, session().access_token);
+    } finally { process.off('unhandledRejection', note); }
+  }
+});
+
+test('Apple: no code, a code that is not one, a closed sheet or a failed sign-in hands nothing over; nor does Google', async () => {
+  const given = [];
+  const appleCode = handed => { given.push(handed); };
+  const ok = { [ID_TOKEN]: reply(200, session()) };
+  for (const extra of [{}, { authorizationCode: '' }, { authorizationCode: 7 }, { authorizationCode: null }, { authorizationCode: 'short' }, { authorizationCode: 'has a space in it' }, { authorizationCode: 'x'.repeat(2049) }]) {
+    const { social } = rig({ plugin: signedInWith(extra), appleCode, routes: ok });
+    assert.equal((await social.apple()).accessToken, session().access_token, 'the sign-in itself is unaffected');
+  }
+  assert.equal(await rig({ plugin: fakePlugin({ apple: { status: 'cancelled', authorizationCode: APPLE_CODE } }), appleCode }).social.apple(), null);
+  await refusal(rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), appleCode, routes: { [ID_TOKEN]: reply(400, { error_code: 'provider_disabled' }) } }).social.apple());
+  // Without anyone to hand it to (an older caller), the sign-in is what it always was.
+  assert.equal((await rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), routes: ok }).social.apple()).accessToken, session().access_token);
+  const google = rig({ appleCode, plugin: fakePlugin({ browser: { status: 'returned', url: 'littlearchive://auth-callback?code=abc123', authorizationCode: APPLE_CODE } }), routes: { [SETTINGS]: switchedOn, [PKCE]: reply(200, session()) } });
+  await google.social.google();
+  await settle();
+  assert.deepEqual(given, []);
+});
+
+test('Apple: the authorization code is not written to storage or to a log', async () => {
+  const store = createStore(memoryBackend());
+  const logged = [];
+  const original = {};
+  for (const name of ['log', 'info', 'warn', 'error', 'debug']) { original[name] = console[name]; console[name] = (...parts) => logged.push(parts.map(String).join(' ')); }
+  try {
+    const { social } = rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), appleCode: async () => { throw new Error(`failed with ${APPLE_CODE}`); }, routes: { [ID_TOKEN]: reply(200, session()) } });
+    const result = await social.apple();
+    await store.save({ v: 1, server: { kind: 'hosted', url: CONFIG.hostedServerUrl }, credential: result });
+    await settle();
+  } finally { Object.assign(console, original); }
+  assert.ok(!JSON.stringify(await store.load()).includes(APPLE_CODE));
+  assert.ok(!logged.join('\n').includes(APPLE_CODE));
+});

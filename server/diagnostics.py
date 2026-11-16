@@ -62,6 +62,10 @@ def _hosted_checks(database, config):
             rows.append(check("supabase_admin_key", "warning", "login_survives_deletion", "No Supabase secret key is configured and the operator allowed that: deleting an account will leave its sign-in in place.", "Set LA_SUPABASE_SERVICE_KEY before a store release (App Store guideline 5.1.1(v))."))
     except ValueError:
         rows.append(check("supabase_admin_key", "failed", "supabase_admin_key_missing", "No Supabase secret key is configured, so deleting an account could not delete its sign-in.", "Set LA_SUPABASE_SERVICE_KEY, or for a development stack only LA_HOSTED_ALLOW_LOGIN_SURVIVES_DELETION=true. The value is never printed."))
+    if config.apple_signin_configured:
+        rows.append(check("apple_signin_revocation", "passed", "apple_signin_key_configured", "A Sign in with Apple key is configured, so deleting an account also revokes its Apple sign-in. The key was not read or used, and Apple was not contacted."))
+    else:
+        rows.append(check("apple_signin_revocation", "warning", "apple_signin_not_revoked", "No Sign in with Apple key is configured: deleting an account will not revoke its Apple sign-in.", "If the app offers Sign in with Apple, set the four LA_APPLE_SIGNIN_* values before a store release (App Store guideline 5.1.1(v))."))
     if database.exists() or database.is_symlink():
         rows.append(check("database", "failed", "single_owner_library_present", "The data location holds a single-owner library, which hosted mode refuses to start beside.", "Choose a separate data directory for hosted mode."))
     else:

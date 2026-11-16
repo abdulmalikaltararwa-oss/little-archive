@@ -76,11 +76,11 @@ def hosted_config(root, **settings):
                   **{"supabase_url": SUPABASE_URL, "supabase_jwt_issuer": ISSUER, **UNLIMITED, **settings})
 
 
-def hosted_app(root, *keys, purchase_clients=None, **settings):
-    """A real hosted application whose only fake part is where signing keys come from (and, if given, the stores' clients)."""
+def hosted_app(root, *keys, purchase_clients=None, apple_signin=None, **settings):
+    """A real hosted application whose only fake part is where signing keys come from (and, if given, the stores' clients and the Sign in with Apple client)."""
     config = hosted_config(root, **settings)
     keyset = FakeKeySet(*keys)
-    app = create_app(config, identity=SupabaseVerifier.from_config(config, fetch=keyset), purchase_clients=purchase_clients)
+    app = create_app(config, identity=SupabaseVerifier.from_config(config, fetch=keyset), purchase_clients=purchase_clients, apple_signin=apple_signin)
     return app, keyset
 
 
