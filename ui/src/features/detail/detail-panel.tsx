@@ -8,6 +8,7 @@ import { cn } from 'cn';
 import { ArrowRight, Check, Copy, ExternalLink, Folder, Heart, ImagePlus, ScanSearch, Sparkles, Trash2, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { confirm, confirmDiscard, toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { CheckRow, Field, FormError, Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { BorderBeam } from '@/components/fx/border-beam';
@@ -154,18 +155,23 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
     await archive.refreshEditedItem(updated);
   });
 
-  const suggest = () => runTool(async () => {
-    const result = await archive.api.queueAi({ ids: [item.id] });
-    toast(result.skipped && !result.queued ? 'Not queued: the suggestions allowance is used for now.' : `${result.queued} classification job queued. Check activity, then reopen this save to review.`);
-  });
+  const suggest = async () => {
+    if (!(await allowAi(archive, 'suggest'))) return;
+    await runTool(async () => {
+      const result = await archive.api.queueAi({ ids: [item.id] });
+      toast(result.skipped && !result.queued ? 'Not queued: the suggestions allowance is used for now.' : `${result.queued} classification job queued. Check activity, then reopen this save to review.`);
+    });
+  };
 
   const deepRead = item.enrichment?.deep_read;
-  const readCloser = () => runTool(async () => {
-    if (!(await allowLeave())) return;
-    await archive.api.deepRead(item.id);
-    toast('A closer read is queued. Check activity, then reopen this save.');
-    accept(await archive.api.item(item.id), 'deep');
-  });
+  const readCloser = async () => {
+    if (!(await allowLeave()) || !(await allowAi(archive, 'closer-read'))) return;
+    await runTool(async () => {
+      await archive.api.deepRead(item.id);
+      toast('A closer read is queued. Check activity, then reopen this save.');
+      accept(await archive.api.item(item.id), 'deep');
+    });
+  };
 
   const nextReview = () => runReview(async () => {
     if (!(await allowLeave())) return;
@@ -198,7 +204,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
   const aiHelp = demo
     ? 'This isolated demo does not upload files or run AI. Install your own instance to use these features.'
     : settings.ai_hosted
-      ? 'Your server uses a hosted AI service: the post’s caption, creator and any transcript are sent to it, not your notes. A video cover is not a full video analysis.'
+      ? 'This uses a hosted AI service: the post’s title, caption, creator and any transcript are sent to it. A video cover is not a full video analysis.'
       : settings.ai_enabled
         ? 'AI works from available text. A video cover is not a full video analysis.'
         : 'Optional local AI is not configured. Your library works without it.';
@@ -339,7 +345,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
         <p className="mt-3 text-xs leading-relaxed text-ink-soft">{aiHelp}</p>
         {!demo && deepRead && (deepRead.available || ['queued', 'running'].includes(deepRead.state)) ? (
           <p className="mt-2 text-xs leading-relaxed text-ink-soft">
-            {deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the audio to your server’s transcription service, then reads this save again from what is said. The video itself is never stored.'}
+            {deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the audio to a transcription service, then reads this save again from what is said. The video itself is never stored.'}
           </p>
         ) : null}
       </section>

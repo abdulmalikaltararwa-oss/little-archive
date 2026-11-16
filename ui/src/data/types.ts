@@ -110,6 +110,8 @@ export interface Tag {
 
 export interface Settings {
   remote_previews: boolean;
+  /** The owner's yes to sending saved content to an AI service. Absent on a server that does not keep it. */
+  ai_sharing_allowed?: boolean;
   ai_enabled: boolean;
   ai_model: string;
   ai_available?: boolean;

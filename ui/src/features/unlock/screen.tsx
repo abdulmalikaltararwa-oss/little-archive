@@ -10,6 +10,7 @@ import { toast } from '@/app/ui-state';
 import { Bloom } from '@/components/brand';
 import { Notice, Whisper } from '@/components/field';
 import { Ascii, AsciiSpinner } from '@/components/fx/ascii';
+import { LegalLinks } from '@/components/legal-links';
 import { Button } from '@/components/ui/button';
 import type { Account, FeatureName, Purchases } from '@/data/types';
 import { FeatureHeader } from '../feature-kit';
@@ -205,6 +206,7 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
 
       <div className="mt-8"><Whisper>self-hosted is free, always</Whisper></div>
       <Button className="mt-4" onClick={() => archive.goView('all')}><ArrowLeft />Back to your library</Button>
+      <LegalLinks className="mt-6" />
     </div>
   );
 }

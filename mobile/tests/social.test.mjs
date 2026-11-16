@@ -5,7 +5,7 @@ import { AppError } from '../src/discovery.js';
 import { createCredentials } from '../src/credentials.js';
 import { createStore, memoryBackend } from '../src/store.js';
 import { createSupabase, sessionFrom } from '../src/supabase.js';
-import { CALLBACK_URL, INTERRUPTED, createSocialSignIn, interruptedSignIn, parseCallback } from '../src/social.js';
+import { CALLBACK_URL, INTERRUPTED, createSocialSignIn, parseCallback, pkcePair } from '../src/social.js';
 import { CONFIG, bytes, fakeHttp, fakeJwt, reply } from './helpers.mjs';
 
 const BASE = CONFIG.supabaseUrl;
@@ -359,42 +359,92 @@ test('the screen is told when the sheet or the browser is done and the session i
   assert.deepEqual(stages, []);
 });
 
-test('Android, a callback that reached a fresh process with no sign-in waiting: one plain notice, once, and the code is never used', async () => {
-  const memory = () => { const map = new Map(); return { map, getItem: key => (map.has(key) ? map.get(key) : null), setItem: (key, value) => { map.set(key, String(value)); } }; };
-  const launchedWith = url => ({ asked: 0, async getLaunchUrl() { this.asked += 1; return url === undefined ? undefined : { url }; } });
-  // The native side answers true once (SocialSignInPlugin.java), or has no such method at all (an older build).
-  const native = (...answers) => ({ asked: 0, async interrupted() { this.asked += 1; return { interrupted: answers.shift() === true }; } });
-  const old = { interrupted: async () => { throw new Error('not implemented'); } };
+test('the PKCE pair is a 64-character verifier and its SHA-256 as base64url, new every time, and needs WebCrypto', async () => {
+  const one = await pkcePair();
+  const two = await pkcePair();
+  assert.match(one.verifier, /^[A-Za-z0-9_-]{64}$/);
+  assert.equal(one.challenge, createHash('sha256').update(one.verifier).digest('base64url'));
+  assert.notEqual(one.verifier, two.verifier);
+  await assert.rejects(pkcePair({ subtle: null }), error => error instanceof AppError && /cannot prepare a safe sign-in/.test(error.message));
+});
+
+test('the sentence for a callback that nothing was waiting for', () => {
+  // Where it is shown is onboarding.js (tests/onboarding.test.mjs); how the address is found is recovery.js.
   assert.equal(INTERRUPTED, 'Sign-in was interrupted. Try again.');
+});
 
-  // Known from the plugin: Android recreated the app and handed it the callback, so the launch address says nothing.
-  const fromPlugin = { plugin: native(true), App: launchedWith(undefined), storage: memory() };
-  assert.equal(await interruptedSignIn({ platform: 'android', ...fromPlugin }), INTERRUPTED);
-  assert.equal(await interruptedSignIn({ platform: 'android', ...fromPlugin }), '', 'said once');
+// Apple's authorization code, for the server (so that deleting the account can revoke the Apple sign-in).
+const APPLE_CODE = 'c0de.synthetic-authorization-code.0.rrtq.Zx9';
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+const signedInWith = extra => fakePlugin({ apple: options => ({ status: 'signed_in', identityToken: appleToken(options.nonce), ...extra }) });
 
-  // Known from the launch address, with a native side that cannot say.
-  const storage = memory();
-  const App = launchedWith('littlearchive://auth-callback?code=a-code-from-the-old-process');
-  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage }), INTERRUPTED);
-  // The page reloads after a sign-out and the launch address is still the same: it is not said again.
-  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage }), '');
-  assert.equal(App.asked, 1);
-  assert.deepEqual([...storage.map.values()], ['1'], 'nothing of the address is kept, only that it was looked at');
-  // Both know: still one notice, and the reload after it says nothing.
-  const both = { plugin: native(true), App: launchedWith('littlearchive://auth-callback?code=x'), storage: memory() };
-  assert.equal(await interruptedSignIn({ platform: 'android', ...both }), INTERRUPTED);
-  assert.equal(await interruptedSignIn({ platform: 'android', ...both }), '');
+test('Apple: the authorization code is handed over once, after the sign-in, with the session that proves who is asking', async () => {
+  const given = [];
+  const order = [];
+  const plugin = signedInWith({ authorizationCode: APPLE_CODE });
+  const { social, calls } = rig({ plugin, appleCode: handed => { order.push('code'); given.push(handed); }, routes: { [ID_TOKEN]: () => { order.push('sign-in'); return reply(200, session()); } } });
+  const result = await social.apple();
+  await settle();
+  assert.deepEqual(order, ['sign-in', 'code'], 'never before the project has accepted the sign-in');
+  assert.equal(given.length, 1);
+  assert.deepEqual(Object.keys(given[0]).sort(), ['code', 'session']);
+  assert.equal(given[0].code, APPLE_CODE);
+  assert.equal(given[0].session, result);
+  assert.equal(calls.length, 1, 'this module itself sends the code nowhere');
+  assert.ok(!calls[0].body.includes(APPLE_CODE), 'and the sign-in service is not sent it');
+});
 
-  // An error callback, or a bare one, is the same interruption.
-  for (const url of ['littlearchive://auth-callback?error=access_denied', 'littlearchive://auth-callback', 'LittleArchive://Auth-Callback/#x']) assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(), App: launchedWith(url), storage: memory() }), INTERRUPTED, url);
-  // An ordinary start, a share, another host, and anything unreadable say nothing.
-  for (const url of [undefined, '', 'littlearchive://share', 'littlearchive://auth-callback.example.com?code=x', 'littlearchive://auth-callbackx', 'https://auth-callback/?code=x', 42]) assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(), App: launchedWith(url), storage: memory() }), '', String(url));
-  // iOS never gets the callback outside its authentication session, so nothing is even asked.
-  const ios = { plugin: native(true), App: launchedWith('littlearchive://auth-callback?code=x'), storage: memory() };
-  assert.equal(await interruptedSignIn({ platform: 'ios', ...ios }), '');
-  assert.equal(ios.App.asked + ios.plugin.asked, 0);
-  // A plugin or a storage that fails is not a reason to stop the app from starting.
-  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App: { getLaunchUrl: async () => { throw new Error('no plugin'); } }, storage: memory() }), '');
-  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), '');
-  assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(true), App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), INTERRUPTED);
+test('Apple: handing the code over cannot break or hold up the sign-in, however it ends', async () => {
+  const routes = { [ID_TOKEN]: reply(200, session()) };
+  for (const appleCode of [
+    () => { throw new Error('thrown at once'); },
+    async () => { throw new Error('the server is unreachable'); },
+    () => Promise.reject(new AppError('refused')),
+    () => new Promise(() => {}), // a server that never answers
+  ]) {
+    const rejections = [];
+    const note = reason => rejections.push(reason);
+    process.on('unhandledRejection', note);
+    try {
+      const { social } = rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), appleCode, routes });
+      assert.equal((await social.apple()).accessToken, session().access_token);
+      await settle();
+      assert.deepEqual(rejections, [], 'and nothing is left unhandled');
+      // The screen is usable again at once: the hand-over is not part of the attempt.
+      assert.equal((await social.apple()).accessToken, session().access_token);
+    } finally { process.off('unhandledRejection', note); }
+  }
+});
+
+test('Apple: no code, a code that is not one, a closed sheet or a failed sign-in hands nothing over; nor does Google', async () => {
+  const given = [];
+  const appleCode = handed => { given.push(handed); };
+  const ok = { [ID_TOKEN]: reply(200, session()) };
+  for (const extra of [{}, { authorizationCode: '' }, { authorizationCode: 7 }, { authorizationCode: null }, { authorizationCode: 'short' }, { authorizationCode: 'has a space in it' }, { authorizationCode: 'x'.repeat(2049) }]) {
+    const { social } = rig({ plugin: signedInWith(extra), appleCode, routes: ok });
+    assert.equal((await social.apple()).accessToken, session().access_token, 'the sign-in itself is unaffected');
+  }
+  assert.equal(await rig({ plugin: fakePlugin({ apple: { status: 'cancelled', authorizationCode: APPLE_CODE } }), appleCode }).social.apple(), null);
+  await refusal(rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), appleCode, routes: { [ID_TOKEN]: reply(400, { error_code: 'provider_disabled' }) } }).social.apple());
+  // Without anyone to hand it to (an older caller), the sign-in is what it always was.
+  assert.equal((await rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), routes: ok }).social.apple()).accessToken, session().access_token);
+  const google = rig({ appleCode, plugin: fakePlugin({ browser: { status: 'returned', url: 'littlearchive://auth-callback?code=abc123', authorizationCode: APPLE_CODE } }), routes: { [SETTINGS]: switchedOn, [PKCE]: reply(200, session()) } });
+  await google.social.google();
+  await settle();
+  assert.deepEqual(given, []);
+});
+
+test('Apple: the authorization code is not written to storage or to a log', async () => {
+  const store = createStore(memoryBackend());
+  const logged = [];
+  const original = {};
+  for (const name of ['log', 'info', 'warn', 'error', 'debug']) { original[name] = console[name]; console[name] = (...parts) => logged.push(parts.map(String).join(' ')); }
+  try {
+    const { social } = rig({ plugin: signedInWith({ authorizationCode: APPLE_CODE }), appleCode: async () => { throw new Error(`failed with ${APPLE_CODE}`); }, routes: { [ID_TOKEN]: reply(200, session()) } });
+    const result = await social.apple();
+    await store.save({ v: 1, server: { kind: 'hosted', url: CONFIG.hostedServerUrl }, credential: result });
+    await settle();
+  } finally { Object.assign(console, original); }
+  assert.ok(!JSON.stringify(await store.load()).includes(APPLE_CODE));
+  assert.ok(!logged.join('\n').includes(APPLE_CODE));
 });

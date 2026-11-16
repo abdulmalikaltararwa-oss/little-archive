@@ -67,6 +67,41 @@ test('errors are in plain words, from the error code, whatever the service wrote
   assert.match(await refusal(signup.supabase.signUp('a@example.com', 'x')), /already exists/);
 });
 
+test('asking for a reset link: the redirect address in the query, the challenge in the body, and silence whatever the answer', async () => {
+  const route = `POST ${BASE}/auth/v1/recover?redirect_to=littlearchive%3A%2F%2Fauth-callback`;
+  const ask = supabase => supabase.recover({ email: 'reader@example.com', redirectTo: 'littlearchive://auth-callback', codeChallenge: 'c'.repeat(43) });
+  const { supabase, calls } = client({ [route]: reply(200, {}) });
+  assert.equal(await ask(supabase), undefined);
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(calls[0].headers.apikey, CONFIG.supabasePublishableKey);
+  assert.deepEqual(JSON.parse(calls[0].body), { email: 'reader@example.com', code_challenge: 'c'.repeat(43), code_challenge_method: 's256' });
+  // An unknown address is a 200 and a known one asked twice in a minute is a 429: neither may be told apart from the other.
+  for (const answer of [reply(429, { error_code: 'over_email_send_rate_limit' }), reply(429, { error_code: 'over_request_rate_limit' }), reply(400, { error_code: 'validation_failed' }), reply(500, {}), text(502, 'bad gateway')]) assert.equal(await ask(client({ [route]: answer }).supabase), undefined);
+  assert.match(await refusal(ask(client({ [route]: new Error('offline') }).supabase)), /Could not reach the sign-in service/);
+});
+
+test('a new password is PUT to the user route with the session\'s own token, and each refusal is in plain words', async () => {
+  const route = `PUT ${BASE}/auth/v1/user`;
+  const set = supabase => supabase.setPassword({ accessToken: 'the-access-token', password: 'a brand new password' });
+  const { supabase, calls } = client({ [route]: reply(200, { id: 'user-1', email: 'reader@example.com' }) });
+  assert.equal(await set(supabase), undefined);
+  assert.equal(calls[0].method, 'PUT');
+  assert.equal(calls[0].headers.Authorization, 'Bearer the-access-token');
+  assert.equal(calls[0].headers.apikey, CONFIG.supabasePublishableKey);
+  assert.deepEqual(JSON.parse(calls[0].body), { password: 'a brand new password' });
+  const failed = async answer => { try { await set(client({ [route]: answer }).supabase); } catch (error) { assert.ok(error instanceof AppError, String(error)); return error; } assert.fail('expected an AppError'); };
+  const weak = await failed(reply(422, { error_code: 'weak_password', msg: 'Password should be at least 8 characters.' }));
+  assert.match(weak.message, /too easy to guess/);
+  assert.equal(weak.field, 'password', 'shown on the password field');
+  const same = await failed(reply(422, { error_code: 'same_password', msg: 'New password should be different from the old password.' }));
+  assert.equal(same.message, 'That is the password this account already has. Choose a different one.');
+  assert.equal(same.field, 'password');
+  for (const status of [401, 403]) assert.equal((await failed(reply(status, { error_code: 'bad_jwt' }))).message, 'This reset has run out. Go back and ask for a new link.');
+  assert.match((await failed(reply(500, {}))).message, /having trouble/);
+  assert.match((await failed(reply(429, {}))).message, /Too many attempts/);
+  assert.match((await failed(new Error('offline'))).message, /Could not reach the sign-in service/);
+});
+
 test('the claims of an access token are read for display only, and garbage gives nothing', () => {
   assert.equal(readClaims(token()).email, 'reader@example.com');
   assert.equal(readClaims(fakeJwt({ email: 'zoë@example.com' })).email, 'zoë@example.com');

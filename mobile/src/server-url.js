@@ -32,7 +32,7 @@ export function normalizeAddress(value) {
 }
 
 /**
- * @returns {{ok: true, url: string, insecure: boolean} | {ok: false, message: string}}
+ * @returns {{ok: true, url: string, insecure: boolean} | {ok: false, message: string, code?: string}}
  */
 export function parseServerAddress(input) {
   const text = String(input ?? '').trim();
@@ -51,7 +51,7 @@ export function parseServerAddress(input) {
   if (url.username || url.password) return { ok: false, message: 'Leave the user name and password out of the address. You will be asked for your password next.' };
   if (url.search || url.hash) return { ok: false, message: 'Enter just the address of the server, without anything after a ? or #.' };
   const insecure = url.protocol === 'http:';
-  if (insecure && !isLoopbackHost(url.hostname)) return { ok: false, message: 'This address is not encrypted, so your password and library could be read on the way. Use an https:// address.' };
+  if (insecure && !isLoopbackHost(url.hostname)) return { ok: false, message: 'This address is not encrypted, so your password and library could be read on the way. Use an https:// address.', code: 'not-encrypted' };
   return { ok: true, url: normalizeAddress(url.href), insecure };
 }
 

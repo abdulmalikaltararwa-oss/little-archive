@@ -5,6 +5,11 @@
 // that string into the identity token it hands back. The token and the *raw* nonce go to the project
 // (POST /auth/v1/token?grant_type=id_token), which hashes the raw value the same way and compares. A token with no matching nonce
 // is refused by the project, so a stolen token is of no use without the raw nonce, which never left this function.
+// Apple's sheet also hands back a one-time authorization code. The project has no use for it; the Little Archive server does
+// (it trades the code with Apple so that deleting the account can revoke the Apple sign-in, see server/apple_signin.py). Once the
+// person is signed in, the code is handed to `appleCode`, which onboarding.js points at the server that was just checked. That
+// is a courtesy to a later deletion, not a step of the sign-in: it is not waited for, and nothing it does can fail the sign-in.
+// The code is good once, for five minutes, and is not kept or logged here.
 //
 // Google (iOS and Android, the system browser, PKCE). The app makes a random code verifier and keeps it. The system
 // authentication session opens the project's authorize address with the verifier's SHA-256 (the "code challenge"); the project
@@ -16,8 +21,8 @@
 // and hands back what came out of it. It never sees the verifier or the raw nonce. Neither secret is written to storage or to
 // any log, and both are gone when the attempt ends, whatever way it ends.
 //
-// Who can deliver a callback. The page has no listener of its own for opened addresses; an address reaches this module only as
-// the answer to the plugin call that is waiting. On iOS that answer comes from the authentication session's own completion
+// Who can deliver a callback. An address reaches this module only as the answer to the plugin call that is waiting. (An address
+// that opens the app with no call waiting is a password-reset link's business, recovery.js, and never reaches a sign-in here.) On iOS that answer comes from the authentication session's own completion
 // handler, so an address opened by another app never gets here. On Android the callback is an ordinary intent
 // (AndroidManifest.xml), and any app on the phone can send littlearchive://auth-callback?code=… while a sign-in is waiting. The
 // plugin cannot tell that from the browser's own redirect, so it hands it over and the attempt ends with it. What it cannot do
@@ -53,43 +58,25 @@ export function parseCallback(address) {
   return code && code.length <= 512 && !/\s/.test(code) ? { kind: 'code', code } : { kind: 'invalid' };
 }
 
-/** Shown on the first screen when the app was started by the callback address with no sign-in waiting for it (see below). */
-export const INTERRUPTED = 'Sign-in was interrupted. Try again.';
-const LAUNCH_CHECKED = 'la-launch-checked';
+/**
+ * A PKCE pair: a random verifier (64 characters; Supabase accepts 43 to 128) and its SHA-256 as base64url, the challenge. Used by
+ * "Continue with Google" below and by a password-reset link (recovery.js).
+ */
+export async function pkcePair({ subtle = globalThis.crypto?.subtle, fill = bytes => globalThis.crypto.getRandomValues(bytes) } = {}) {
+  if (!subtle) throw new AppError(CANNOT_PREPARE);
+  const verifier = base64url(fill(new Uint8Array(48)));
+  return { verifier, challenge: base64url(new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(verifier)))) };
+}
 
 /**
- * Android may end the app's process while the browser for "Continue with Google" is in front. The redirect then reaches a fresh
- * process: the verifier is gone with the old one, so the code is of no use, and without a word the person would be looking at
- * the first screen wondering what happened. This returns the sentence to show them, or ''. The code is never read or used.
- *
- * Two ways to know, because Android can deliver that callback two ways. The plugin remembers a callback it dropped before the
- * page first asked (`plugin.interrupted()`, which covers both: Capacitor also hands it the intent the activity was created
- * with). And the address the app was launched with (`App.getLaunchUrl()`), for a native side that does not have that method.
- * The launch address stays the same when the page reloads after a sign-out, so `storage` (sessionStorage, which a new process
- * starts without) remembers that it was looked at; the plugin answers true once.
- *
- * Android only (on iOS the callback never arrives outside the authentication session). Another app that starts this one with
- * the same address gets the same harmless sentence.
- *
- * @param {object} options
- * @param {string} options.platform
- * @param {{interrupted(): Promise<{interrupted?: boolean}>}} options.plugin  SocialSignIn
- * @param {{getLaunchUrl(): Promise<{url?: string}|undefined>}} options.App  @capacitor/app
- * @param {{getItem(key: string): string|null, setItem(key: string, value: string): void}} options.storage
+ * Shown when a callback reached the app with no sign-in waiting for it and no password reset asked for. On Android that happens
+ * when the system ended the app's process while the browser for "Continue with Google" was in front: the redirect then reaches
+ * a fresh process, the verifier is gone with the old one, and without a word the person would be looking at the first screen
+ * wondering what happened. The code is never used. (On iOS the callback of a Google sign-in never arrives outside its
+ * authentication session.) Another app that sends the same address gets the same harmless sentence. See recovery.js for how
+ * such an address is found, and onboarding.js for what is done with it.
  */
-export async function interruptedSignIn({ platform, plugin, App, storage }) {
-  if (platform !== 'android') return '';
-  // Each question is a courtesy: one that fails is never a reason not to start.
-  let dropped = false;
-  try { dropped = (await plugin.interrupted())?.interrupted === true; } catch { /* an older native side */ }
-  let launched = false;
-  try {
-    const first = !storage.getItem(LAUNCH_CHECKED);
-    storage.setItem(LAUNCH_CHECKED, '1');
-    if (first && !dropped) launched = /^littlearchive:\/\/auth-callback(?:[/?#]|$)/i.test(String((await App.getLaunchUrl())?.url || ''));
-  } catch { /* nothing to say */ }
-  return dropped || launched ? INTERRUPTED : '';
-}
+export const INTERRUPTED = 'Sign-in was interrupted. Try again.';
 
 /** Plain words for a failure of the native side. Its own sentences are fit to show; anything else is not. */
 function nativeProblem(error, fallback) {
@@ -102,8 +89,9 @@ function nativeProblem(error, fallback) {
  * @param {ReturnType<import('./supabase.js').createSupabase>} options.supabase  pinned to the project this app was built for
  * @param {{apple(o: {nonce: string}): Promise<object>, browser(o: {url: string}): Promise<object>}} options.plugin  SocialSignIn
  * @param {'ios'|'android'|string} options.platform
+ * @param {(given: {code: string, session: object}) => unknown} [options.appleCode]  takes Apple's authorization code after an Apple sign-in
  */
-export function createSocialSignIn({ supabase, plugin, platform, subtle = globalThis.crypto?.subtle, fill = bytes => globalThis.crypto.getRandomValues(bytes) }) {
+export function createSocialSignIn({ supabase, plugin, platform, appleCode, subtle = globalThis.crypto?.subtle, fill = bytes => globalThis.crypto.getRandomValues(bytes) }) {
   // Sign in with Apple is part of iOS; Google works in any system browser.
   const available = Object.freeze({ apple: platform === 'ios', google: platform === 'ios' || platform === 'android' });
   let busy = false;
@@ -140,13 +128,18 @@ export function createSocialSignIn({ supabase, plugin, platform, subtle = global
       const token = answer?.identityToken;
       if (answer?.status !== 'signed_in' || typeof token !== 'string' || token.split('.').length !== 3) throw new AppError('Apple did not send back a sign-in. Try again.');
       onStage?.('signing-in');
-      return supabase.signInWithIdToken({ provider: 'apple', idToken: token, nonce, label: LABEL.apple });
+      const session = await supabase.signInWithIdToken({ provider: 'apple', idToken: token, nonce, label: LABEL.apple });
+      const code = answer.authorizationCode;
+      if (appleCode && typeof code === 'string' && code.length >= 8 && code.length <= 2048 && !/\s/.test(code)) {
+        // Not awaited, and every failure is swallowed: the person is signed in whatever becomes of this.
+        Promise.resolve().then(() => appleCode({ code, session })).catch(() => {});
+      }
+      return session;
     }),
 
     /** @returns {Promise<object|null>} the session, or null when the person closed the browser */
     google: ({ onStage } = {}) => exclusive('google', async () => {
-      const verifier = secret(48); // 64 characters; Supabase accepts 43 to 128
-      const challenge = base64url(await sha256(verifier));
+      const { verifier, challenge } = await pkcePair({ subtle, fill });
       await supabase.providerReady({ provider: 'google', label: LABEL.google });
       let answer;
       try { answer = await plugin.browser({ url: supabase.authorizeUrl({ provider: 'google', redirectTo: CALLBACK_URL, codeChallenge: challenge }) }); }

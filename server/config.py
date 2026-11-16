@@ -91,6 +91,13 @@ class Config:
     tap_currency: str = "KWD"
     tap_return_url: str = ""                 # where Tap sends the buyer afterwards; empty means this server's own small page
     tap_merchant_id: str = ""                # only for a Tap account with more than one merchant
+    # Sign in with Apple, revoked when an account is deleted (server/apple_signin.py). All four or none: the team id, the id of the
+    # team's Sign in with Apple key, the client id (the app's bundle id) and the key itself, given inline or as a path to the .p8 file.
+    apple_signin_team_id: str = ""
+    apple_signin_key_id: str = ""
+    apple_signin_client_id: str = ""
+    apple_signin_private_key: str = field(default="", repr=False)
+    apple_signin_private_key_file: str = field(default="", repr=False)   # a path; the key file itself is never in the repository
 
     @classmethod
     def from_env(cls, values=None):
@@ -146,6 +153,11 @@ class Config:
             tap_currency=values.get("LA_TAP_CURRENCY", "").strip().upper() or "KWD",
             tap_return_url=values.get("LA_TAP_RETURN_URL", "").strip(),
             tap_merchant_id=values.get("LA_TAP_MERCHANT_ID", "").strip(),
+            apple_signin_team_id=values.get("LA_APPLE_SIGNIN_TEAM_ID", "").strip(),
+            apple_signin_key_id=values.get("LA_APPLE_SIGNIN_KEY_ID", "").strip(),
+            apple_signin_client_id=values.get("LA_APPLE_SIGNIN_CLIENT_ID", "").strip(),
+            apple_signin_private_key=values.get("LA_APPLE_SIGNIN_PRIVATE_KEY", "").strip(),
+            apple_signin_private_key_file=values.get("LA_APPLE_SIGNIN_PRIVATE_KEY_FILE", "").strip(),
         )
 
     def validate(self):
@@ -176,6 +188,7 @@ class Config:
             if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 3650:
                 raise ValueError(f"{label} must be a whole number of days from 0 (off) to 3650.")
         self._validate_mode()
+        self._validate_apple_signin()
 
     def _validate_mode(self):
         if self.mode not in {SELF_HOSTED, HOSTED}:
@@ -288,6 +301,36 @@ class Config:
             _ = r.port
             if r.scheme not in {"http", "https"} or not r.hostname or r.username or r.password or r.query or r.fragment or (r.scheme == "http" and r.hostname not in LOOPBACK):
                 raise ValueError("LA_TAP_RETURN_URL must be an HTTPS page address without a query; Tap adds ?tap_id=... to it.")
+
+    def _validate_apple_signin(self):
+        key, key_file = self.apple_signin_private_key, self.apple_signin_private_key_file
+        given = [self.apple_signin_team_id, self.apple_signin_key_id, self.apple_signin_client_id, key or key_file]
+        if not any(given):
+            return
+        if not self.hosted:
+            raise ValueError("LA_APPLE_SIGNIN_* settings apply only with LA_MODE=hosted. Remove them or set LA_MODE=hosted.")
+        if not all(given):
+            raise ValueError("Set LA_APPLE_SIGNIN_TEAM_ID, LA_APPLE_SIGNIN_KEY_ID, LA_APPLE_SIGNIN_CLIENT_ID and the key (LA_APPLE_SIGNIN_PRIVATE_KEY or "
+                             "LA_APPLE_SIGNIN_PRIVATE_KEY_FILE) together, or none of them.")
+        if key and key_file:
+            raise ValueError("Set LA_APPLE_SIGNIN_PRIVATE_KEY or LA_APPLE_SIGNIN_PRIVATE_KEY_FILE, not both.")
+        for label, value in (("LA_APPLE_SIGNIN_TEAM_ID", self.apple_signin_team_id), ("LA_APPLE_SIGNIN_KEY_ID", self.apple_signin_key_id)):
+            if not re.fullmatch(r"[A-Z0-9]{10}", value):
+                raise ValueError(f"{label} must be the 10 capital letters and digits Apple shows for it.")
+        if not re.fullmatch(r"[A-Za-z0-9.-]{1,155}", self.apple_signin_client_id):
+            raise ValueError("LA_APPLE_SIGNIN_CLIENT_ID must be the app's bundle id (letters, digits and . - only), without the team id in front.")
+        # Never echoed: a message about the key names the setting only.
+        if key and (len(key) > 8192 or "PRIVATE KEY" not in key):
+            raise ValueError("LA_APPLE_SIGNIN_PRIVATE_KEY must be the contents of the .p8 file, with its BEGIN and END lines (line breaks may be written as \\n).")
+        if key_file:
+            if _unsafe_text(key_file) or len(key_file) > 2048 or not Path(key_file).is_absolute():
+                raise ValueError("LA_APPLE_SIGNIN_PRIVATE_KEY_FILE must be an absolute path.")
+            if Path(key_file).resolve().is_relative_to((Path(__file__).resolve().parent.parent).resolve()):
+                raise ValueError("LA_APPLE_SIGNIN_PRIVATE_KEY_FILE must be outside the source tree: a key file does not belong in the repository.")
+
+    @property
+    def apple_signin_configured(self):
+        return bool(self.apple_signin_team_id and self.apple_signin_key_id and self.apple_signin_client_id and (self.apple_signin_private_key or self.apple_signin_private_key_file))
 
     def require_account_deletion(self):
         """Hosted mode must be able to delete a person's sign-in with their library (App Store guideline 5.1.1(v)).

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f8f3ea" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a211d" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="How to get help with Little Archive, and answers to common questions about purchases, accounts and your own server.">
+    <!-- A plain page: no script runs and nothing is loaded from another site. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+    <title>Support — Little Archive</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./pages.css">
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the page</a>
+    <header class="site-header wrap">
+      <a class="brand" href="./"><img src="./icon.svg" alt="" width="32" height="32">Little Archive</a>
+      <nav class="site-nav" aria-label="Pages">
+        <ul>
+          <li><a href="./privacy.html">Privacy</a></li>
+          <li><a href="./terms.html">Terms</a></li>
+          <li><a href="./support.html" aria-current="page">Support</a></li>
+          <li><a href="./delete-account.html">Delete account</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" class="wrap">
+      <h1>Support</h1>
+      <p class="lede">How to get help with Little Archive, and answers to common questions.</p>
+
+      <h2 id="help">Where to ask</h2>
+      <ul>
+        <li><strong>Something is broken, or you have an idea.</strong> Open an issue in the <a href="https://github.com/abdulmalikaltararwa-oss/little-archive/issues">issue tracker</a>. It is public, so leave out anything personal: no passwords, tokens, exports of your library or private screenshots.</li>
+        <li><strong>A security problem.</strong> Follow the <a href="https://github.com/abdulmalikaltararwa-oss/little-archive/blob/main/SECURITY.md">security policy</a> and do not post the details in a public issue.</li>
+        <li><strong>Your account, a purchase, or your data.</strong> Write to us at the address under <a href="#contact">Contact</a>.</li>
+      </ul>
+
+      <h2 id="faq">Common questions</h2>
+
+      <h3 id="restore">How do I restore my purchase?</h3>
+      <p>Sign in to the same Little Archive account you bought the unlock with, open the unlock screen and choose "Restore a purchase". The store may ask you to sign in. A purchase belongs to one Little Archive account: if the app says another account holds it, sign in to that account instead.</p>
+
+      <h3 id="refund">How do I get a refund?</h3>
+      <p>If you bought the unlock through the App Store or Google Play, ask the store; it took the payment and decides refunds. If you paid on the web, write to us. The <a href="./terms.html#refunds">terms</a> have the details.</p>
+
+      <h3 id="delete">How do I delete my account?</h3>
+      <p>In the app: Settings, "This device", "Delete my account…", then type DELETE to confirm. If you cannot use the app, the <a href="./delete-account.html">account deletion page</a> explains how to ask by email, and what is removed.</p>
+
+      <h3 id="password">I forgot my password</h3>
+      <p>The app cannot reset a password yet. Write to us from the email address of your account and we will help. If you signed up with Continue with Google or Continue with Apple, you have no Little Archive password; use the same button again.</p>
+
+      <h3 id="own-server">How do I use my own server?</h3>
+      <p>Little Archive is open source and free to run yourself. Follow the <a href="https://github.com/abdulmalikaltararwa-oss/little-archive/blob/main/docs/self-hosting.md">self-hosting guide</a> to set up a server. Then, in the app, choose "My own server" on the first screen and type its address. The address must start with https. To change later, open Settings, "This device", "Switch server". With your own server every feature is open and there is nothing to buy; AI features work if you connect your own AI service.</p>
+
+      <h3 id="move">Can I move my library out of the hosted service?</h3>
+      <p>Yes. In Settings, download a full backup. The <a href="https://github.com/abdulmalikaltararwa-oss/little-archive/blob/main/docs/backup-restore.md">backup and restore guide</a> explains how to restore it into a copy of Little Archive that you run yourself.</p>
+
+      <h3 id="web">Can I open my hosted account in a web browser?</h3>
+      <p>Not yet. A Little Archive account works in the iPhone and Android apps.</p>
+
+      <h3 id="ai">Why did an AI feature say I reached a limit?</h3>
+      <p>AI features have daily and monthly limits. The message says when the limit starts again, and Settings shows what your account has used. A request that fails is not counted.</p>
+
+      <h2 id="contact">Contact</h2>
+      <p>For help with your account, a purchase or your data, write to <span class="contact-address">support@[owner to set]</span></p>
+    </main>
+    <footer class="site-footer wrap">
+      <nav aria-label="Legal and help">
+        <ul>
+          <li><a href="./privacy.html">Privacy policy</a></li>
+          <li><a href="./terms.html">Terms of use</a></li>
+          <li><a href="./support.html">Support</a></li>
+          <li><a href="./delete-account.html">Delete your account</a></li>
+          <li><a href="https://github.com/abdulmalikaltararwa-oss/little-archive">Source code</a></li>
+        </ul>
+      </nav>
+      <p>Little Archive is open source under the MIT licence. The hosted service and the apps are run by Nuzio, Kuwait.</p>
+    </footer>
+  </body>
+</html>

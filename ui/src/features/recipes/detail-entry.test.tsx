@@ -5,7 +5,8 @@ import { createStore } from 'zustand/vanilla';
 import { ArchiveProvider } from '@/app/archive-context';
 import type { Archive } from '@/data/archive';
 import { ApiError } from '@/data/client';
-import type { Features, Item } from '@/data/types';
+import type { Features, Item, Settings } from '@/data/types';
+import { AiPermissionHost } from '@/features/ai-permission/host';
 import type { Recipe, RecipeResponse } from './api';
 import { RecipeEntry } from './detail-entry';
 
@@ -44,17 +45,18 @@ const answer = (status: RecipeResponse['status'], card: Recipe | null): RecipeRe
   item_id: 'item-1', status, edited: false, recipe: card, extracted: card, extraction: card ? { method: 'rules', at: '2026-11-14T10:00:00+00:00', stale: false } : null, edited_at: null, available: { jsonld: false, rules: true, ai: false },
 });
 
-interface Setup { features: Features | null; known?: boolean; get?: () => Promise<unknown>; post?: () => Promise<unknown>; leave?: boolean }
+interface Setup { features: Features | null; settings?: Partial<Settings>; known?: boolean; get?: () => Promise<unknown>; post?: () => Promise<unknown>; leave?: boolean }
 
-function view({ features: flags, known = true, get = async () => answer('none', null), post, leave = true }: Setup) {
+function view({ features: flags, settings, known = true, get = async () => answer('none', null), post, leave = true }: Setup) {
   const request = vi.fn(async (_path: string, options?: { method?: string }) => {
+    if (_path === '/enrichment/status') return {};
     if (options?.method === 'POST') return post ? post() : answer('none', null);
     return get();
   });
   const closeItem = vi.fn(async () => leave);
   const goScreen = vi.fn();
-  const archive = { store: createStore(() => ({ features: flags, featuresKnown: known })), api: { request }, closeItem, goScreen } as unknown as Archive;
-  const result = render(<ArchiveProvider archive={archive}><RecipeEntry item={ITEM} /></ArchiveProvider>);
+  const archive = { store: createStore(() => ({ features: flags, featuresKnown: known, settings })), api: { request }, closeItem, goScreen } as unknown as Archive;
+  const result = render(<ArchiveProvider archive={archive}><RecipeEntry item={ITEM} /><AiPermissionHost /></ArchiveProvider>);
   return { ...result, request, closeItem, goScreen };
 }
 
@@ -152,5 +154,14 @@ describe('a save’s recipe section', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach your archive.');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('button', { name: 'Look for a recipe' })).toBeInTheDocument();
+  });
+
+  it('asks before looking when the text could go to a hosted AI service, and sends nothing on "Not now"', async () => {
+    const { request } = view({ features: features({ ai: true }), settings: { ai_enabled: true, ai_hosted: true, ai_provider: 'gemini', ai_sharing_allowed: false } });
+    await userEvent.click(await screen.findByRole('button', { name: 'Look for a recipe' }));
+    expect(await screen.findByRole('dialog', { name: 'Send this to an AI service?' })).toHaveTextContent('Google’s Gemini service');
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(request.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
   });
 });

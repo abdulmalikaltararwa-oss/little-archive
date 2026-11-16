@@ -4,6 +4,12 @@
 
 The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` in [run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). Six installation/recovery reports are retained with their provenance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence, corrected initial failures, and boundaries.
 
+### Permission before anything is sent to an AI service
+
+- **One question, once.** Before the first action that would send saved content to a service outside the person's server (suggestions, a closer read, a recipe card, places, a question to the archive), the interface says what would be sent and to which service, as the server reports it, and offers "Allow" and "Not now". "Not now" cancels the action. A self-hosted server with only a local model is not asked.
+- **Kept with the library.** `ai_sharing_allowed` in `/api/settings` (per account on a hosted service); a switch in Settings withdraws it. `PATCH /api/settings` now writes only the fields it is given. The server does not refuse AI routes itself.
+- **Privacy policy and terms.** Linked from Settings, the unlock screen and the permission dialog, built from one site address (`ui/src/lib/site.ts`).
+
 ### The React interface is the interface (in development)
 
 The web interface is the React app in `ui/`, served by the server, the Docker image, the Mac app and the public demo. The old buildless interface in `web/` is no longer served; its files stay in the repository because the interface and the phone app import a few of them (`utils.js`, the demo data and store, the display font, `transport.js`).
@@ -68,6 +74,7 @@ Covered by automated tests with stand-ins only (no real Supabase project, Apple 
 - The page fetcher bounds inflated size (a gzip body is inflated under the byte limit instead of by the HTTP library), shares its time allowance across lookups and connections, refuses names that become addresses once normalised and scoped addresses, and lists the ranges Python versions disagree about.
 - Recipe cards, places and ask-your-archive: every model call and uncached geocoder request is a *feature call* charged to the account against a daily and monthly allowance (`LA_HOSTED_FEATURE_CALLS_*`; 100 a day and 1,500 a month unlocked, none for free accounts, so the features stay part of the unlock), refunded on failure, with the same `402`/`429` answers; the guided import's staged upload now counts toward a hosted account's storage quota (refused at `create` with `507 storage_full` if it cannot fit); route-class request prices and concurrency caps cover the new routes.
 - Mobile: `10.0.2.2` (the Android emulator's host) is accepted only by a development bundle (`LA_DEBUG_BUILD=1`); a test keeps the app's address check and both Android network configs in step.
+- Deleting an account revokes its Sign in with Apple, when the operator sets the team's Sign in with Apple key (`LA_APPLE_SIGNIN_TEAM_ID`, `LA_APPLE_SIGNIN_KEY_ID`, `LA_APPLE_SIGNIN_CLIENT_ID` and `LA_APPLE_SIGNIN_PRIVATE_KEY_FILE` or `LA_APPLE_SIGNIN_PRIVATE_KEY`; all or none, and with none nothing changes). After an Apple sign-in the iOS app posts Apple's one-time authorization code to the new `POST /api/account/apple-authorization`; the server trades it with Apple and keeps the refresh token for that account, and deletion asks Apple once to revoke it before the Supabase sign-in is removed. Apple being unreachable never blocks a deletion (a warning is logged and the token is not kept), and the post never blocks a sign-in. `doctor` lists `apple_signin_revocation` once the key is set. No new dependency (PyJWT and cryptography sign the client secret). Run against stand-ins only: Apple's endpoints, a real key and a device were not used, and the Swift change is uncompiled. The owner steps are in [the mobile app guide](docs/mobile-app.md#what-to-switch-on-and-create-the-owner-checklist).
 
 ### iOS and Android app (in development)
 

@@ -6,6 +6,7 @@ import { errorMessage } from '@web/utils.js';
 import { Lock, Play, Sparkles } from 'lucide-react';
 import { useArchive, useBusy } from '@/app/archive-context';
 import { toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { Button } from '@/components/ui/button';
@@ -62,16 +63,19 @@ export function RecipeEntry({ item }: { item: Item }) {
   const response = current?.phase === 'ready' ? current.response : null;
   const recipe = response?.recipe && response.recipe.is_recipe && (response.status === 'extracted' || response.status === 'edited') ? response.recipe : null;
 
-  const look = () => runLook(async () => {
-    const result = await extractRecipe(archive, item.id, { method: 'auto' });
-    setKnown({ id: item.id, phase: 'ready', response: result });
-    if (result.extraction_result.found && result.status !== 'not_a_recipe') {
-      setNote('');
-      toast('A recipe card is ready.', { tone: 'saved' });
-    } else {
-      setNote(result.extraction_result.found ? 'The text was read, and it does not read like a recipe.' : noRecipeSentence(result.extraction_result.reason, result.extraction_result.ai_available));
-    }
-  });
+  const look = async () => {
+    if (!(await allowAi(archive, 'recipe'))) return;
+    await runLook(async () => {
+      const result = await extractRecipe(archive, item.id, { method: 'auto' });
+      setKnown({ id: item.id, phase: 'ready', response: result });
+      if (result.extraction_result.found && result.status !== 'not_a_recipe') {
+        setNote('');
+        toast('A recipe card is ready.', { tone: 'saved' });
+      } else {
+        setNote(result.extraction_result.found ? 'The text was read, and it does not read like a recipe.' : noRecipeSentence(result.extraction_result.reason, result.extraction_result.ai_available));
+      }
+    });
+  };
 
   return (
     <section aria-label="Recipe" data-testid="recipe-entry" className="mt-6 border-t border-line pt-5">
