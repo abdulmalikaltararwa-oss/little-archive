@@ -95,7 +95,9 @@ test.describe('on a phone', () => {
     // Measured once the dialog has finished arriving.
     await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map(animation => animation.finished.catch(() => {}))));
     const box = await dialog.boundingBox();
-    expect(box).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+    // As wide as the page: a browser with a classic scrollbar (Chromium on Linux) keeps its gutter beside the dialog.
+    const pageWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(box).toMatchObject({ x: 0, y: 0, width: pageWidth, height: 844 });
     const field = await dialog.getByRole('combobox').boundingBox();
     expect(field.y).toBeGreaterThan(844 - 90);
     expect(field.y + field.height).toBeLessThanOrEqual(844);
