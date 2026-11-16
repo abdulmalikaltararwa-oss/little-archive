@@ -550,6 +550,10 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             if problem.reason == "key_refused":
                 log.error("Apple refused the Sign in with Apple key, so an account's Apple sign-in could not be recorded for later revocation. Check LA_APPLE_SIGNIN_TEAM_ID, LA_APPLE_SIGNIN_KEY_ID, LA_APPLE_SIGNIN_CLIENT_ID and the key.")
             raise Refusal(503, "Apple could not be reached to record this sign-in. Signing in is not affected.", "apple_unavailable", headers=retry_after(30), reason=problem.reason) from None
+        if auth.store.closed:
+            # The account was deleted while Apple was answering, and its deletion may already have looked for a token: finish it here.
+            apple_accounts.forget(auth.user_id)
+            return {"stored": False}
         return {"stored": True}
 
     @app.get("/api/items")

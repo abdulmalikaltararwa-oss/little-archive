@@ -31,7 +31,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 import logging
 from pathlib import Path
-import re
 import sqlite3
 from threading import RLock
 import time
@@ -45,7 +44,6 @@ log = logging.getLogger("little_archive")
 APPLE_ORIGIN = "https://appleid.apple.com"
 SECRET_SECONDS = 300  # a client secret is made for one request; Apple allows up to six months
 MAX_ANSWER_BYTES = 64 * 1024
-CODE = re.compile(r"[A-Za-z0-9._~+/=-]{8,2048}")
 SCHEMA = "CREATE TABLE IF NOT EXISTS apple_signin_tokens(user_id TEXT PRIMARY KEY, refresh_token TEXT NOT NULL, stored_at INTEGER NOT NULL);"
 
 
@@ -176,7 +174,7 @@ class AppleSignIn:
     def keep(self, user_id, code):
         """Trade the code and keep the refresh token for this account, replacing an earlier one. Raises AppleUnavailable."""
         user_id = valid_user_id(user_id)
-        if not isinstance(code, str) or not CODE.fullmatch(code):
+        if not isinstance(code, str) or not 8 <= len(code) <= 2048 or any(c.isspace() or not c.isprintable() for c in code):
             raise AppleUnavailable("grant_refused")  # not something Apple's sheet gives out, so Apple is not asked
         token = self.client.exchange(code)
         with self._transaction() as c:
@@ -191,9 +189,10 @@ class AppleSignIn:
         return row[0] if row else None
 
     def forget(self, user_id):
-        """The account is being deleted: revoke its Sign in with Apple, once, and keep nothing. Never raises and never delays a deletion for long.
+        """The account is being deleted: revoke its Sign in with Apple, once, and keep nothing. Never delays a deletion for long.
 
-        The token leaves the database before Apple is asked, so no outcome (a crash included) can leave it behind.
+        The token leaves the database before Apple is asked, so no answer from Apple, and no crash, can leave it behind. Apple
+        failing is logged and never raised; only a database that cannot be read is, so that the deletion repeats this step.
         """
         try:
             token = self._take(user_id)

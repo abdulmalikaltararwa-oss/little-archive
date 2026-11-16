@@ -226,11 +226,34 @@ class AppleRevocationTests(AppCase):
     def test_only_something_shaped_like_a_code_is_sent_to_apple_and_only_by_a_signed_in_account(self):
         client = self.build()
         user, auth = self.account()
-        for bad in ("short", "has a space in the middle of it", "line\nbreak-in-the-code", "x" * 2049):
+        for bad in ("short", "has a space in the middle of it", "line\nbreak-in-the-code", "nul\x00-in-the-code", "x" * 2049):
             self.assertIn(self.send_code(client, auth, bad).status_code, (400, 422), bad[:10])
         self.assertEqual(client.post("/api/account/apple-authorization", json={"authorization_code": CODE, "extra": 1}, headers=auth).status_code, 422)
         self.assertEqual(client.post("/api/account/apple-authorization", json={"authorization_code": CODE}).status_code, 401)
         self.assertEqual(self.journal, [], "Apple was asked nothing")
+
+    def test_a_code_made_of_other_characters_than_the_ones_seen_so_far_is_still_sent_to_apple(self):
+        client = self.build()
+        user, auth = self.account()
+        code = "c~9f!*'();:@&=+$,/?#[]%20é.code"
+        self.assertEqual(self.send_code(client, auth, code).json(), {"stored": True})
+        self.assertEqual(self.journal, [("apple.exchange", code)])
+
+    def test_an_account_deleted_while_apple_was_answering_leaves_no_token_behind(self):
+        client = self.build()
+        user, auth = self.account()
+        client.post("/api/items", json={"url": "https://example.com/mine"}, headers=auth)
+        answers = []
+        trade = self.apple.exchange
+
+        def slow_exchange(code):
+            answers.append(self.delete(client, auth).status_code)  # the deletion runs to its end while Apple is still answering
+            return trade(code)
+        self.apple.exchange = slow_exchange
+        answer = self.send_code(client, auth)
+        self.assertEqual((answers, answer.status_code, answer.json()), ([200], 200, {"stored": False}))
+        self.assertEqual(self.kept(), [], "the late token is not kept")
+        self.assertEqual([step[0] for step in self.journal], ["supabase.delete_user", "apple.exchange", "apple.revoke"], "and it is revoked")
 
     def test_one_account_cannot_make_the_server_ask_apple_without_end(self):
         client = self.build(apple=FakeApple(self.journal, exchange="grant_refused"))
@@ -439,14 +462,27 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("bm90IGEga2V5", str(raised.exception))
 
     def test_doctor_says_whether_apple_sign_ins_are_revoked_and_never_shows_the_key(self):
-        def row(result):
-            return next(row for row in result["checks"] if row["id"] == "apple_signin_revocation")
+        def rows(result):
+            return [(row["status"], row["code"]) for row in result["checks"] if row["id"] == "apple_signin_revocation"]
         off = diagnose(env_file=self.root / "absent.env", environment=self.base)
-        self.assertEqual((row(off)["status"], row(off)["code"], off["exit_code"]), ("warning", "apple_signin_not_revoked", 0))
-        self.assertIn("LA_APPLE_SIGNIN_", row(off)["next_action"])
+        self.assertEqual(rows(off), [], "with nothing set the report is what it was")
         on = diagnose(env_file=self.root / "absent.env", environment={**self.base, **self.apple})
-        self.assertEqual((row(on)["status"], row(on)["code"]), ("passed", "apple_signin_key_configured"))
+        self.assertEqual(rows(on), [("passed", "apple_signin_key_configured")])
+        self.assertEqual({row["id"]: row["status"] for row in on["checks"] if row["id"] != "apple_signin_revocation"}, {row["id"]: row["status"] for row in off["checks"]})
         self.assertNotIn(self.key[40:80], json.dumps([off, on]))
+
+    def test_the_settings_are_read_from_an_environment_file_with_the_key_on_one_line(self):
+        from server.configuration import read_env_values
+        path = self.root / "hosted.env"
+        one_line = self.key.strip().replace("\n", "\\n")
+        path.write_text("".join(f"{name}={value}\n" for name, value in {**self.base, **self.apple, "LA_APPLE_SIGNIN_PRIVATE_KEY": f'"{one_line}"'}.items()))
+        self.assertEqual(len(path.read_text().splitlines()), len(self.base) + len(self.apple))
+        config = Config.from_env(read_env_values(path))
+        config.validate()
+        self.assertIsInstance(client_from_config(config), AppleSignInClient)
+        report = diagnose(env_file=path, environment={})
+        self.assertEqual([row["code"] for row in report["checks"] if row["id"] == "apple_signin_revocation"], ["apple_signin_key_configured"])
+        self.assertNotIn(self.key[40:80], json.dumps(report))
 
 
 class StoreTests(unittest.TestCase):
