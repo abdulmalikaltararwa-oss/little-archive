@@ -214,7 +214,7 @@ export function PlacesEntry({ item, allowLeave }: { item: Item; /** Asked before
     ? ''
     : data.available.ai
       ? aiHosted
-        ? 'Reads the page’s data and the pin lines and map links in the text first. If those find nothing, the caption and creator are sent to your server’s hosted AI service.'
+        ? 'Reads the page’s data and the pin lines and map links in the text first. If those find nothing, the caption and creator are sent to a hosted AI service.'
         : 'Reads the page’s data and the pin lines and map links in the text first. If those find nothing, your local AI model reads the text.'
       : 'Reads the page’s data and the pin lines and map links in the text. No AI is set up on this server, and nothing is guessed.';
 

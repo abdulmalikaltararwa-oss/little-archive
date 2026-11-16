@@ -204,7 +204,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
   const aiHelp = demo
     ? 'This isolated demo does not upload files or run AI. Install your own instance to use these features.'
     : settings.ai_hosted
-      ? 'Your server uses a hosted AI service: the post’s caption, creator and any transcript are sent to it, not your notes. A video cover is not a full video analysis.'
+      ? 'This uses a hosted AI service: the post’s title, caption, creator and any transcript are sent to it. A video cover is not a full video analysis.'
       : settings.ai_enabled
         ? 'AI works from available text. A video cover is not a full video analysis.'
         : 'Optional local AI is not configured. Your library works without it.';
@@ -345,7 +345,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
         <p className="mt-3 text-xs leading-relaxed text-ink-soft">{aiHelp}</p>
         {!demo && deepRead && (deepRead.available || ['queued', 'running'].includes(deepRead.state)) ? (
           <p className="mt-2 text-xs leading-relaxed text-ink-soft">
-            {deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the audio to your server’s transcription service, then reads this save again from what is said. The video itself is never stored.'}
+            {deepRead.state === 'failed' && deepRead.error ? `Last try: ${deepRead.error}` : 'Sends the audio to a transcription service, then reads this save again from what is said. The video itself is never stored.'}
           </p>
         ) : null}
       </section>
