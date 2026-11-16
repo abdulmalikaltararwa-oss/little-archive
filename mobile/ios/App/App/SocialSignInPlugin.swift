@@ -123,9 +123,9 @@ private final class AppleSheet: NSObject, ASAuthorizationControllerDelegate, ASA
 
     init(anchor: ASPresentationAnchor, nonce: String, finish: @escaping (Outcome) -> Void) {
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        // The email goes into the identity token (the project makes the account from it); the name is asked for as Apple's sheet
-        // offers both together, and is not used or kept by the app.
-        request.requestedScopes = [.fullName, .email]
+        // The email goes into the identity token (the project makes the account from it). The name is not asked for: the app
+        // has no use for it.
+        request.requestedScopes = [.email]
         request.nonce = nonce
         self.anchor = anchor
         self.controller = ASAuthorizationController(authorizationRequests: [request])
