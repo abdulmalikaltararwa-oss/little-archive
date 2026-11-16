@@ -54,7 +54,7 @@ class SharedCacheCase(unittest.TestCase):
         environment = {"LA_PUBLIC_CACHE": "true", "LA_PUBLIC_CACHE_PATH": str(self.shared)}
         self.enterContext(patch("server.tenancy.understanding_environment", return_value=environment))
         self.key = SigningKey()
-        self.app, _ = hosted_app(self.root, self.key, **MODEL)
+        self.app, _ = hosted_app(self.root, self.key, accounts_allow_ai=True, **MODEL)
         self.client = TestClient(self.app)
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)

@@ -89,9 +89,11 @@ class _Harness:
 class SelfHosted(_Harness):
     mode = "self-hosted"
 
-    def __init__(self, **config):
+    def __init__(self, allow_ai=True, **config):
         super().__init__()
         self.app = create_app(Config(data_dir=self.root / "data", admin_password=PASSWORD, public_url="http://testserver", testing=True, **config))
+        if allow_ai:  # the owner has answered the AI sharing question, as in `Hosted`; test_ai_sharing.py covers the other answer
+            self.app.state.store.set_meta("ai_sharing_allowed", "true")
         self.client = TestClient(self.app)
         self.client.__enter__()
         self.stack.callback(self.client.__exit__, None, None, None)
@@ -112,10 +114,10 @@ class SelfHosted(_Harness):
 class Hosted(_Harness):
     mode = "hosted"
 
-    def __init__(self, **settings):
+    def __init__(self, allow_ai=True, **settings):
         super().__init__()
         self.key = SigningKey()
-        self.app, self.keyset = hosted_app(self.root, self.key, **settings)
+        self.app, self.keyset = hosted_app(self.root, self.key, accounts_allow_ai=allow_ai, **settings)
         self.client = TestClient(self.app)
         self.client.__enter__()
         self.stack.callback(self.client.__exit__, None, None, None)

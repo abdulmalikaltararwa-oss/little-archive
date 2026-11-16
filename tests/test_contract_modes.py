@@ -65,7 +65,7 @@ class HostedClient:
         self.key, self.user = SigningKey(), str(uuid4())
         if settings:  # A model is configured: give the account an allowance to queue with.
             settings["hosted_free_deep_reads_monthly"] = 1000
-        self.app, self.keyset = hosted_app(root, self.key, **settings)
+        self.app, self.keyset = hosted_app(root, self.key, accounts_allow_ai=bool(settings), **settings)  # with a model, the account has allowed AI sharing
         self.client = TestClient(self.app)
         self.client.__enter__()
         self.auth = bearer(self.key.sign(claims(self.user)))
@@ -320,7 +320,8 @@ class LibraryContract(ContractScenarios):
         self.assertEqual(refused.status_code, 409)
         self.assertIsNone(self.ok("DELETE", f"/api/items/{item['id']}/transcript").json()["enrichment"]["transcript"])
         status = self.ok("GET", "/api/enrichment/status").json()
-        self.assertEqual(set(status), {"page", "analysis", "transcription", "deep_read", "shared_cache"})
+        self.assertEqual(set(status), {"page", "analysis", "transcription", "deep_read", "shared_cache", "sharing"})
+        self.assertEqual(status["sharing"], {"needed": False, "allowed": False, "waiting": 0})
         self.assertEqual((status["page"]["server_fetch"], status["deep_read"]["available"], status["shared_cache"]["enabled"]), (False, False, False))
         usage = self.ok("GET", "/api/enrichment/usage").json()
         self.assertEqual((usage["page_reads"], usage["deep_reads"], usage["model_calls"]), (1, 0, 0))

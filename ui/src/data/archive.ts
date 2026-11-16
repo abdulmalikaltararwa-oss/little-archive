@@ -140,6 +140,8 @@ export interface Archive {
   closeItem(options?: { force?: boolean }): Promise<boolean>;
   /** The open save registers a check that runs before it is left (unsaved edits). */
   setLeaveGuard(guard: (() => Promise<boolean>) | null): void;
+  /** The interface registers how to ask for the AI sharing permission when the server refuses for want of it. */
+  setAiPermissionAsker(asker: (() => Promise<boolean>) | null): void;
   select(id: string, on: boolean): boolean;
   selectLoaded(): void;
   clearSelection(): void;
@@ -174,7 +176,8 @@ export function createArchive({ backend, history = browserHistory(), notify = ()
   const get = store.getState;
   const set = store.setState;
 
-  const client = createClient(backend, { isAuthenticated: () => authenticated, onUnauthorized: sessionExpired });
+  let askAiPermission: (() => Promise<boolean>) | null = null;
+  const client = createClient(backend, { isAuthenticated: () => authenticated, onUnauthorized: sessionExpired, onAiPermissionRequired: async () => (askAiPermission ? askAiPermission() : false) });
   const api = createApi(client);
 
   function sessionExpired(detail = '') {
@@ -394,6 +397,7 @@ export function createArchive({ backend, history = browserHistory(), notify = ()
   return {
     backend, api, store, boot, login, logout, refreshMetadata, loadItems, refreshLibrary, refreshEditedItem, navigate, goView, goScreen, openItem, closeItem,
     setLeaveGuard: guard => { leaveGuard = guard; },
+    setAiPermissionAsker: asker => { askAiPermission = asker; },
     select,
     selectLoaded() {
       const selected = new Set(get().selected);

@@ -51,8 +51,10 @@ def _digest(value) -> str:
 
 
 class Analyzer:
-    def __init__(self, provider, settings, *, cache=None, meter=None):
+    def __init__(self, provider, settings, *, cache=None, meter=None, before_send=None):
         self.provider, self.settings, self.cache, self.meter = provider, settings, cache, meter
+        # Called before every request to the provider; the service passes its AI sharing check, which raises to stop the send.
+        self.before_send = before_send
 
     @property
     def enabled(self) -> bool:
@@ -144,6 +146,8 @@ class Analyzer:
     def _call(self, chunk, job_ids) -> dict[str, Outcome]:
         inputs = [AnalysisInput(p.key, p.evidence, True, p.offered) for p in chunk]
         results: dict[str, Outcome] = {}
+        if self.before_send is not None:
+            self.before_send()
         try:
             answers, usage = self.provider.analyze(inputs)
             self._meter(kind="model_call", tier="understand", provider=self.provider.name, model=self.provider.model, items=len(chunk),

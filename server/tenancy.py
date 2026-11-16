@@ -422,7 +422,16 @@ class AccountWorker:
                 meters.refund_suggestions(store.tenant, len(waiting) - deep)
             return count
 
-        worker.enqueue, worker.enqueue_deep, worker._fail, worker.cancel_pending = queue, queue_deep, failing, cancel_pending
+        def resume():
+            """The account has just allowed AI sharing: offer its library to the shared thread again (see `step`)."""
+            with store.lock:
+                with store.transaction() as c:
+                    queued = has_queued(c)
+                if queued:
+                    self.libraries.mark_pending(store)
+            self.wake.set()
+
+        worker.enqueue, worker.enqueue_deep, worker._fail, worker.cancel_pending, worker.resume = queue, queue_deep, failing, cancel_pending, resume
 
     def start(self):
         self.thread = Thread(target=self.run, daemon=True, name="little-archive-accounts")
@@ -461,7 +470,12 @@ class AccountWorker:
             store = self.libraries.next_pending(has_queued)
             if store is None:
                 return False
-            store.enrichment.worker.step()
+            if not store.enrichment.worker.step():
+                # Its queued jobs are all waiting for the account's AI sharing permission. Stop offering the library, or
+                # this loop would spin on it; giving the permission (`resume`) or queueing new work offers it again.
+                with store.lock:
+                    if not store.enrichment.worker.startable():
+                        self.libraries.set_aside(store)
         except Exception:
             # One library's failure (its account deleted mid-job, a full disk) must
             # not end every account's work. It is set aside until work is queued again.

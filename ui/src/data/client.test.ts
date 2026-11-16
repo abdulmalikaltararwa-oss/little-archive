@@ -67,6 +67,40 @@ describe('the client', () => {
     expect(error.extra).not.toHaveProperty('detail');
   });
 
+  it('turns the server’s "AI sharing is not allowed" into the question, then makes the request once more', async () => {
+    const refusal = () => json({ detail: 'Sending saves to an AI service has not been allowed for this library.', code: 'ai_permission_required' }, 403);
+    const client = (answers: Response[], allowed: boolean) => {
+      const ask = vi.fn(async () => allowed);
+      const fetch = vi.fn(async () => answers.shift()!);
+      const backend = { kind: 'browser', csrf: false, fetch } as unknown as Backend;
+      return { ask, fetch, client: createClient(backend, { isAuthenticated: () => true, onUnauthorized: vi.fn(), onAiPermissionRequired: ask }) };
+    };
+
+    const yes = client([refusal(), json({ queued: 1 })], true);
+    await expect(yes.client.request('/ai/jobs', { method: 'POST', body: { ids: ['a'] } })).resolves.toEqual({ queued: 1 });
+    expect(yes.ask).toHaveBeenCalledTimes(1);
+    expect(yes.fetch).toHaveBeenCalledTimes(2);
+
+    // "Not now": nothing more is requested, and the server's own sentence is what is shown.
+    const no = client([refusal(), json({ queued: 1 })], false);
+    await expect(no.client.request('/ask', { method: 'POST', body: {} })).rejects.toMatchObject({ status: 403, code: 'ai_permission_required', message: 'Sending saves to an AI service has not been allowed for this library.' });
+    expect(no.fetch).toHaveBeenCalledTimes(1);
+
+    // A server that still refuses after a yes is asked once, never in a loop.
+    const stuck = client([refusal(), refusal(), json({})], true);
+    await expect(stuck.client.request('/ask', { method: 'POST', body: {} })).rejects.toMatchObject({ code: 'ai_permission_required' });
+    expect(stuck.ask).toHaveBeenCalledTimes(1);
+    expect(stuck.fetch).toHaveBeenCalledTimes(2);
+
+    // Without the hook the refusal is passed on as it is, and another refusal never asks.
+    const { client: plain, calls } = setup(refusal);
+    await expect(plain.request('/ask', { method: 'POST', body: {} })).rejects.toMatchObject({ code: 'ai_permission_required' });
+    expect(calls).toHaveLength(1);
+    const other = client([json({ detail: 'Part of the unlock.', code: 'unlock_required' }, 402)], true);
+    await expect(other.client.request('/ask', { method: 'POST', body: {} })).rejects.toMatchObject({ code: 'unlock_required' });
+    expect(other.ask).not.toHaveBeenCalled();
+  });
+
   it('recognises the locked answer by status and code together', async () => {
     const locked = await setup(() => json({ detail: 'Part of the unlock.', code: 'unlock_required', feature: 'ask' }, 402)).client.request('/ask').catch(caught => caught);
     expect(isLocked(locked)).toBe(true);

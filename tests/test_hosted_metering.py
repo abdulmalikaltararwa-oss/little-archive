@@ -176,7 +176,7 @@ class HostedMeterCase(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.enterContext(no_worker_threads())
         self.key = SigningKey()
-        self.app, _ = hosted_app(self.root, self.key, **self.settings)
+        self.app, _ = hosted_app(self.root, self.key, accounts_allow_ai=True, **self.settings)
         self.clock = Clock()
         self.app.state.entitlements.clock = self.clock
         self.client = TestClient(self.app)

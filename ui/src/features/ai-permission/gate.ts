@@ -1,7 +1,8 @@
 // The permission step before saved content is sent to an AI service. Every action that can send it calls
 // `allowAi` first and stops when the answer is false; nothing is requested from the server's AI routes before
 // the person has said yes. The answer is kept with the library (PATCH /api/settings `ai_sharing_allowed`), which
-// on a hosted service means with the account.
+// on a hosted service means with the account. The server checks the same answer before it sends anything, and
+// refuses with `ai_permission_required` when it is missing; `askAiAgain` turns that refusal back into the question.
 import { create } from 'zustand';
 import { toast } from '@/app/ui-state';
 import type { Archive } from '@/data/archive';
@@ -73,7 +74,20 @@ export async function allowAi(archive: Archive, action: AiAction): Promise<boole
   return true;
 }
 
-/** Withdraws the permission. The next AI action asks again. Work already queued is not stopped by this. */
+/**
+ * The server said the permission is missing although this page thought it was given (it was withdrawn somewhere
+ * else, or the server could not keep it). What this page remembered is dropped and the question is asked again.
+ */
+export async function askAiAgain(archive: Archive): Promise<boolean> {
+  allowedForNow.delete(archive);
+  const settings = archive.store.getState().settings;
+  if (settings?.ai_sharing_allowed) archive.setSettings({ ...settings, ai_sharing_allowed: false });
+  if (!(await allowAi(archive, 'settings'))) return false;
+  // Only an answer the server kept lets the request through; "allowed for now" would be refused again.
+  return Boolean(archive.store.getState().settings?.ai_sharing_allowed);
+}
+
+/** Withdraws the permission. The next AI action asks again, and the server holds work already queued until it is given again. */
 export async function withdrawAi(archive: Archive): Promise<void> {
   allowedForNow.delete(archive);
   archive.setSettings(await archive.api.patchSettings({ ai_sharing_allowed: false }));

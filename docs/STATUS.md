@@ -25,7 +25,7 @@ in the linked docs, not here. Last updated: 2026-11-16.
   own-server sign-in, Google and Apple sign-in, password reset for hosted accounts, share sheet, native
   purchase sheet. iPhone only in version 1.
 - A permission step before saved content is sent to an AI service (kept per account, switch in Settings).
-  The interface enforces it; the server does not refuse AI routes without it.
+  The server enforces it: without it AI routes are refused and queued jobs wait, so nothing is sent.
 - Privacy policy and terms links in Settings and on the unlock screen. Privacy, terms, support and account
   deletion pages in `web/`, published because `web/site.json` names the contact address
   `hello@littlearchive.me` (not opened in a browser since; no mail to it has been seen arriving). The store listing pack in `docs/store/`.
@@ -56,7 +56,6 @@ in the linked docs, not here. Last updated: 2026-11-16.
 
 - Following a refund of a web payment automatically (the operator removes the unlock by hand); Arabic.
 - Browser sign-in for hosted accounts beyond the pay page (hosted mode serves the API only).
-- Server-side refusal of AI routes without the permission (the interface asks; the server does not check).
 
 ## Never run for real
 

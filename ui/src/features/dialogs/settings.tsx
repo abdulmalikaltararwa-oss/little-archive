@@ -186,7 +186,7 @@ function AiSharing() {
       </div>
       <p>
         {allowed
-          ? 'On: you allowed it. Turn it off and the next AI action asks again. Work that is already queued still runs, and what was already sent cannot be taken back.'
+          ? 'On: you allowed it. Turn it off and the next AI action asks again. Work that is already queued then waits and is not sent; what was already sent cannot be taken back.'
           : 'Off. The first time an action would send something, you are asked first.'}
       </p>
     </>

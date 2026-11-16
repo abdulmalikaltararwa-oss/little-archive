@@ -39,6 +39,7 @@ from .enrich.build import build_enrichment
 from .enrich.images import reencode_image, write_asset
 from .enrich.feature_routes import install_feature_routes
 from .enrich.routes import install_routes as install_enrichment_routes
+from .enrich.sharing import require as require_sharing
 from .enrich.search import annotate_matches
 from .entitlements import OwnerEntitlements
 from .guided_routes import install_guided_import_routes
@@ -938,11 +939,14 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             value = getattr(data, key)
             if value is not None:
                 store.set_meta(key, "true" if value else "false")
+        if data.ai_sharing_allowed:
+            store.enrichment.worker.resume()  # jobs that were waiting for this answer start now
         return current_settings(store)
 
     def ai_ready(store):
         if not store.enrichment.ai_ready():
             raise HTTPException(503, "AI suggestions are not enabled on this service." if hosted else "Configure an AI provider on your server to enable suggestions (Ollama, or Gemini as described in docs/understanding.md).")
+        require_sharing(store.enrichment, "suggest")  # 403 `ai_permission_required`, before anything is queued or charged
 
     @app.post("/api/ai/jobs")
     def queue_ai(data: AIJobs, auth=Depends(owner)):

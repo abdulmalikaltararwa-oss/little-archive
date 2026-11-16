@@ -69,8 +69,8 @@ were added. Keep the manifest and these answers the same.
   that shows what would be sent and to which service; the answer is kept with the account and can be changed in
   Settings (`ui/src/features/ai-permission/`). The service names on that screen come from what the server reports,
   so check on the production server that it names Google's Gemini service and Groq's transcription service, as the
-  privacy policy does. The interface enforces the step; the server does not refuse an AI request made without it
-  (`docs/STATUS.md`). It has not been run on a phone.
+  privacy policy does. The server enforces the answer too: without it an AI request is refused and nothing is sent
+  (`server/enrich/sharing.py`). It has not been run on a phone.
 - **Sign in with Apple and deletion.** Deleting an account ends its Apple sign-in at Apple only once the operator
   has set the Sign in with Apple key on the server; until then that step is off (`server/apple_signin.py`). With
   the key set, the server keeps one Apple token per account that used Continue with Apple, until the account is

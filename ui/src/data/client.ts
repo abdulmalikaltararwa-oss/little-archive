@@ -31,6 +31,9 @@ export function isLocked(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status === 402 && error.code === 'unlock_required';
 }
 
+/** The code of the server's refusal to send saved content to an AI service without the owner's permission. */
+export const AI_PERMISSION_REQUIRED = 'ai_permission_required';
+
 export const UNREACHABLE = 'Could not reach your archive. Check that the server is running and try again.';
 
 export interface ClientHooks {
@@ -38,6 +41,11 @@ export interface ClientHooks {
   isAuthenticated(): boolean;
   /** The server answered 401 to a signed-in request. `detail` is its sentence (it says so when a device's sign-in expired). */
   onUnauthorized(detail: string): void;
+  /**
+   * The server refused to send saved content to an AI service because the owner has not allowed it
+   * (`ai_permission_required`). Resolves true once they have, and the request is then made once more.
+   */
+  onAiPermissionRequired?(): Promise<boolean>;
 }
 
 export interface Client {
@@ -56,7 +64,18 @@ function detailMessage(payload: unknown, status: number): string {
 export function createClient(backend: Backend, hooks: ClientHooks): Client {
   let csrf = '';
 
-  async function request<T>(path: string, { method = 'GET', body, headers = {}, signal, raw = false }: RequestOptions = {}): Promise<T> {
+  async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    try {
+      return await send<T>(path, options);
+    } catch (error) {
+      // The interface asks before an AI action, but its copy of the answer can be out of date (withdrawn on
+      // another device). The server's refusal then becomes the same question, not an error, and one more try.
+      if (!(error instanceof ApiError) || error.code !== AI_PERMISSION_REQUIRED || !(await hooks.onAiPermissionRequired?.())) throw error;
+      return send<T>(path, options);
+    }
+  }
+
+  async function send<T>(path: string, { method = 'GET', body, headers = {}, signal, raw = false }: RequestOptions = {}): Promise<T> {
     const init: RequestInit = { method, headers: { Accept: 'application/json', ...headers }, signal };
     const sent = init.headers as Record<string, string>;
     if (body != null) {

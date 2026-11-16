@@ -280,11 +280,14 @@ def structured_call(service, *, system: str, user: str, schema: dict, max_tokens
 
     On a hosted service every call is first charged to the account (`service.call_guard`, set by the tenancy layer), which refuses it
     with a 402 or 429 when the account has no allowance left, and gives the charge back if the provider fails or answers unusably.
+    Before any of that the owner's AI sharing permission is checked (`sharing.require`): without it nothing is sent or charged.
     `feature` names what the call is for (recipes, places, ask) in that refusal. A self-hosted service has no guard and no charge.
     """
     provider = service.provider
     if provider is None or not hasattr(provider, "complete_json"):
         raise FeatureError(503, "No AI provider is configured on this server, so this cannot use one.", "ai_not_configured")
+    from .sharing import require
+    require(service, "text")  # before the charge below: a refusal for want of the owner's permission costs nothing
     guard = getattr(service, "call_guard", None)
     if guard is not None:
         guard.before(feature)

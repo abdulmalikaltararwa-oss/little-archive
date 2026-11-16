@@ -5,7 +5,7 @@ import { createStore } from 'zustand/vanilla';
 import type { Archive } from '@/data/archive';
 import type { Settings } from '@/data/types';
 import { PRIVACY_URL } from '@/lib/site';
-import { allowAi, sharingApplies, useAiPermission, withdrawAi } from './gate';
+import { allowAi, askAiAgain, sharingApplies, useAiPermission, withdrawAi } from './gate';
 import { AiPermissionHost } from './host';
 
 beforeAll(() => {
@@ -100,6 +100,30 @@ describe('the permission step before an AI action', () => {
     expect(patchSettings).toHaveBeenCalledWith({ ai_sharing_allowed: false });
     const answer = allowAi(archive, 'suggest');
     await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    await expect(answer).resolves.toBe(false);
+  });
+
+  it('asks again when the server refuses although this page thought the permission was given', async () => {
+    // Withdrawn on another device: this page's copy still says yes, so `allowAi` alone would not ask.
+    const { archive, patchSettings } = rig({ settings: { ...GEMINI, ai_sharing_allowed: true } });
+    const answer = askAiAgain(archive);
+    await screen.findByRole('dialog', { name: 'Allow sending saves to an AI service?' });
+    expect(archive.store.getState().settings.ai_sharing_allowed).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    await expect(answer).resolves.toBe(true);
+    expect(patchSettings).toHaveBeenCalledWith({ ai_sharing_allowed: true });
+
+    await withdrawAi(archive);
+    const declined = askAiAgain(archive);
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    await expect(declined).resolves.toBe(false);
+    expect(archive.store.getState().settings.ai_sharing_allowed).toBe(false);
+  });
+
+  it('does not count a yes the server could not keep, since the server would refuse the request again', async () => {
+    const { archive } = rig({ settings: GEMINI, patch: async () => { throw new Error('offline'); } });
+    const answer = askAiAgain(archive);
+    await userEvent.click(await screen.findByRole('button', { name: 'Allow' }));
     await expect(answer).resolves.toBe(false);
   });
 

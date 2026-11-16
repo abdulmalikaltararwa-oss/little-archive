@@ -6,6 +6,7 @@ import { useTheme } from './app/theme';
 import { toast } from './app/ui-state';
 import { createArchive } from './data/archive';
 import { createBackend } from './data/backend';
+import { askAiAgain } from './features/ai-permission/gate';
 import { morph } from './lib/transition';
 
 // One of three backends is chosen for this page (a browser on a self-hosted server, the phone app's bridge,
@@ -14,6 +15,7 @@ const backend = await createBackend();
 useTheme.getState().init(backend.remembers);
 
 const archive = createArchive({ backend, notify: (message, options) => toast(message, options), transition: morph });
+archive.setAiPermissionAsker(() => askAiAgain(archive));
 
 createRoot(document.getElementById('app')!).render(
   <StrictMode>

@@ -7,7 +7,8 @@ The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e
 ### Permission before anything is sent to an AI service
 
 - **One question, once.** Before the first action that would send saved content to a service outside the person's server (suggestions, a closer read, a recipe card, places, a question to the archive), the interface says what would be sent and to which service, as the server reports it, and offers "Allow" and "Not now". "Not now" cancels the action. A self-hosted server with only a local model is not asked.
-- **Kept with the library.** `ai_sharing_allowed` in `/api/settings` (per account on a hosted service); a switch in Settings withdraws it. `PATCH /api/settings` now writes only the fields it is given. The server does not refuse AI routes itself.
+- **Kept with the library.** `ai_sharing_allowed` in `/api/settings` (per account on a hosted service); a switch in Settings withdraws it. `PATCH /api/settings` now writes only the fields it is given.
+- **Enforced by the server.** Without the permission the server sends nothing to a hosted AI or transcription service: AI routes answer `403` `ai_permission_required` (the interface then asks the question), and queued jobs wait until it is given. Withdrawing it stops queued work from being sent. A self-hosted server with only a local model is unaffected.
 - **Privacy policy and terms.** Linked from Settings, the unlock screen and the permission dialog, built from one site address (`ui/src/lib/site.ts`).
 
 ### The public site's pages and the store pack

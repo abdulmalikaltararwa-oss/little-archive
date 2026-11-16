@@ -9,7 +9,9 @@ recovery behave exactly as before, and replaces how a claimed job is run:
   with automatic transcription on) is handled one at a time: the transcript is stored, the
   job is re-keyed to the item's new evidence, then the item is analysed;
 * the review flow is unchanged. A result is only written if the job is still active and
-  the item's evidence still matches; the owner accepts or dismisses it.
+  the item's evidence still matches; the owner accepts or dismisses it;
+* a job whose content would be sent off the server waits in the queue, untouched, while the
+  owner has not allowed that (``sharing``), and starts once they do.
 
 Tenancy seam: this class reads ``self.store`` and ``self.service`` only. A deployment that
 runs one library per user builds one worker per store through ``build_enrichment``.
@@ -23,6 +25,7 @@ from uuid import uuid4
 from ..jobs import ClassificationWorker
 from ..storage import json_text, now
 from .service import EnrichError
+from .sharing import SharingNotAllowed, allowed
 from .understanding import build_evidence
 from .urls import classify_url
 
@@ -70,6 +73,41 @@ class UnderstandingWorker(ClassificationWorker):
             self.service._upsert(c, item_id, deep_read_state="queued", deep_read_error="")
         self.wake.set()
 
+    # -- waiting for the owner's permission ---------------------------------------
+    def _held(self) -> str:
+        """SQL for the queued jobs that may not start yet, because the owner has not allowed AI sharing.
+
+        Every job ends in a model call, so all of them wait when the text would leave the server. When only
+        the media file would (a local model beside a transcription service), only closer reads wait.
+        """
+        if not allowed(self.service, "text"):
+            return "1"
+        return "input_hash LIKE 'deep:%'" if not allowed(self.service, "media") else "0"
+
+    def waiting(self) -> int:
+        """How many queued jobs are waiting for the permission."""
+        held = self._held()
+        with self.store.transaction() as c:
+            return c.execute(f"SELECT count(*) FROM ai_jobs WHERE status='queued' AND {held}").fetchone()[0]
+
+    def startable(self) -> bool:
+        """Whether any queued job could be claimed now."""
+        held = self._held()
+        with self.store.transaction() as c:
+            return c.execute(f"SELECT 1 FROM ai_jobs WHERE status='queued' AND NOT ({held}) LIMIT 1").fetchone() is not None
+
+    def resume(self) -> None:
+        """The owner has just allowed AI sharing: look at the queue again now."""
+        self.wake.set()
+
+    def _hold(self, jobs) -> None:
+        """Put claimed jobs back in the queue as they were. Not a failure: nothing was sent, and they start once sharing is allowed."""
+        with self.store.transaction() as c:
+            for job in jobs:
+                back = c.execute("UPDATE ai_jobs SET status='queued',updated_at=? WHERE id=? AND status='running'", (now(), job.id)).rowcount
+                if back and job.special:
+                    self.service._upsert(c, job.item_id, deep_read_state="queued" if job.deep else "", deep_read_error="")
+
     # -- the loop -----------------------------------------------------------------
     def run(self):
         while not self.stopping.is_set():
@@ -98,8 +136,9 @@ class UnderstandingWorker(ClassificationWorker):
     def _claim(self) -> list[_Job]:
         limit = self.service.batch_limit()
         claimed: list[_Job] = []
+        held = self._held()  # jobs waiting for the owner's permission are passed over, so they cannot block the ones behind them
         with self.store.transaction() as c:
-            rows = c.execute("SELECT * FROM ai_jobs WHERE status='queued' ORDER BY created_at,id LIMIT ?", (max(limit, 1),)).fetchall()
+            rows = c.execute(f"SELECT * FROM ai_jobs WHERE status='queued' AND NOT ({held}) ORDER BY created_at,id LIMIT ?", (max(limit, 1),)).fetchall()
             for row in rows:
                 item = self.store.get_item(row["item_id"], c)
                 job = _Job(row, item)
@@ -114,6 +153,13 @@ class UnderstandingWorker(ClassificationWorker):
         return claimed
 
     def _process(self, jobs: list[_Job]) -> None:
+        try:
+            self._run(jobs)
+        except SharingNotAllowed:
+            # The permission was withdrawn after these were claimed. Whatever has not finished goes back to wait.
+            self._hold(jobs)
+
+    def _run(self, jobs: list[_Job]) -> None:
         plain = []
         for job in jobs:
             if job.item is None:
@@ -131,6 +177,8 @@ class UnderstandingWorker(ClassificationWorker):
             self.service._upsert(c, job.item_id, deep_read_state="running", deep_read_error="")
         try:
             item = self.service.transcribe_item(job.item, deep=job.deep)
+        except SharingNotAllowed:
+            raise  # not a failed read: `_process` puts the job back to wait
         except EnrichError as exc:
             with self.store.transaction() as c:
                 self.service._upsert(c, job.item_id, deep_read_state="failed", deep_read_error=exc.message[:500])

@@ -68,7 +68,7 @@ class HostedCase(unittest.TestCase):
         self.data = self.root / "data"
         self.enterContext(no_worker_threads())
         self.key = SigningKey()
-        self.app, self.keyset = hosted_app(self.root, self.key, **self.settings)
+        self.app, self.keyset = hosted_app(self.root, self.key, accounts_allow_ai=True, **self.settings)
         self.client = TestClient(self.app)
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
@@ -108,7 +108,7 @@ class TenantIsolationTests(HostedCase):
         self.ok(auth, "POST", f"/api/items/{item['id']}/page", {"extraction": {"creator": marker + " creator", "site_name": marker + " site"}})
         self.ok(auth, "POST", f"/api/items/{item['id']}/transcript", {"text": marker + " spoken words"})
         run = self.ok(auth, "POST", "/api/imports/file", params={"filename": name + ".csv"}, content=f"url,title\nhttps://example.com/{name}/imported,{marker} imported\n".encode()).json()
-        self.ok(auth, "PATCH", "/api/settings", {"remote_previews": name == "alice", "ai_sharing_allowed": name == "alice"})
+        self.ok(auth, "PATCH", "/api/settings", {"remote_previews": name == "alice"})
         self.ok(auth, "POST", "/api/ai/jobs", {"ids": [item["id"]]})
         job = self.ok(auth, "GET", "/api/ai/jobs").json()["jobs"][0]
         return {"marker": marker, "item": item["id"], "shelf": shelf["id"], "thumbnail": thumbnail, "run": run["run_id"], "job": job["id"]}
@@ -192,7 +192,8 @@ class TenantIsolationTests(HostedCase):
         self.assertEqual([job["id"] for job in self.ok(b, "GET", "/api/ai/jobs").json()["jobs"]], [self.his["job"]])
         self.assertFalse(self.ok(b, "GET", "/api/settings").json()["remote_previews"])
         self.assertTrue(self.ok(self.a, "GET", "/api/settings").json()["remote_previews"])
-        # Permission to send saves to an AI service is one account's answer, never another's.
+        # Permission to send saves to an AI service is one account's answer, never another's: bob withdraws his.
+        self.ok(b, "PATCH", "/api/settings", {"ai_sharing_allowed": False})
         self.assertFalse(self.ok(b, "GET", "/api/settings").json()["ai_sharing_allowed"])
         self.assertTrue(self.ok(self.a, "GET", "/api/settings").json()["ai_sharing_allowed"])
         self.assertEqual(self.ok(b, "GET", "/api/account").json()["user_id"], self.bob)

@@ -76,11 +76,24 @@ def hosted_config(root, **settings):
                   **{"supabase_url": SUPABASE_URL, "supabase_jwt_issuer": ISSUER, **UNLIMITED, **settings})
 
 
-def hosted_app(root, *keys, purchase_clients=None, apple_signin=None, **settings):
-    """A real hosted application whose only fake part is where signing keys come from (and, if given, the stores' clients and the Sign in with Apple client)."""
+def hosted_app(root, *keys, purchase_clients=None, apple_signin=None, accounts_allow_ai=False, **settings):
+    """A real hosted application whose only fake part is where signing keys come from (and, if given, the stores' clients and the Sign in with Apple client).
+
+    `accounts_allow_ai` starts every new account with the AI sharing permission given, as an account that has answered the app's
+    question has it. The tests that queue suggestions or call a model pass it; the server's own default (not given) and the
+    refusals that follow from it are tested in test_ai_sharing.py.
+    """
     config = hosted_config(root, **settings)
     keyset = FakeKeySet(*keys)
     app = create_app(config, identity=SupabaseVerifier.from_config(config, fetch=keyset), purchase_clients=purchase_clients, apple_signin=apple_signin)
+    if accounts_allow_ai:
+        prepare = app.state.libraries.prepare
+
+        def prepared(store):
+            prepare(store)
+            if store.meta("ai_sharing_allowed") is None:
+                store.set_meta("ai_sharing_allowed", "true")
+        app.state.libraries.prepare = prepared
     return app, keyset
 
 

@@ -18,6 +18,7 @@ from .analysis import Analyzer
 from .extract import extract_page, sanitize_client_extraction
 from .images import reencode_image, write_asset
 from .netfetch import FetchError
+from .sharing import allowed, given, leaves_server, require
 from .transcribe import TranscriptResult, clean_transcript, transcript_needed
 from .understanding import PLACEHOLDER_TITLE, ProviderError
 from .urls import classify_url, oembed_endpoint
@@ -93,7 +94,7 @@ class EnrichmentService:
         return self.provider is not None
 
     def analyzer(self) -> Analyzer:
-        return Analyzer(self.provider, self.settings, cache=self.cache, meter=self.meter)
+        return Analyzer(self.provider, self.settings, cache=self.cache, meter=self.meter, before_send=lambda: require(self, "text"))
 
     def batch_limit(self) -> int:
         return self.provider.max_batch if self.provider is not None else 1
@@ -121,6 +122,9 @@ class EnrichmentService:
                               "client_transcripts": True, "max_audio_minutes": self.settings.transcribe_max_seconds // 60},
             "deep_read": {"available": bool(self.transcriber and self.fetch_enabled)},
             "shared_cache": {"enabled": self.cache is not None},
+            # `waiting` counts queued jobs that are held until the owner allows sending, so a client can say so instead of "queued".
+            "sharing": {"needed": leaves_server(self, "suggest") or leaves_server(self, "media"), "allowed": given(self),
+                        "waiting": self.worker.waiting() if self.worker is not None else 0},
         }
 
     # -- the item view ---------------------------------------------------------
@@ -284,6 +288,7 @@ class EnrichmentService:
         deep = (item.get("enrichment") or {}).get("deep_read") or {"available": False, "reason": "transcription_not_configured"}
         if not deep["available"]:
             raise EnrichError(409, DEEP_READ_REASONS.get(deep["reason"], "A closer read is not available for this save."), deep["reason"])
+        require(self, "media")  # before it is queued, which on a hosted service is also when it is charged
         self.worker.enqueue_deep(item_id)
         return {"queued": 1}
 
@@ -294,6 +299,8 @@ class EnrichmentService:
         enrichment = item.get("enrichment") or {}
         if (enrichment.get("deep_read") or {}).get("state") == "failed":
             return False  # tried already; the owner can ask again explicitly
+        if not allowed(self, "media"):
+            return False  # no permission to send the media file: the suggestion is made from the text that exists
         page, _ = self.stored_page(item["id"])
         return transcript_needed(item, page)[0]
 
@@ -307,6 +314,7 @@ class EnrichmentService:
         if self.cache is not None and (hit := self.cache.get(post.canonical, "transcript")) and hit.get("text"):
             self._meter(kind="cache_hit", tier="transcribe", item_id=item["id"], provider=hit.get("provider", ""), model=hit.get("model", ""), cache_hit=True)
             return TranscriptResult(hit["text"], hit.get("language", ""), hit.get("seconds")), "cache"
+        require(self, "media")  # checked before the media is even fetched, since fetching it is only for sending it
         page, source = self.stored_page(item["id"])
         trusted = source == "server_fetch"
         refreshed = False

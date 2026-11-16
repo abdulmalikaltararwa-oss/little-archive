@@ -116,6 +116,8 @@ class Base(unittest.TestCase):
         self.store = self.app.state.store
         self.service = self.app.state.enrichment
         self.worker = self.app.state.worker
+        # The owner has allowed AI sharing: these scenarios use a hosted provider and a transcriber. `SharingPermissionTests` takes it away.
+        self.store.set_meta("ai_sharing_allowed", "true")
         self.web = FakeWeb()
         self.provider = FakeProvider()
         self.transcriber = FakeTranscriber()
@@ -644,6 +646,137 @@ class AnalysisThroughTheApiTests(Base):
         self.assertFalse(self.client.get("/api/settings").json()["ai_enabled"])
 
 
+class SharingPermissionTests(Base):
+    """The owner's AI sharing permission, on the queue and in the worker (server/enrich/sharing.py). Routes that call a model
+    inside the request, and a hosted service's shared worker, are in test_ai_sharing.py."""
+
+    def setUp(self):
+        super().setUp()
+        self.store.set_meta("ai_sharing_allowed", "false")  # the answer of an owner who was never asked
+
+    def allow(self, yes=True):
+        self.assertEqual(self.client.patch("/api/settings", json={"ai_sharing_allowed": yes}, headers=self.headers).json()["ai_sharing_allowed"], yes)
+
+    def refused(self, response):
+        self.assertEqual((response.status_code, response.json()["code"]), (403, "ai_permission_required"), response.text)
+
+    def sharing(self):
+        return self.client.get("/api/enrichment/status").json()["sharing"]
+
+    def test_a_hosted_model_is_sent_nothing_until_the_owner_allows_it(self):
+        self.enable(fetch=False, transcriber=False)
+        item = self.item(caption="Sourdough starter, day 5")
+        for body in ({"ids": [item["id"]]}, {"filters": {}}):
+            self.refused(self.post("/api/ai/jobs", body))
+        self.assertEqual(sum(self.jobs()["counts"].values()), 0, "a refusal queues nothing")
+        self.assertEqual(self.sharing(), {"needed": True, "allowed": False, "waiting": 0})
+        self.drain()
+        self.assertEqual(self.provider.calls, [])
+        self.allow()
+        self.assertEqual(self.post("/api/ai/jobs", {"ids": [item["id"]]}).json(), {"queued": 1, "matched": 1, "unchanged": 0})
+        self.drain()
+        self.assertEqual(len(self.provider.calls), 1)
+        self.assertEqual(self.get(item["id"])["ai"]["provider"], "gemini")
+
+    def test_a_local_model_works_without_the_permission(self):
+        self.provider = FakeProvider(hosted=False, max_batch=1)
+        self.enable(fetch=False, transcriber=False)
+        item = self.item(caption="Sourdough starter, day 5")
+        self.assertEqual(self.sharing(), {"needed": False, "allowed": False, "waiting": 0})
+        self.assertEqual(self.post("/api/ai/jobs", {"ids": [item["id"]]}).json()["queued"], 1)
+        self.drain()
+        self.assertEqual(len(self.provider.calls), 1)
+        self.assertEqual(self.jobs()["counts"]["completed"], 1)
+        self.assertFalse(self.client.get("/api/settings").json()["ai_sharing_allowed"])
+
+    def test_withdrawing_the_permission_holds_queued_jobs_and_giving_it_again_starts_them(self):
+        self.enable(fetch=False, transcriber=False)
+        item = self.item(caption="Sourdough starter, day 5")
+        self.allow()
+        self.post("/api/ai/jobs", {"ids": [item["id"]]})
+        self.allow(False)
+        self.assertEqual(self.worker._claim(), [])
+        self.assertFalse(self.worker.step(), "nothing to do, so the loop waits instead of trying again at once")
+        self.assertEqual(self.provider.calls, [])
+        counts = self.jobs()["counts"]
+        self.assertEqual((counts["queued"], counts["running"], counts["failed"]), (1, 0, 0), "held, not failed")
+        self.assertEqual(self.sharing(), {"needed": True, "allowed": False, "waiting": 1})
+        self.refused(self.post(f"/api/ai/jobs/{self.jobs()['jobs'][0]['id']}/retry"))
+        self.worker.wake.clear()
+        self.allow()
+        self.assertTrue(self.worker.wake.is_set(), "the worker is told at once")
+        self.assertEqual(self.sharing()["waiting"], 0)
+        self.drain()
+        self.assertEqual(len(self.provider.calls), 1)
+        self.assertEqual(self.jobs()["counts"]["completed"], 1)
+        self.assertTrue(self.get(item["id"])["ai"])
+
+    def test_a_job_already_claimed_when_the_permission_is_withdrawn_goes_back_to_wait(self):
+        self.enable(fetch=False, transcriber=False)
+        item = self.item(caption="Sourdough starter, day 5")
+        self.allow()
+        self.post("/api/ai/jobs", {"ids": [item["id"]]})
+        claimed = self.worker._claim()
+        self.assertEqual(len(claimed), 1)
+        self.allow(False)
+        self.worker._process(claimed)
+        self.assertEqual(self.provider.calls, [], "the check is made again at the moment of sending")
+        counts = self.jobs()["counts"]
+        self.assertEqual((counts["queued"], counts["running"], counts["failed"]), (1, 0, 0))
+        self.assertIsNone(self.get(item["id"])["ai"])
+
+    def test_a_closer_read_is_refused_and_a_queued_one_sends_no_media_once_the_permission_is_withdrawn(self):
+        self.enable()
+        item = self.item(caption="#fyp")
+        self.refused(self.post(f"/api/items/{item['id']}/deep-read"))
+        self.assertEqual(sum(self.jobs()["counts"].values()), 0)
+        self.allow()
+        self.assertEqual(self.post(f"/api/items/{item['id']}/deep-read").json(), {"queued": 1})
+        self.allow(False)
+        self.drain()
+        self.assertEqual((self.transcriber.calls, self.provider.calls), ([], []))
+        self.assertEqual(self.web.count(path="/o1/v/t16/synthetic/example-clip.mp4"), 0, "the media is not even fetched")
+        self.assertEqual(self.get(item["id"])["enrichment"]["deep_read"]["state"], "queued")
+        self.allow()
+        self.drain()
+        self.assertEqual(len(self.transcriber.calls), 1)
+        done = self.get(item["id"])
+        self.assertEqual((done["enrichment"]["transcript"]["source"], done["ai"]["evidence_level"]), ("groq", "transcript-based"))
+
+    def test_a_closer_read_claimed_before_the_permission_was_withdrawn_is_put_back_as_it_was(self):
+        self.enable()
+        item = self.item(caption="#fyp")
+        self.allow()
+        self.post(f"/api/items/{item['id']}/deep-read")
+        claimed = self.worker._claim()
+        self.allow(False)
+        self.worker._process(claimed)
+        self.assertEqual((self.transcriber.calls, self.provider.calls), ([], []))
+        self.assertEqual(self.jobs()["counts"]["queued"], 1)
+        deep = self.get(item["id"])["enrichment"]["deep_read"]
+        self.assertEqual((deep["state"], deep["error"]), ("queued", ""))
+
+    def test_with_a_local_model_only_what_needs_the_transcription_service_waits(self):
+        self.provider = FakeProvider(hosted=False, max_batch=1)
+        self.enable()
+        self.assertEqual(self.sharing(), {"needed": True, "allowed": False, "waiting": 0})
+        thin = self.item(caption="#fyp #baking")
+        rich = self.item("https://www.instagram.com/reel/SYNTH0003ef/", caption="A long enough description of what happens in this clip for a title")
+        # The interface asks before a suggestion here too, because a thin caption would have the media sent first.
+        self.refused(self.post("/api/ai/jobs", {"ids": [rich["id"]]}))
+        self.allow()
+        self.post(f"/api/items/{thin['id']}/deep-read")
+        self.post("/api/ai/jobs", {"ids": [thin["id"], rich["id"]]})
+        self.allow(False)
+        self.drain()
+        self.assertEqual(self.transcriber.calls, [], "no media file left the server")
+        self.assertEqual(len(self.provider.calls), 2, "the local model still read both saves, from the text that exists")
+        counts = self.jobs()["counts"]
+        self.assertEqual((counts["completed"], counts["queued"], counts["failed"]), (2, 1, 0), "the closer read waits behind nothing and blocks nothing")
+        self.assertEqual(self.sharing()["waiting"], 1)
+        self.assertEqual(self.get(thin["id"])["ai"]["evidence_level"], "caption-based")
+
+
 class UpgradeTests(Base):
     def test_a_suggestion_from_before_this_change_is_shown_but_must_be_regenerated(self):
         self.enable(fetch=False, transcriber=False)
@@ -757,6 +890,7 @@ class RealWorkerThreadTests(unittest.TestCase):
         self.client.__enter__()
         login = self.client.post("/api/auth/login", json={"password": self.password})
         self.headers = {"Origin": "http://testserver", "X-CSRF-Token": login.json()["csrf_token"]}
+        self.client.patch("/api/settings", json={"ai_sharing_allowed": True}, headers=self.headers)  # these tests use a hosted provider
 
     def tearDown(self):
         self.client.__exit__(None, None, None)
