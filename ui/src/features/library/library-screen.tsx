@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { countLabel, errorMessage } from '@web/utils.js';
 import { cn } from 'cn';
-import { Archive, ArrowRight, Check, ChevronsUpDown, CircleCheck, FolderPlus, Heart, HeartOff, Inbox, LayoutGrid, Plus, Search, ShieldCheck, Shuffle, Sparkles, Tag as TagIcon, Upload, X } from 'lucide-react';
+import { Archive, ArrowRight, Check, ChevronsUpDown, CircleCheck, FolderPlus, Heart, HeartOff, Inbox, LayoutGrid, Plus, Search, ShieldCheck, Shuffle, Sparkles, Tag as TagIcon, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { openDialog, toast } from '@/app/ui-state';
-import { AsciiSpinner } from '@/components/fx/ascii';
+import { AsciiSpinner, Garden } from '@/components/fx/ascii';
 import { PlatformIcon } from '@/components/icons';
 import { Pick } from '@/components/pick';
 import { Button } from '@/components/ui/button';
@@ -17,8 +17,10 @@ import { viewTitle, withPlatform } from '@/data/location';
 import type { BulkAction, Platform, Sort } from '@/data/types';
 import { VIEW_TITLE_ID } from '@/lib/focus';
 import { StateCard } from '../feature-kit';
+import { EmptyLibrary } from './empty-library';
 import { Gallery } from './gallery';
 import { Hero } from './hero';
+import { WallEnd } from './wall-end';
 import { keptLine } from './words';
 
 const SORTS: { value: Sort; label: string }[] = [
@@ -221,7 +223,6 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
   const listError = useArchiveState(state => state.listError);
   const loadingMore = useArchiveState(state => state.loadingMore);
   const selecting = useArchiveState(state => state.selecting || state.selected.size > 0);
-  const [demoBusy, runDemo] = useBusy();
   const [retrying, runRetry] = useBusy();
   const [moreBusy, runMore] = useBusy();
 
@@ -231,11 +232,6 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
   const narrowed = Boolean(loc.q || loc.tag || loc.platform);
   const libraryEmpty = !stats.total && !stats.archived;
   const countText = list === 'loading' ? 'Finding your saves…' : list === 'error' ? 'Unable to load' : filters.sort === 'random' && count < total ? `${count} of ${countLabel(total, 'save')}` : countLabel(total, 'save');
-  const addDemo = () => runDemo(async () => {
-    const result = await archive.api.addDemo();
-    await archive.refreshLibrary();
-    toast(result.created ? `${result.created} synthetic demo saves added. Enjoy exploring.` : 'Your demo saves are already here.');
-  });
 
   return (
     <>
@@ -273,19 +269,7 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
         </StateCard>
       ) : list === 'ready' && !count ? (
         libraryEmpty ? (
-          <StateCard
-            art="pot"
-            title="Every collection starts somewhere."
-            actions={
-              <>
-                <Button variant="primary" onClick={() => openDialog({ kind: 'save-link' })}><Plus />Save a link</Button>
-                <Button onClick={() => openDialog({ kind: 'import' })}><Upload />Import your saves</Button>
-                <Button variant="ghost" aria-busy={demoBusy || undefined} onClick={() => void addDemo()}><Sparkles />Try demo saves</Button>
-              </>
-            }
-          >
-            Save your first link, bring in an export, or explore with a small collection of clearly labeled demo saves.
-          </StateCard>
+          <EmptyLibrary />
         ) : (
           <StateCard art="search" title="Nothing here just yet." actions={<Button variant="primary" onClick={() => archive.goView('all')}><X />Clear filters</Button>}>
             Try a different search or filter. Your next rediscovery might be one collection over.
@@ -294,6 +278,8 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
       ) : (
         <Gallery />
       )}
+      {/* Under an empty state the garden is sprouts and grass only: nothing has been saved here, so nothing has bloomed. */}
+      {list === 'ready' && !count ? <Garden bed="sprouts" className="mx-auto mt-10 max-w-xl" /> : null}
 
       <div className="flex min-h-10 justify-center pt-8">
         {list === 'ready' && count > 0 && filters.sort === 'random' ? (
@@ -305,6 +291,7 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
           </Button>
         ) : null}
       </div>
+      <WallEnd />
 
       <p className="mt-8 flex items-center justify-center gap-2 text-center text-xs text-ink-soft">
         <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
