@@ -77,7 +77,7 @@ async function main() {
 
   // Loops until there is a signed-in record that the server accepts.
   let record = await store.load();
-  let notice = takeNotice() || await interruptedSignIn({ platform, App, storage: sessionStorage });
+  let notice = takeNotice() || await interruptedSignIn({ platform, plugin: SocialSignIn, App, storage: sessionStorage });
   let session;
   while (!session) {
     if (!record) { record = await firstLaunch(notice); notice = ''; continue; }

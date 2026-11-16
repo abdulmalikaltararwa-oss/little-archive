@@ -33,9 +33,13 @@ import java.util.Locale;
  *     cannot sign anyone in: the page trades the code together with its own verifier, and the project refuses a code that was
  *     not made for that attempt's challenge (an error in the address is shown as a failed sign-in). So the most another app can
  *     do is make one attempt fail, and the person tries again.
- *   - With no call waiting, the intent is dropped here. If it started the app in a new process (Android ended the old one while
- *     the tab was open, or another app sent it), the page sees it as the launch address and says "Sign-in was interrupted. Try
- *     again." (interruptedSignIn in social.js); the code in it is never used, since the verifier went with the old process.
+ *   - With no call waiting, the address is dropped here and never handed to the page. If that happens before the page has asked
+ *     interrupted() (the app was started, or started again, by the callback: Android ended the old process while the tab was
+ *     open, or another app sent the intent), the fact is remembered, and the page says "Sign-in was interrupted. Try again."
+ *     (interruptedSignIn in social.js). The code is not used: the verifier went with the old process. Capacitor hands the
+ *     intent an activity was created with to onNewIntent as well, so both ways the callback can reach a fresh process end here.
+ *
+ *   interrupted()     { interrupted: true } once, if a callback was dropped before the page first asked; false after that.
  */
 @CapacitorPlugin(name = "SocialSignIn")
 public class SocialSignInPlugin extends Plugin {
@@ -48,6 +52,10 @@ public class SocialSignInPlugin extends Plugin {
     private PluginCall waiting;
     /** Set once the tab has been started, so that a resume before that is not taken for the tab closing. Guarded by `this`. */
     private boolean opened;
+    /** A callback arrived with nothing waiting, before the page asked interrupted(). Guarded by `this`. */
+    private boolean droppedEarly;
+    /** The page has asked interrupted() in this process: a callback dropped from now on is not remembered. Guarded by `this`. */
+    private boolean asked;
 
     @PluginMethod
     public void browser(PluginCall call) {
@@ -90,6 +98,7 @@ public class SocialSignInPlugin extends Plugin {
             call = waiting;
             waiting = null;
             opened = false;
+            if (call == null && !asked) droppedEarly = true;
         }
         // Nothing is waiting: dropped (see the class comment).
         if (call == null) return;
@@ -98,6 +107,19 @@ public class SocialSignInPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("status", "returned");
         result.put("url", data.toString());
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void interrupted(PluginCall call) {
+        boolean was;
+        synchronized (this) {
+            was = droppedEarly;
+            droppedEarly = false;
+            asked = true;
+        }
+        JSObject result = new JSObject();
+        result.put("interrupted", was);
         call.resolve(result);
     }
 

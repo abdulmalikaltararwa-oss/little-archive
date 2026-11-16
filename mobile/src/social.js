@@ -58,28 +58,37 @@ export const INTERRUPTED = 'Sign-in was interrupted. Try again.';
 const LAUNCH_CHECKED = 'la-launch-checked';
 
 /**
- * Android may end the app's process while the browser for "Continue with Google" is in front. The redirect then starts the app
- * afresh with littlearchive://auth-callback as its launch address: the verifier is gone with the old process, so the code is of
- * no use, and without a word the person would be looking at the first screen wondering what happened. This returns the sentence
- * to show them, or ''. It reads the address the app was launched with and nothing from it: the code is never used.
+ * Android may end the app's process while the browser for "Continue with Google" is in front. The redirect then reaches a fresh
+ * process: the verifier is gone with the old one, so the code is of no use, and without a word the person would be looking at
+ * the first screen wondering what happened. This returns the sentence to show them, or ''. The code is never read or used.
  *
- * Android only (on iOS the callback never arrives as a launch address). Asked once per process: the launch address stays the
- * same when the page reloads after a sign-out, so `storage` (sessionStorage, which a new process starts without) remembers
- * that it was looked at. Another app that starts this one with the same address gets the same harmless sentence.
+ * Two ways to know, because Android can deliver that callback two ways. The plugin remembers a callback it dropped before the
+ * page first asked (`plugin.interrupted()`, which covers both: Capacitor also hands it the intent the activity was created
+ * with). And the address the app was launched with (`App.getLaunchUrl()`), for a native side that does not have that method.
+ * The launch address stays the same when the page reloads after a sign-out, so `storage` (sessionStorage, which a new process
+ * starts without) remembers that it was looked at; the plugin answers true once.
+ *
+ * Android only (on iOS the callback never arrives outside the authentication session). Another app that starts this one with
+ * the same address gets the same harmless sentence.
  *
  * @param {object} options
  * @param {string} options.platform
+ * @param {{interrupted(): Promise<{interrupted?: boolean}>}} options.plugin  SocialSignIn
  * @param {{getLaunchUrl(): Promise<{url?: string}|undefined>}} options.App  @capacitor/app
  * @param {{getItem(key: string): string|null, setItem(key: string, value: string): void}} options.storage
  */
-export async function interruptedSignIn({ platform, App, storage }) {
+export async function interruptedSignIn({ platform, plugin, App, storage }) {
   if (platform !== 'android') return '';
+  // Each question is a courtesy: one that fails is never a reason not to start.
+  let dropped = false;
+  try { dropped = (await plugin.interrupted())?.interrupted === true; } catch { /* an older native side */ }
+  let launched = false;
   try {
-    if (storage.getItem(LAUNCH_CHECKED)) return '';
+    const first = !storage.getItem(LAUNCH_CHECKED);
     storage.setItem(LAUNCH_CHECKED, '1');
-    const launch = await App.getLaunchUrl();
-    return /^littlearchive:\/\/auth-callback(?:[/?#]|$)/i.test(String(launch?.url || '')) ? INTERRUPTED : '';
-  } catch { return ''; } // a courtesy: never a reason not to start
+    if (first && !dropped) launched = /^littlearchive:\/\/auth-callback(?:[/?#]|$)/i.test(String((await App.getLaunchUrl())?.url || ''));
+  } catch { /* nothing to say */ }
+  return dropped || launched ? INTERRUPTED : '';
 }
 
 /** Plain words for a failure of the native side. Its own sentences are fit to show; anything else is not. */

@@ -359,26 +359,42 @@ test('the screen is told when the sheet or the browser is done and the session i
   assert.deepEqual(stages, []);
 });
 
-test('Android, the app started by the callback address with no sign-in waiting: one plain notice, once per process, and the code is never used', async () => {
+test('Android, a callback that reached a fresh process with no sign-in waiting: one plain notice, once, and the code is never used', async () => {
   const memory = () => { const map = new Map(); return { map, getItem: key => (map.has(key) ? map.get(key) : null), setItem: (key, value) => { map.set(key, String(value)); } }; };
   const launchedWith = url => ({ asked: 0, async getLaunchUrl() { this.asked += 1; return url === undefined ? undefined : { url }; } });
+  // The native side answers true once (SocialSignInPlugin.java), or has no such method at all (an older build).
+  const native = (...answers) => ({ asked: 0, async interrupted() { this.asked += 1; return { interrupted: answers.shift() === true }; } });
+  const old = { interrupted: async () => { throw new Error('not implemented'); } };
+  assert.equal(INTERRUPTED, 'Sign-in was interrupted. Try again.');
+
+  // Known from the plugin: Android recreated the app and handed it the callback, so the launch address says nothing.
+  const fromPlugin = { plugin: native(true), App: launchedWith(undefined), storage: memory() };
+  assert.equal(await interruptedSignIn({ platform: 'android', ...fromPlugin }), INTERRUPTED);
+  assert.equal(await interruptedSignIn({ platform: 'android', ...fromPlugin }), '', 'said once');
+
+  // Known from the launch address, with a native side that cannot say.
   const storage = memory();
   const App = launchedWith('littlearchive://auth-callback?code=a-code-from-the-old-process');
-  assert.equal(INTERRUPTED, 'Sign-in was interrupted. Try again.');
-  assert.equal(await interruptedSignIn({ platform: 'android', App, storage }), INTERRUPTED);
+  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage }), INTERRUPTED);
   // The page reloads after a sign-out and the launch address is still the same: it is not said again.
-  assert.equal(await interruptedSignIn({ platform: 'android', App, storage }), '');
+  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage }), '');
   assert.equal(App.asked, 1);
   assert.deepEqual([...storage.map.values()], ['1'], 'nothing of the address is kept, only that it was looked at');
+  // Both know: still one notice, and the reload after it says nothing.
+  const both = { plugin: native(true), App: launchedWith('littlearchive://auth-callback?code=x'), storage: memory() };
+  assert.equal(await interruptedSignIn({ platform: 'android', ...both }), INTERRUPTED);
+  assert.equal(await interruptedSignIn({ platform: 'android', ...both }), '');
+
   // An error callback, or a bare one, is the same interruption.
-  for (const url of ['littlearchive://auth-callback?error=access_denied', 'littlearchive://auth-callback', 'LittleArchive://Auth-Callback/#x']) assert.equal(await interruptedSignIn({ platform: 'android', App: launchedWith(url), storage: memory() }), INTERRUPTED, url);
+  for (const url of ['littlearchive://auth-callback?error=access_denied', 'littlearchive://auth-callback', 'LittleArchive://Auth-Callback/#x']) assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(), App: launchedWith(url), storage: memory() }), INTERRUPTED, url);
   // An ordinary start, a share, another host, and anything unreadable say nothing.
-  for (const url of [undefined, '', 'littlearchive://share', 'littlearchive://auth-callback.example.com?code=x', 'littlearchive://auth-callbackx', 'https://auth-callback/?code=x', 42]) assert.equal(await interruptedSignIn({ platform: 'android', App: launchedWith(url), storage: memory() }), '', String(url));
-  // iOS never gets the callback as a launch address, so it is not even asked.
-  const ios = launchedWith('littlearchive://auth-callback?code=x');
-  assert.equal(await interruptedSignIn({ platform: 'ios', App: ios, storage: memory() }), '');
-  assert.equal(ios.asked, 0);
+  for (const url of [undefined, '', 'littlearchive://share', 'littlearchive://auth-callback.example.com?code=x', 'littlearchive://auth-callbackx', 'https://auth-callback/?code=x', 42]) assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(), App: launchedWith(url), storage: memory() }), '', String(url));
+  // iOS never gets the callback outside its authentication session, so nothing is even asked.
+  const ios = { plugin: native(true), App: launchedWith('littlearchive://auth-callback?code=x'), storage: memory() };
+  assert.equal(await interruptedSignIn({ platform: 'ios', ...ios }), '');
+  assert.equal(ios.App.asked + ios.plugin.asked, 0);
   // A plugin or a storage that fails is not a reason to stop the app from starting.
-  assert.equal(await interruptedSignIn({ platform: 'android', App: { getLaunchUrl: async () => { throw new Error('no plugin'); } }, storage: memory() }), '');
-  assert.equal(await interruptedSignIn({ platform: 'android', App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), '');
+  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App: { getLaunchUrl: async () => { throw new Error('no plugin'); } }, storage: memory() }), '');
+  assert.equal(await interruptedSignIn({ platform: 'android', plugin: old, App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), '');
+  assert.equal(await interruptedSignIn({ platform: 'android', plugin: native(true), App, storage: { getItem() { throw new Error('blocked'); }, setItem() {} } }), INTERRUPTED);
 });
