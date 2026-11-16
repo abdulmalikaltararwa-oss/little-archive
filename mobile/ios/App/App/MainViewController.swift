@@ -53,7 +53,7 @@ class RootViewController: UIViewController {
         let keyboard = view.convert(end, from: window.screen.coordinateSpace)
         let docked = keyboard.maxY >= view.bounds.maxY - 1 && keyboard.minX <= 1 && keyboard.maxX >= view.bounds.maxX - 1
         let covered = docked ? max(0, view.bounds.maxY - keyboard.minY) : 0
-        if covered > 0 { matchPaper() }
+        tellPage(keyboardUp: covered > 0)
         guard bottom.constant != -covered else { return }
         bottom.constant = -covered
         let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0
@@ -61,10 +61,12 @@ class RootViewController: UIViewController {
         UIView.animate(withDuration: duration, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) { self.view.layoutIfNeeded() }
     }
 
-    /// The page can be set to light or dark whatever the phone is set to (Settings in the interface), so the colour behind the
-    /// keyboard follows the page's theme, not the system's.
-    private func matchPaper() {
-        main.webView?.evaluateJavaScript("document.documentElement.dataset.theme") { [weak self] theme, _ in
+    /// Marks the page while the keyboard takes room from it (`data-keyboard` on the root element; native.css moves the interface's
+    /// dock out of the way), and reads the page's theme back. The page can be set to light or dark whatever the phone is set to
+    /// (Settings in the interface), so the colour behind the keyboard follows the page's theme, not the system's.
+    private func tellPage(keyboardUp: Bool) {
+        let script = "document.documentElement.toggleAttribute('data-keyboard', \(keyboardUp)); document.documentElement.dataset.theme"
+        main.webView?.evaluateJavaScript(script) { [weak self] theme, _ in
             switch theme as? String {
             case "dark": self?.view.backgroundColor = Self.darkPaper
             case "light": self?.view.backgroundColor = Self.lightPaper

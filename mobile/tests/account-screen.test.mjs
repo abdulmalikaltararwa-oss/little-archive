@@ -269,13 +269,25 @@ test('after "we sent you a message" the screen is redrawn on Sign in and focus i
   assert.equal(page.$('input[name=password]').value, '');
 });
 
-test('when the page changes size (the keyboard, a turned phone) the field being typed in is brought back on screen, and nothing else is', { skip }, t => {
+test('when the page changes size (the keyboard, a turned phone) a field being typed in that is left out of view is brought back, and nothing else moves', { skip }, t => {
   const page = open(t, { social: async () => null });
   const shown = [];
   page.window.Element.prototype.scrollIntoView = function scrollIntoView(options) { shown.push([this.getAttribute('name') || this.tagName, options]); };
-  page.window.dispatchEvent(new page.window.Event('resize'));
-  assert.deepEqual(shown, [], 'focus is on the heading: nothing to bring back');
-  page.$('input[name=email]').focus();
-  page.window.dispatchEvent(new page.window.Event('resize'));
-  assert.deepEqual(shown, [['email', { block: 'nearest' }]]);
+  // jsdom does no layout: say where each thing is. Its window is 768 tall.
+  const place = (node, top) => { node.getBoundingClientRect = () => ({ top, bottom: top + 48 }); };
+  const resize = () => page.window.dispatchEvent(new page.window.Event('resize'));
+  place(page.$('h1'), 900);
+  resize();
+  assert.deepEqual(shown, [], 'focus is on the heading, which is not a field');
+  const email = page.$('input[name=email]');
+  email.focus();
+  place(email, 300);
+  resize();
+  assert.deepEqual(shown, [], 'a field that is still in view is left where it is');
+  place(email, 740);
+  resize();
+  assert.deepEqual(shown, [['email', { block: 'center' }]], 'a field cut off at the bottom');
+  place(email, -20);
+  resize();
+  assert.equal(shown.length, 2, 'and one above the top');
 });

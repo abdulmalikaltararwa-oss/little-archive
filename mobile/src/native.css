@@ -24,10 +24,11 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 #app header.h-16 { height: calc(4rem + var(--safe-top)); }
 @media (min-width: 1024px) { #app header.h-16 { height: calc(5rem + var(--safe-top)); } }
 /* On iOS the app ends the web view at the keyboard (RootViewController in MainViewController.swift), so the interface's dock,
-   fixed to the bottom edge, would ride up and sit over the page just above the keyboard. While a text field has focus it steps
-   aside, as it did when the keyboard covered it. (:focus-visible is true for a field that was tapped, not for a tapped button.)
-   This belongs in ui/src/features/shell/shell.tsx; it matches nothing if the dock's label changes. */
-body:has(:is(input, textarea, [contenteditable='true']):focus-visible) #app nav[aria-label='Quick actions'] { opacity: 0; pointer-events: none; transform: translateY(6rem); }
+   fixed to the bottom edge, would ride up and sit over the page just above the keyboard. While the keyboard is up it steps aside,
+   as it did when the keyboard covered it. That controller sets data-keyboard on the root element for as long as the keyboard
+   takes room from the page; nothing sets it on Android, where the dock is left as it was. The dock is found by its label, so
+   this matches nothing if the label changes (ui/src/features/shell/shell.tsx). */
+:root[data-keyboard] #app nav[aria-label='Quick actions'] { opacity: 0; pointer-events: none; transform: translateY(6rem); }
 
 /* First-launch screens ---------------------------------------------------------------------------------------------- */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

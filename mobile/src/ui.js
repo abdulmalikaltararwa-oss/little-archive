@@ -67,11 +67,18 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
 
   // The app ends the web view at the keyboard, so the page changes size when the keyboard comes up, changes height or the phone
   // is turned. The web view shows a field when it takes focus, not after a later change of size, so keep the field that is being
-  // typed in on screen. This stays for the interface too, once it has replaced these screens. On Android the keyboard changes the
-  // size of the visual viewport only, which has its own event.
+  // typed in on screen: when the change leaves it out of view, it goes to the middle of what is left. A field that is still in view
+  // is left alone. This stays for the interface too, once it has replaced these screens. The visual viewport's own event is
+  // listened to as well: in an Android emulator (WebView 133) a field focused under the keyboard came into view with it and not
+  // without it (one run each).
   const showField = () => {
     const field = document.activeElement;
-    if (field?.matches?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) field.scrollIntoView({ block: 'nearest' });
+    if (!field?.matches?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    const page = document.defaultView;
+    const top = page.visualViewport?.offsetTop ?? 0;
+    const height = page.visualViewport?.height ?? page.innerHeight;
+    const box = field.getBoundingClientRect();
+    if (box.top < top || box.bottom > top + height) field.scrollIntoView({ block: 'center' });
   };
   document.defaultView?.addEventListener('resize', showField);
   document.defaultView?.visualViewport?.addEventListener('resize', showField);
