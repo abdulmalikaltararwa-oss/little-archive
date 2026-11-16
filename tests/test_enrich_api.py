@@ -547,6 +547,18 @@ class AnalysisThroughTheApiTests(Base):
         self.assertEqual([(c["name"], c["kind"]) for c in accepted["collections"]], [("Food & Recipes", "local")])
         self.assertEqual({t["name"] for t in self.client.get("/api/tags").json()["tags"]}, {"sourdough", "baking"})
 
+    def test_accepting_a_suggestion_is_not_a_reason_to_suggest_again(self):
+        # Accepting changes the title and files the save in a folder, and both are part of what the model reads.
+        self.enable(fetch=False, transcriber=False)
+        item = self.item(caption="Sourdough starter, day 5")
+        self.post("/api/ai/jobs", {"ids": [item["id"]]})
+        self.drain()
+        accepted = self.post(f"/api/items/{item['id']}/ai/accept").json()
+        self.assertEqual([c["name"] for c in accepted["collections"]], ["Food & Recipes"])
+        self.assertEqual(self.post("/api/ai/jobs", {"ids": [item["id"]]}).json(), {"queued": 0, "matched": 1, "unchanged": 1})
+        self.assertEqual(self.client.patch(f"/api/items/{item['id']}", json={"notes": "A note the owner wrote afterwards"}, headers=self.headers).status_code, 200)
+        self.assertEqual(self.post("/api/ai/jobs", {"ids": [item["id"]]}).json()["queued"], 1, "a later change by the owner still offers a fresh suggestion")
+
     def test_an_existing_collection_is_preferred_and_a_manual_title_is_kept(self):
         self.enable(fetch=False, transcriber=False)
         mine = self.post("/api/collections", {"name": "My Recipes"}).json()

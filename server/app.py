@@ -973,7 +973,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             c.execute("UPDATE items SET title=?,summary=?,tags=?,needs_review=0,updated_at=? WHERE id=?", (row["title"] if row["manual_title"] else ai.get("suggested_title") or row["title"], row["summary"] if row["manual_summary"] else ai.get("summary") or row["summary"], json_text(tags), now(), iid))
             store.index_item(c, iid)
             store.enrichment.apply_suggested_folder(c, iid, ai)
-            return store.get_item(iid, c)
+            accepted = store.get_item(iid, c)
+            # Accepting may change the title and the folders, which the model reads. That is not new information:
+            # move the finished job to the item as it now stands, so it is not offered (or charged for) again.
+            c.execute("UPDATE OR IGNORE ai_jobs SET input_hash=? WHERE item_id=? AND input_hash=?", (store.enrichment.worker.fingerprint(accepted), iid, ai.get("input_hash")))
+            return accepted
 
     @app.post("/api/items/{iid}/ai/dismiss")
     def dismiss_ai(iid: str, auth=Depends(owner)):
