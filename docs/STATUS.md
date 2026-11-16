@@ -70,7 +70,8 @@ in the linked docs, not here. Last updated: 2026-11-16.
 - On the hosted server for the pay page: the Supabase publishable key and `/pay` as a redirect address.
 - Publish the Google sign-in setup before real users. Register the share extension id and the app group
   with Apple; create a Sign in with Apple key for revocation.
-- An Android upload keystore kept outside the repository, and Play App Signing.
+- The legal pages' open points: registered name, host and country, backup period (reviewed by an AI agent, not a lawyer).
+- Play App Signing for the Android upload key (the key exists outside the repository; a signed bundle was built, not uploaded).
 - Check the Supabase reset-password email template and try one reset against staging.
 - Arabic (the interface is English only today). Store accounts: agreements, tax and banking, sandbox testers, listings (text is in `docs/store/`).
 

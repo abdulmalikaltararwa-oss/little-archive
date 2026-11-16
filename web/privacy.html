@@ -74,7 +74,7 @@
             </tr>
             <tr>
               <th scope="row">Network address</th>
-              <td>The server holds the address your request came from in memory for a short time. The application keeps no access log unless we turn one on to investigate a problem.</td>
+              <td>The server holds the address your request came from in memory for a short time. The application keeps no access log unless we turn one on to investigate a problem. Our hosting provider or proxy may keep short-lived connection logs.</td>
               <td>To limit request rates and block abuse.</td>
             </tr>
           </tbody>
@@ -100,7 +100,7 @@
             </tr>
             <tr>
               <th scope="row">Google (Gemini)</th>
-              <td>When you use an AI feature: the text of the saves you chose, meaning the post's title, creator, caption, image description and transcript. For "ask your archive": the question you typed and short passages from the saves that match it. For a closer read, if we use Gemini to transcribe: the post's media file.</td>
+              <td>When you use an AI feature: the text of the saves you chose, meaning the post's title (including one you typed), creator, caption, image description and transcript. For "ask your archive": the question you typed and short passages from the saves that match it. For a closer read, if we use Gemini to transcribe: the post's media file.</td>
               <td>To suggest titles, folders and summaries, build recipe cards and places, answer your question, and turn speech into text.</td>
             </tr>
             <tr>
@@ -134,7 +134,7 @@
       <p>More about the AI features:</p>
       <ul>
         <li>They run only when you start them. Nothing in your library is sent to an AI company in the background.</li>
-        <li>Before the first one, the app shows what would be sent and to which service, and asks you to allow it. Nothing is sent unless you allow it. Your answer is kept with your account, and you can change it in Settings.</li>
+        <li>Before the first one, the app shows what would be sent and to which service, and asks you to allow it. Nothing is sent unless you allow it; our server refuses AI work for an account that has not allowed it. Your answer is kept with your account, and you can change it in Settings. A request already on its way when you switch it off cannot be recalled.</li>
         <li>Your own notes and the names of your collections are not sent to Google or Groq.</li>
         <li>The media file for a closer read is fetched by our server from the public post, held in memory while it is transcribed, and then discarded. We keep the transcript, not the video or audio.</li>
         <li>Once text or media has been sent to Google or Groq, their own terms decide how long they keep it. We cannot take it back.</li>
@@ -150,7 +150,7 @@
         <li>No tracking of you across other apps or websites.</li>
         <li>No analytics software in the apps.</li>
         <li>We do not sell your data, and we do not give it to anyone other than the services described on this page, for the purposes described.</li>
-        <li>The apps do not ask for your location, your contacts or your social media passwords.</li>
+        <li>The apps do not ask for your location, your contacts or your social media passwords. The iPhone app asks for the camera only if you take a photo as a preview picture.</li>
       </ul>
 
       <h2 id="own-server">Your own server</h2>

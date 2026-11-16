@@ -42,7 +42,7 @@ Nothing in this list has been done or tried by a builder.
 ## Play Console
 
 25. Create the Google Play developer account as an organisation, if not done (**not in the docs**).
-26. Create an upload keystore, keep it outside the repository, and turn on Play App Signing (`docs/STATUS.md`, "Waiting on the owner").
+26. The upload keystore exists outside the repository (password in the macOS Keychain); back it up and turn on Play App Signing (`docs/STATUS.md`, "Waiting on the owner").
 27. Create the app for the package name and upload a signed build to the internal testing track; products can only be created after that (`docs/mobile-app.md`, "What store setup is still yours").
 28. Create the one-time product `unlock_full`, active, with a price.
 29. Add licence testers and make one test purchase on a real Android phone.
@@ -77,7 +77,7 @@ No Tap payment has ever been run, with a test key or a live one (`docs/STATUS.md
 
 ## Google Cloud
 
-49. Move the Google sign-in consent screen from Testing to In production; until then only listed test users can sign in (`docs/STATUS.md`).
+49. Done on 16 November 2026: the Google sign-in consent screen is In production (`docs/STATUS.md`).
 50. Set the app name and support email shown on Google's sign-in page; today it names the Supabase address, not Little Archive (`docs/STATUS.md`, "Known fault").
 51. Check whether Google asks for a verification review of the sign-in setup before launch (`docs/mobile-app.md` says this was not confirmed).
 
