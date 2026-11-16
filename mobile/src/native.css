@@ -23,12 +23,6 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
    (h-16 becomes h-[calc(4rem+var(--safe-top))]); until then this does it for the app. It matches nothing once that is changed. */
 #app header.h-16 { height: calc(4rem + var(--safe-top)); }
 @media (min-width: 1024px) { #app header.h-16 { height: calc(5rem + var(--safe-top)); } }
-/* On iOS the app ends the web view at the keyboard (RootViewController in MainViewController.swift), so the interface's dock,
-   fixed to the bottom edge, would ride up and sit over the page just above the keyboard. While the keyboard is up it steps aside,
-   as it did when the keyboard covered it. That controller sets data-keyboard on the root element for as long as the keyboard
-   takes room from the page; nothing sets it on Android, where the dock is left as it was. The dock is found by its label, so
-   this matches nothing if the label changes (ui/src/features/shell/shell.tsx). */
-:root[data-keyboard] #app nav[aria-label='Quick actions'] { opacity: 0; pointer-events: none; transform: translateY(6rem); }
 
 /* First-launch screens ---------------------------------------------------------------------------------------------- */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -37,7 +31,8 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 /* With the keyboard up the screen is shorter than its content and scrolls, and the page is drawn under the status bar, so the
    logo would pass behind the clock. A strip of the same dotted paper, as tall as the inset (nothing where there is none), stays
    over it. It holds because the app ends the web view at the keyboard (RootViewController in MainViewController.swift on iOS;
-   Capacitor's SystemBars does it on Android): the document is what scrolls. The interface has its own strip (ui/src/features/shell/shell.tsx). */
+   Capacitor's SystemBars does it on Android): the document is what scrolls. The interface has its own strip, and hides its dock
+   while the keyboard is up (ui/src/features/shell/shell.tsx). */
 .native-screen::before { content: ''; position: fixed; z-index: 10; inset: 0 0 auto 0; height: var(--safe-top); background: var(--paper) radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px) 0 0 / 26px 26px; pointer-events: none; }
 .native-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 34px; font-family: var(--font-display, 'Fraunces', 'Iowan Old Style', Georgia, serif); font-weight: 540; font-size: 1.3rem; letter-spacing: -.02em; }
 .native-brand img { border-radius: 12px; }
