@@ -4,6 +4,10 @@
 //   POST /auth/v1/token?grant_type=password     sign in
 //   POST /auth/v1/token?grant_type=refresh_token  trade a refresh token for new tokens
 //   POST /auth/v1/logout?scope=local            end this device's session
+//   POST /auth/v1/token?grant_type=id_token     sign in with an Apple identity token (the native sheet), see social.js
+//   GET  /auth/v1/settings                      which providers the project has switched on (asked before the browser opens)
+//   GET  /auth/v1/authorize?provider=google&…   the address the system browser opens for Google (PKCE), see social.js
+//   POST /auth/v1/token?grant_type=pkce         trade the code that came back for a session
 //
 // Every request carries the project's publishable key in `apikey`. That key is public by design (it only identifies
 // the project; what a person can do is set by their own access token), so it lives in app.config.json. No other
@@ -21,10 +25,33 @@ const KNOWN = {
   over_email_send_rate_limit: 'Too many emails were sent. Wait a few minutes and try again.',
   validation_failed: 'Check the email address and try again.',
   user_banned: 'This account has been suspended.',
+  // The code exchange of a browser sign-in (Supabase's PKCE flow): the code is single use and lasts a few minutes.
+  bad_code_verifier: 'That sign-in did not finish. Try again.',
+  flow_state_not_found: 'That sign-in did not finish. Try again.',
+  flow_state_expired: 'That sign-in took too long. Try again.',
+  bad_oauth_callback: 'That sign-in did not finish. Try again.',
+  bad_oauth_state: 'That sign-in did not finish. Try again.',
 };
 
-function problem(reply) {
+/**
+ * Is this the answer of a project that has not switched the provider on? Supabase says so in two ways: the token grant answers
+ * `provider_disabled` (and the error-codes page lists `oauth_provider_not_supported`), and the authorize address answers
+ * `validation_failed` with "Unsupported provider: provider is not enabled" (or "missing OAuth secret"), which is what a
+ * provider with no client secret yet looks like. Both are 400s.
+ */
+export function providerIsOff(body) {
+  const code = body?.error_code || body?.code;
+  if (code === 'provider_disabled' || code === 'oauth_provider_not_supported') return true;
+  const message = String(body?.msg || body?.message || '');
+  return code === 'validation_failed' && /^unsupported provider/i.test(message);
+}
+
+/** `label` names the provider ("Google", "Apple") for the sign-ins that have one; email and password has none. */
+function problem(reply, label = '') {
   const body = bodyJson(reply) || {};
+  if (label && providerIsOff(body)) return new AppError(`${label} sign-in is not switched on yet. Use your email and password for now.`);
+  // Apple's identity token names the app it was made for; the project accepts only the bundle ids listed in its Apple settings.
+  if (label && /unacceptable audience/i.test(String(body.error_description || body.msg || ''))) return new AppError(`${label} sign-in is not set up for this app yet. Use your email and password for now.`);
   const code = body.error_code || body.code;
   if (typeof code === 'string' && KNOWN[code]) return new AppError(KNOWN[code]);
   if (reply.status === 429) return new AppError(KNOWN.over_request_rate_limit);
@@ -51,6 +78,13 @@ export function sessionFrom(body, now) {
   return { type: 'supabase', accessToken: body.access_token, refreshToken: body.refresh_token, expiresAt, userId: String(body.user?.id || claims.sub || ''), email: String(body.user?.email || claims.email || '') };
 }
 
+/** What the app can say about a browser sign-in that came back with an error: the code, never the text the address carried. */
+export function callbackProblem(errorCode, label) {
+  if (errorCode && providerIsOff({ error_code: errorCode })) return new AppError(`${label} sign-in is not switched on yet. Use your email and password for now.`);
+  if (typeof errorCode === 'string' && KNOWN[errorCode]) return new AppError(KNOWN[errorCode]);
+  return new AppError(`${label} did not finish signing you in. Try again.`);
+}
+
 export function createSupabase({ url, publishableKey, http, now = Date.now }) {
   const base = String(url).replace(/\/+$/, '');
   async function call(path, { body, token } = {}) {
@@ -58,13 +92,52 @@ export function createSupabase({ url, publishableKey, http, now = Date.now }) {
     try { return await http({ url: `${base}${path}`, method: 'POST', headers, body: JSON.stringify(body ?? {}) }); }
     catch (error) { throw new AppError('Could not reach the sign-in service. Check your connection and try again.', { cause: error }); }
   }
+  /** A session from a token grant, or the reason in words. */
+  async function granted(reply, label) {
+    if (reply.status !== 200) throw problem(reply, label);
+    const session = sessionFrom(bodyJson(reply), now);
+    if (!session) throw new AppError('The sign-in service sent an answer the app could not read.');
+    return session;
+  }
+  // Every address a browser sign-in uses starts from the pinned `base`, and nothing else: the provider's own pages are reached
+  // by Supabase's redirect, never by an address the app was handed.
+  function authorizeUrl({ provider, redirectTo, codeChallenge }) {
+    if (provider !== 'google') throw new Error(`No browser sign-in for ${provider}.`);
+    // prompt=select_account: Google shows its account chooser every time, so signing in again after signing out does not silently
+    // reuse the Google account the browser remembers. The project passes query parameters it does not own on to the provider
+    // (internal/api/external.go; `prompt` is not in its reserved list).
+    const query = new URLSearchParams({ provider, redirect_to: redirectTo, prompt: 'select_account' });
+    // Supabase's documented spelling is lower case: auth-js sends code_challenge_method=s256.
+    if (codeChallenge) { query.set('code_challenge', codeChallenge); query.set('code_challenge_method', 's256'); }
+    return `${base}/auth/v1/authorize?${query}`;
+  }
   return {
-    async signIn(email, password) {
-      const reply = await call('/auth/v1/token?grant_type=password', { body: { email, password } });
-      if (reply.status !== 200) throw problem(reply);
-      const session = sessionFrom(bodyJson(reply), now);
-      if (!session) throw new AppError('The sign-in service sent an answer the app could not read.');
-      return session;
+    signIn: async (email, password) => granted(await call('/auth/v1/token?grant_type=password', { body: { email, password } })),
+    authorizeUrl,
+    /**
+     * Is the provider switched on? Supabase answers a switched-off provider's authorize address with a 400 page that the system
+     * browser would show as raw text and the app would never hear about. So the project's public settings are read first
+     * (GET /auth/v1/settings lists `external.<provider>` as true or false, needs no sign-in and records nothing on the project).
+     *
+     * The sign-in is refused only when the answer says the provider is off, or when the service cannot be reached. Any other
+     * answer (a rate limit, an error page, a shape this app does not know) lets the browser open: this check exists to turn one
+     * known dead end into a sentence, not to stand between a person and a sign-in that may well work.
+     */
+    async providerReady({ provider, label }) {
+      let reply;
+      try { reply = await http({ url: `${base}/auth/v1/settings`, method: 'GET', headers: { apikey: publishableKey, Accept: 'application/json' } }); }
+      catch (error) { throw new AppError('Could not reach the sign-in service. Check your connection and try again.', { cause: error }); }
+      const body = bodyJson(reply);
+      const off = reply.status === 200 ? body?.external?.[provider] === false : providerIsOff(body);
+      if (off) throw new AppError(`${label} sign-in is not switched on yet. Use your email and password for now.`);
+    },
+    /** The code a browser sign-in came back with, for a session. `codeVerifier` is the secret half of the PKCE pair. */
+    async exchangeCode({ authCode, codeVerifier, label }) {
+      return granted(await call('/auth/v1/token?grant_type=pkce', { body: { auth_code: authCode, code_verifier: codeVerifier } }), label);
+    },
+    /** Sign in with an identity token from a provider's own sheet. `nonce` is the raw value whose SHA-256 (lower case hex) the token carries. */
+    async signInWithIdToken({ provider, idToken, nonce, label }) {
+      return granted(await call('/auth/v1/token?grant_type=id_token', { body: { provider, id_token: idToken, nonce } }), label);
     },
     /** @returns {Promise<{session: object} | {confirmationSent: true}>} */
     async signUp(email, password) {

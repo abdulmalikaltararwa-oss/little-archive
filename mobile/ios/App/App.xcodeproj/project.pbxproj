@@ -13,6 +13,7 @@
 		2590782B93BF2DBED121ED56 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5368096CD5030FB5EED335AE /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		437532B773753CABC0FF16BC /* ShareInboxPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959AAA352105D6BAD0376C0F /* ShareInboxPlugin.swift */; };
+		D83B52F1A7064C9E15E0A6B7 /* SocialSignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1E4C0B93D25F7708B1C4E2 /* SocialSignInPlugin.swift */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -68,6 +69,7 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		959AAA352105D6BAD0376C0F /* ShareInboxPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareInboxPlugin.swift; sourceTree = "<group>"; };
+		6A1E4C0B93D25F7708B1C4E2 /* SocialSignInPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SocialSignInPlugin.swift; sourceTree = "<group>"; };
 		B6EA4A0092CB2B9C82C336A4 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C1BD55B266F7872D5D0E819A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		C8B00CC863A07EDB2C2D3C61 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				81E63024A5A8D646B27CC90D /* MainViewController.swift */,
 				959AAA352105D6BAD0376C0F /* ShareInboxPlugin.swift */,
+				6A1E4C0B93D25F7708B1C4E2 /* SocialSignInPlugin.swift */,
 				E8B92DC40B4D356059E4516B /* App.entitlements */,
 				C1BD55B266F7872D5D0E819A /* PrivacyInfo.xcprivacy */,
 				92F9868109BD7865D63172EB /* StorePurchasesPlugin.swift */,
@@ -283,6 +286,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				08C7258F9A4AE9EFC111A95E /* MainViewController.swift in Sources */,
 				437532B773753CABC0FF16BC /* ShareInboxPlugin.swift in Sources */,
+				D83B52F1A7064C9E15E0A6B7 /* SocialSignInPlugin.swift in Sources */,
 				FD4EC41CB547DF9DDEEAB005 /* StorePurchasesPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
