@@ -15,6 +15,7 @@ import { BorderBeam } from '@/components/fx/border-beam';
 import { TextScramble } from '@/components/fx/text-scramble';
 import { PlatformIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { allowAi } from '@/features/ai-permission/gate';
 import type { AskCitation, AskResponse, AskSource } from './api';
 import {
   authorLine, collapseSources, COMPOSER_ID, contextLine, describeOutcome, evidenceLabel, fieldLabel, highlight, isNarrowed, matchLabel, narrowingLabels, NO_FILTERS, platformOf, sourceStatus,
@@ -81,6 +82,7 @@ function Reading({ onStop }: { onStop(): void }) {
 }
 
 function ErrorCard({ entry, message, httpStatus, session }: { entry: Entry; message: string; httpStatus: number; session: AskSession }) {
+  const archive = useArchive();
   return (
     <section role="alert" className={cn('flex gap-4 rounded-lg border border-danger/30 bg-danger-pale p-5 text-danger sm:p-6', REVEAL)}>
       <Unplug className="mt-1 size-5 shrink-0" aria-hidden="true" />
@@ -89,7 +91,7 @@ function ErrorCard({ entry, message, httpStatus, session }: { entry: Entry; mess
         <p dir="auto" className="mt-1.5 text-base leading-relaxed">{message}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {/* A refused question (422) will be refused again; only the wording can change that. */}
-          {httpStatus === 422 ? null : <Button size="sm" onClick={() => session.retry(entry.id)}><RotateCcw />Try again</Button>}
+          {httpStatus === 422 ? null : <Button size="sm" onClick={() => void allowAi(archive, 'ask').then(allowed => { if (allowed) session.retry(entry.id); })}><RotateCcw />Try again</Button>}
           <Button variant="ghost" size="sm" className="hov:bg-card/60 text-danger" onClick={() => document.getElementById(COMPOSER_ID)?.focus()}>Change the question</Button>
         </div>
       </div>
@@ -110,11 +112,13 @@ const ICONS: Record<Exclude<OutcomeInfo['key'], 'answer' | 'nothing_saved'>, Luc
 
 /** Every answer that is not an answer, explained: what happened, what was and was not done, what the server said. */
 function OutcomeCard({ entry, response, outcome, session }: { entry: Entry; response: AskResponse; outcome: OutcomeInfo; session: AskSession }) {
+  const archive = useArchive();
   const headingId = useId();
   const nothing = outcome.key === 'nothing_saved';
   const Icon = outcome.key === 'answer' || outcome.key === 'nothing_saved' ? Info : ICONS[outcome.key];
   const narrowed = isNarrowed(entry.filters);
-  const askWithoutNarrowing = () => {
+  const askWithoutNarrowing = async () => {
+    if (!(await allowAi(archive, 'ask'))) return;
     session.dispatch({ type: 'drafted', text: entry.question });
     session.dispatch({ type: 'narrowed', filters: NO_FILTERS });
     session.submit();
@@ -139,8 +143,8 @@ function OutcomeCard({ entry, response, outcome, session }: { entry: Entry; resp
       ) : null}
       {outcome.retry || (nothing && narrowed) ? (
         <div className={cn('mt-4 flex flex-wrap gap-2', nothing && 'justify-center')}>
-          {outcome.retry ? <Button size="sm" onClick={() => session.retry(entry.id)}><RotateCcw />Try again</Button> : null}
-          {nothing && narrowed ? <Button size="sm" onClick={askWithoutNarrowing}>Ask without narrowing</Button> : null}
+          {outcome.retry ? <Button size="sm" onClick={() => void allowAi(archive, 'ask').then(allowed => { if (allowed) session.retry(entry.id); })}><RotateCcw />Try again</Button> : null}
+          {nothing && narrowed ? <Button size="sm" onClick={() => void askWithoutNarrowing()}>Ask without narrowing</Button> : null}
         </div>
       ) : null}
     </section>

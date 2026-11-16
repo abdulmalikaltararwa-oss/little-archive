@@ -4,8 +4,9 @@
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from 'cn';
 import { CornerDownLeft, Folder, Globe, Tag, X } from 'lucide-react';
-import { useArchiveState } from '@/app/archive-context';
+import { useArchive, useArchiveState } from '@/app/archive-context';
 import { Button } from '@/components/ui/button';
+import { allowAi } from '@/features/ai-permission/gate';
 import { QUESTION_MAX } from './api';
 import { checkQuestion, COMPOSER_ID, isNarrowed, NO_FILTERS, problemText, SOURCE_NAMES } from './logic';
 import { NarrowMenu, type NarrowOption } from './narrow-menu';
@@ -15,6 +16,7 @@ import { useAskState } from './use-ask';
 const MAX_HEIGHT = 192;
 
 export function Composer({ session }: { session: AskSession }) {
+  const archive = useArchive();
   const draft = useAskState(session, state => state.draft);
   const filters = useAskState(session, state => state.filters);
   const stats = useArchiveState(state => state.stats);
@@ -45,8 +47,10 @@ export function Composer({ session }: { session: AskSession }) {
     box.style.height = `${Math.min(box.scrollHeight, MAX_HEIGHT)}px`;
   }, [draft]);
 
-  const submit = () => {
+  const submit = async () => {
     if (!check.ok) { setTried(true); return; }
+    // Asked before the question joins the page: on "Not now" it stays in the box and nothing is sent.
+    if (!(await allowAi(archive, 'ask'))) return;
     if (!session.submit()) return;
     setTried(false);
     // On a phone the keyboard would cover the answer.
@@ -56,7 +60,7 @@ export function Composer({ session }: { session: AskSession }) {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
     event.preventDefault();
-    submit();
+    void submit();
   };
 
   const hintId = `${COMPOSER_ID}-hint`;
@@ -65,7 +69,7 @@ export function Composer({ session }: { session: AskSession }) {
   const near = check.count >= QUESTION_MAX - 50;
   return (
     <form
-      onSubmit={event => { event.preventDefault(); submit(); }}
+      onSubmit={event => { event.preventDefault(); void submit(); }}
       aria-label="Ask a question"
       className="rounded-lg border border-line-strong bg-card shadow-xs transition-[border-color,box-shadow] duration-200 focus-within:border-sage focus-within:ring-4 focus-within:ring-sage/15 dark:bg-card-2"
     >

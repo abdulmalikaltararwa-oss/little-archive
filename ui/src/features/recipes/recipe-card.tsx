@@ -6,6 +6,7 @@ import { cn } from 'cn';
 import { ArrowLeft, Bookmark, Clock, ListChecks, Pencil, Play, RotateCcw, Sparkles, Users } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { confirm, toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { PlatformIcon } from '@/components/icons';
@@ -46,12 +47,15 @@ function NoCard({ id, state, kind }: { id: string; state: UseRecipe; kind: 'none
 
   useEffect(() => { document.title = `${state.item?.title || 'Recipe'} — Little Archive`; }, [state.item?.title]);
 
-  const look = (method: 'auto' | 'ai') => runLook(async () => {
-    const result = await extractRecipe(archive, id, { method, force: true });
-    setNote(lookedText(result, result.edited));
-    state.refresh();
-    if (result.extraction_result.found && result.status === 'extracted') toast('A recipe card is ready.', { tone: 'saved' });
-  });
+  const look = async (method: 'auto' | 'ai') => {
+    if (!(await allowAi(archive, 'recipe'))) return;
+    await runLook(async () => {
+      const result = await extractRecipe(archive, id, { method, force: true });
+      setNote(lookedText(result, result.edited));
+      state.refresh();
+      if (result.extraction_result.found && result.status === 'extracted') toast('A recipe card is ready.', { tone: 'saved' });
+    });
+  };
   const putBack = () => runPut(async () => {
     await discardRecipeEdits(archive, id);
     state.refresh();
@@ -122,11 +126,14 @@ function CardBody({ id, state, recipe, response }: { id: string; state: UseRecip
     markCookFromCard();
     archive.goScreen('recipes', cookRest(id));
   };
-  const lookAgain = (method: 'auto' | 'ai' = 'auto') => runLook(async () => {
-    const result = await extractRecipe(archive, id, { method, force: true });
-    refresh();
-    toast(lookedText(result, response.edited), { tone: result.extraction_result.found ? 'saved' : 'ok' });
-  });
+  const lookAgain = async (method: 'auto' | 'ai' = 'auto') => {
+    if (!(await allowAi(archive, 'recipe'))) return;
+    await runLook(async () => {
+      const result = await extractRecipe(archive, id, { method, force: true });
+      refresh();
+      toast(lookedText(result, response.edited), { tone: result.extraction_result.found ? 'saved' : 'ok' });
+    });
+  };
   const notARecipe = () => confirm({
     title: 'Mark this save as not a recipe?',
     message: 'It leaves your recipe list and cook mode. The save itself stays in your library, and you can put the card back from here.',

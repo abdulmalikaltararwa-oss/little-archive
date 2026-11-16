@@ -8,6 +8,7 @@ import { cn } from 'cn';
 import { ArrowRight, Check, Copy, ExternalLink, Folder, Heart, ImagePlus, ScanSearch, Sparkles, Trash2, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { confirm, confirmDiscard, toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { CheckRow, Field, FormError, Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { BorderBeam } from '@/components/fx/border-beam';
@@ -154,18 +155,23 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel }: { i
     await archive.refreshEditedItem(updated);
   });
 
-  const suggest = () => runTool(async () => {
-    const result = await archive.api.queueAi({ ids: [item.id] });
-    toast(result.skipped && !result.queued ? 'Not queued: the suggestions allowance is used for now.' : `${result.queued} classification job queued. Check activity, then reopen this save to review.`);
-  });
+  const suggest = async () => {
+    if (!(await allowAi(archive, 'suggest'))) return;
+    await runTool(async () => {
+      const result = await archive.api.queueAi({ ids: [item.id] });
+      toast(result.skipped && !result.queued ? 'Not queued: the suggestions allowance is used for now.' : `${result.queued} classification job queued. Check activity, then reopen this save to review.`);
+    });
+  };
 
   const deepRead = item.enrichment?.deep_read;
-  const readCloser = () => runTool(async () => {
-    if (!(await allowLeave())) return;
-    await archive.api.deepRead(item.id);
-    toast('A closer read is queued. Check activity, then reopen this save.');
-    accept(await archive.api.item(item.id), 'deep');
-  });
+  const readCloser = async () => {
+    if (!(await allowLeave()) || !(await allowAi(archive, 'closer-read'))) return;
+    await runTool(async () => {
+      await archive.api.deepRead(item.id);
+      toast('A closer read is queued. Check activity, then reopen this save.');
+      accept(await archive.api.item(item.id), 'deep');
+    });
+  };
 
   const nextReview = () => runReview(async () => {
     if (!(await allowLeave())) return;

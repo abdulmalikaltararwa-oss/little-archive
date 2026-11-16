@@ -6,6 +6,7 @@ import { cn } from 'cn';
 import { Activity, ArrowLeft, ArrowRight, Check, CircleCheck, RotateCw, Sparkles, Upload, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { confirm, toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { FormError, Notice } from '@/components/field';
 import { AsciiProgress, AsciiSpinner } from '@/components/fx/ascii';
 import { Modal } from '@/components/modal';
@@ -198,11 +199,14 @@ function JobRow({ row, canRetry, onChanged, onOpen }: { row: AiJob; canRetry: bo
             size="sm"
             disabled={!canRetry || busy}
             aria-busy={busy || undefined}
-            onClick={() => void run(async () => {
-              const result = await archive.api.retryAi(row.id);
-              toast(result.queued ? 'Fresh suggestions queued.' : 'A matching job is already current.');
-              onChanged();
-            })}
+            onClick={() => void (async () => {
+              if (!(await allowAi(archive, 'suggest'))) return;
+              await run(async () => {
+                const result = await archive.api.retryAi(row.id);
+                toast(result.queued ? 'Fresh suggestions queued.' : 'A matching job is already current.');
+                onChanged();
+              });
+            })()}
           >
             <RotateCw />
             Retry with current text
