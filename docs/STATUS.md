@@ -25,15 +25,16 @@ in the linked docs, not here. Last updated: 2026-11-16.
 - React interface, synthetic demo, Chrome extension, Mac app build, container image.
 - Phone app (iOS and Android shell): first-launch server choice, hosted and own-server sign-in, share sheet,
   native purchase sheet.
-- Release validation is green on main at `4cd0fae`.
+- Google and Apple sign-in code. Release validation is green on main at `5ce3d52`.
 
-## Built, merged locally, not pushed
+## Sign-in, proven and not
 
-- Google and Apple sign-in in the phone app (`6ee5138`). The gate passed on that commit. Proven against a local
-  stand-in only: Google on an iOS simulator, the interrupted-sign-in notice on an Android emulator. Apple's
-  sheet has never been shown, and no real Supabase, Google or Apple account has been used.
-- Known fault: on the account screen the keyboard slides the logo under the status bar. It needs the web
-  view's keyboard handling (a keyboard plugin), not CSS.
+- Google: proven end to end on 2026-11-16 from the iOS simulator against staging and the real Supabase
+  project (Continue with Google, Google's page, back into an empty library). The Google setup is in testing
+  mode: only listed test users can sign in until it is published.
+- Apple: switched on in Supabase, but the app is not registered with Apple yet, so the sheet has never run.
+- Known faults: Google's page names the Supabase address, not Little Archive; the iOS prompt calls the app
+  "App"; on the account screen the keyboard slides the logo under the status bar.
 
 ## Running
 
@@ -57,8 +58,8 @@ in the linked docs, not here. Last updated: 2026-11-16.
 
 ## Waiting on the owner
 
-- Switch on the Google and Apple providers and set the Site URL and redirect list in Supabase
-  ([checklist](mobile-app.md)).
+- Register the app with Apple (team and bundle id) so Sign in with Apple can run; publish the Google
+  sign-in setup before real users.
 - The unlock price, and whether the store apps sell the unlock through Tap or through the stores.
 - The production address for the hosted service.
 - Arabic: the interface is English only today. Decide before a store listing or a payment page.

@@ -286,7 +286,7 @@ export function createUi(root, { iconUrl = '/icon.svg' } = {}) {
           frame(
             h('p', { class: 'native-whisper' }, 'a little archive account'),
             heading,
-            h('p', { class: 'native-lede' }, creating ? 'Your library is private to you.' : `Sign in to your account on ${host}.`),
+            h('p', { class: 'native-lede' }, creating ? 'A library of your own, kept on your account.' : `Sign in to your account on ${host}.`),
             said,
             names.length > 0 && h('div', { class: 'native-socials' }, ...names.map(providerButton), providerError, h('p', { class: 'native-divider' }, h('span', {}, 'or use your email'))),
             tabs,

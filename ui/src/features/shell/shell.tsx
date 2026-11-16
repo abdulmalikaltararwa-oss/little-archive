@@ -132,6 +132,9 @@ export function Shell({ children, demo }: { children: ReactNode; demo: boolean }
         <div className="px-2"><Brand /></div>
         <NavContent />
       </aside>
+      {/* Where a phone draws the page under its status bar, the page scrolls behind the clock. This strip is as tall
+          as that inset and stays put, so nothing shows through. Where there is no inset it has no height. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 z-40 h-[var(--safe-top)] bg-paper" />
       <div className="min-w-0">
         {demo ? <DemoBanner /> : null}
         <TopBar demo={demo} />

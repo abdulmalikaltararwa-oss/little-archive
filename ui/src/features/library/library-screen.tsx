@@ -19,6 +19,7 @@ import { VIEW_TITLE_ID } from '@/lib/focus';
 import { StateCard } from '../feature-kit';
 import { Gallery } from './gallery';
 import { Hero } from './hero';
+import { keptLine } from './words';
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: 'recent', label: 'Recently added' },
@@ -307,7 +308,7 @@ export function LibraryScreen({ demo }: { demo: boolean }) {
 
       <p className="mt-8 flex items-center justify-center gap-2 text-center text-xs text-ink-soft">
         <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
-        Your collection. Your server. A little more peace of mind.
+        {keptLine(archive.backend.kind, archive.backend.mode)}
       </p>
       <BulkBar />
     </>
