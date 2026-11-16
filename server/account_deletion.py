@@ -32,6 +32,21 @@ def wait_for_attempt(attempts):
     return min(FIRST_WAIT * 2 ** max(0, attempts - 1), LONGEST_WAIT)
 
 
+def remove_account(libraries, auth_deletions, user_id):
+    """Delete one account for good: the one path, used by `POST /api/account/delete` and by the operator's `delete-account` command.
+
+    The intent is written down first, then the library goes (with everything `libraries.on_delete` knows of: the unlock, the
+    purchases and payment records, the Sign in with Apple token), then the sign-in. Returns 'done', 'pending' (the library is
+    gone and the sign-in is still to be deleted; it is retried) or 'not_configured' (this server has no key to delete sign-ins).
+    """
+    if auth_deletions is not None:
+        auth_deletions.request(user_id)  # written first, so a failure part-way is finished later, not forgotten
+    libraries.delete(user_id)
+    if auth_deletions is None:
+        return "not_configured"
+    return auth_deletions.attempt(user_id)
+
+
 class AuthDeletions:
     def __init__(self, libraries, admin, clock=time.time):
         self.libraries, self.admin, self.clock = libraries, admin, clock

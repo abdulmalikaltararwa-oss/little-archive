@@ -59,7 +59,8 @@ BODY = "little_archive.body"  # this request's buffered body, in its own ASGI sc
 STORE = "little_archive.store"  # the library this request resolved to, so an error handler can look at it
 FULL = "This library has reached its storage limit. Delete items or thumbnails to make room."
 # Writes that cannot grow a library stay available to an account at its quota.
-QUOTA_EXEMPT = {"/api/account/delete", "/api/account/apple-authorization", "/api/ai/jobs/cancel"}
+# Settings are among them: a person at their quota must still be able to switch something off (sharing with an AI provider, say).
+QUOTA_EXEMPT = {"/api/account/delete", "/api/account/apple-authorization", "/api/ai/jobs/cancel", "/api/settings"}
 # Browsers only accept an installable app's manifest with this type. Some systems' MIME tables lack it.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -523,12 +524,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
         sign-in could not be deleted yet; it is retried until Supabase confirms. 200 with `auth_deletion: "not_configured"` on a
         server whose operator chose to run without the secret key: the library is gone and the sign-in is not.
         """
-        if auth_deletions is not None:
-            auth_deletions.request(auth.user_id)  # written first, so a failure part-way is finished later, not forgotten
-        libraries.delete(auth.user_id)
-        if auth_deletions is None:
+        from .account_deletion import remove_account
+        outcome = remove_account(libraries, auth_deletions, auth.user_id)
+        if outcome == "not_configured":
             return {"deleted": True, "auth_user_deleted": False, "auth_deletion": "not_configured"}
-        if auth_deletions.attempt(auth.user_id) == "done":
+        if outcome == "done":
             return {"deleted": True, "auth_user_deleted": True}
         return JSONResponse({"deleted": True, "auth_user_deleted": False, "auth_deletion": "pending",
                              "detail": "Your library is deleted. Deleting your sign-in did not finish yet; it is retried automatically until it does."}, status_code=202)
