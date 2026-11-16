@@ -96,6 +96,7 @@ class Config:
     # publishable key. That key is public by design (the phone app ships with it); it is not the secret key above.
     supabase_publishable_key: str = ""
     public_site_url: str = "https://abdulmalikaltararwa-oss.github.io/little-archive"   # where privacy.html and terms.html are published
+    seller_name: str = ""                    # who sells the unlock, shown beside the Pay button; empty shows no seller line
     # Sign in with Apple, revoked when an account is deleted (server/apple_signin.py). All four or none: the team id, the id of the
     # team's Sign in with Apple key, the client id (the app's bundle id) and the key itself, given inline or as a path to the .p8 file.
     apple_signin_team_id: str = ""
@@ -161,6 +162,7 @@ class Config:
             tap_allow_test_purchases=str(values.get("LA_TAP_ALLOW_TEST_PURCHASES", "")).strip().lower() in {"1", "true", "yes", "on"},
             supabase_publishable_key=values.get("LA_SUPABASE_PUBLISHABLE_KEY", "").strip(),
             public_site_url=values.get("LA_PUBLIC_SITE_URL", "").strip().rstrip("/") or "https://abdulmalikaltararwa-oss.github.io/little-archive",
+            seller_name=values.get("LA_SELLER_NAME", "").strip(),
             apple_signin_team_id=values.get("LA_APPLE_SIGNIN_TEAM_ID", "").strip(),
             apple_signin_key_id=values.get("LA_APPLE_SIGNIN_KEY_ID", "").strip(),
             apple_signin_client_id=values.get("LA_APPLE_SIGNIN_CLIENT_ID", "").strip(),
@@ -342,7 +344,7 @@ class Config:
         return bool(self.apple_signin_team_id and self.apple_signin_key_id and self.apple_signin_client_id and (self.apple_signin_private_key or self.apple_signin_private_key_file))
 
     def _validate_pay_page(self):
-        """The two values the pay page shows a browser. The publishable key is public; anything that could be a secret key is refused,
+        """The values the pay page shows a browser. The publishable key is public; anything that could be a secret key is refused,
         because this value is written into a page anyone can open."""
         key = self.supabase_publishable_key
         if key:
@@ -360,8 +362,11 @@ class Config:
                 raise ValueError("LA_SUPABASE_PUBLISHABLE_KEY must be the project's publishable key (sb_publishable_...) or its legacy anon key. It is shown to browsers, so a secret key is refused.")
         site = self.public_site_url
         s = urlsplit(site)
-        if _unsafe_text(site) or len(site) > 2048 or s.scheme != "https" or not s.hostname or s.username or s.password or s.query or s.fragment or any(c in site for c in "\"<>'"):
+        # Empty (only a Config built by hand; the environment falls back to the project's site) means the page carries no links.
+        if site and (_unsafe_text(site) or len(site) > 2048 or s.scheme != "https" or not s.hostname or s.username or s.password or s.query or s.fragment or any(c in site for c in "\"<>'")):
             raise ValueError("LA_PUBLIC_SITE_URL must be the HTTPS address of the public site, without a query.")
+        if _unsafe_text(self.seller_name) or len(self.seller_name) > 120:
+            raise ValueError("LA_SELLER_NAME must be the seller's name on one line, at most 120 characters.")
 
     def require_account_deletion(self):
         """Hosted mode must be able to delete a person's sign-in with their library (App Store guideline 5.1.1(v)).

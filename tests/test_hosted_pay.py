@@ -53,10 +53,78 @@ class PayPageTests(PayCase):
     def test_the_page_is_served_with_the_price_and_what_a_browser_needs_to_sign_in(self):
         page = self.client.get("/pay")
         self.assertEqual((page.status_code, page.headers["content-type"], page.headers["cache-control"]), (200, "text/html; charset=utf-8", "no-store"))
-        for part in ('<html lang="en">', 'data-supabase-url="https://synthetic-project.supabase.test"', f'data-supabase-key="{PUBLISHABLE}"', "Pay 2.500 KWD", '<p class="price">2.500 <small>KWD</small></p>',
+        for part in ('<html lang="en">', 'data-supabase-url="https://synthetic-project.supabase.test"', f'data-supabase-key="{PUBLISHABLE}"', "Pay 2.500 KWD", '<p class="price"><bdi><small>KWD</small> 2.500</bdi></p>',
                      "one payment · once · no subscription", f'href="{SITE}/privacy.html"', f'href="{SITE}/terms.html"', '<label for="email">Email</label>', '<label for="password">Password</label>',
-                     'id="error" role="alert"', 'id="status" role="status"', "shows the ways to pay it supports", "Little Archive never sees your card"):
+                     'id="error" role="alert"', 'id="status" role="status"', "shows the ways to pay it supports", "Little Archive never sees your card", "Nothing is charged until you confirm there",
+                     "free, forever", "the unlock adds", "<li>KNET</li>", "<li>Apple Pay</li>", "<li>Card</li>"):
             self.assertIn(part, page.text)
+        self.assertNotIn("{", page.text, "nothing of the template is left unfilled")
+
+    def test_every_state_the_script_shows_is_in_the_page_and_only_the_offer_is_open_at_first(self):
+        page, script = self.client.get("/pay").text, self.client.get("/pay/pay.js").text
+        self.assertIn("var VIEWS = ['signin', 'offer', 'open', 'done'];", script)
+        for view, title in (("offer", "Pay once, keep it."), ("signin", "Sign in to pay"), ("open", "A payment is already open"), ("done", "Everything is open")):
+            hidden = "" if view == "offer" else " hidden"
+            self.assertIn(f'<section id="{view}" aria-labelledby="{view}-title"{hidden}>', page)
+            self.assertIn(f'<h1 id="{view}-title" tabindex="-1">{title}</h1>', page, "the script moves the keyboard's focus to each view's heading")
+        self.assertEqual(len(re.findall(r"<h1[ >]", page)), 4)
+        # Signed out, the offer's button leads to the sign-in view; the Pay button and who is signed in appear only with a sign-in.
+        for part in ('<button type="button" class="btn primary lg" id="pay" hidden>Pay 2.500 KWD</button>', '<p class="signed" id="signed" hidden>', 'id="begin">', 'id="back">', 'id="check">Check again</button>',
+                     'id="google" hidden>Continue with Google</button>', 'id="signout">Sign out</button>', "you do not need to pay twice", "<noscript>"):
+            self.assertIn(part, page)
+        for said in ("That sign-in is not valid here. Sign in again.", "That email and password do not match an account.", "Google did not finish signing you in. Try again.",
+                     "Paying on the web is not switched on for this service yet. Nothing was charged.", "The payment could not be started just now. Nothing was charged. Try again in a moment.",
+                     "No payment has been confirmed yet. If you already paid, wait a minute and check again before paying a second time.", "Taking you to Tap Payments.", "Checking your account.", "Signing in."):
+            self.assertIn(said, script)
+        for button in re.findall(r"<button[^>]*>", page):
+            self.assertIn('type="', button, "every control is a real button, reachable from the keyboard")
+        self.assertNotIn('tabindex="0"', page)
+        self.assertNotIn("<div role=", page)
+
+    def test_the_price_is_the_configured_one_in_the_currency_s_own_places(self):
+        for settings, price, button in (({"tap_price": "3"}, "<small>KWD</small> 3.000", "Pay 3.000 KWD"), ({"tap_price": "3.000"}, "<small>KWD</small> 3.000", "Pay 3.000 KWD"),
+                                        ({"tap_price": "9.5", "tap_currency": "USD"}, "<small>USD</small> 9.50", "Pay 9.50 USD"), ({"tap_price": "0.750", "tap_currency": "BHD"}, "<small>BHD</small> 0.750", "Pay 0.750 BHD")):
+            self.build(**settings)
+            page = self.client.get("/pay").text
+            self.assertIn(f'<p class="price"><bdi>{price}</bdi></p>', page, settings)
+            self.assertIn(f">{button}</button>", page, settings)
+        for name in ("pay.html", "pay.js"):
+            written = (ROOT / "server" / "purchases" / "web" / name).read_text(encoding="utf-8")
+            for figure in ("3.000", "2.500", "KWD", "KD "):
+                self.assertNotIn(figure, written, name + " carries no price or currency of its own")
+
+    def test_the_seller_is_named_beside_the_pay_button_only_when_the_operator_set_one(self):
+        self.assertNotIn("Sold by", self.client.get("/pay").text, "no seller is invented")
+        self.build(seller_name="Example Trading Co. W.L.L.")
+        page = self.client.get("/pay").text
+        self.assertIn('<p class="legal">Sold by Example Trading Co. W.L.L.</p>', page)
+        offer = page[page.index('<section id="offer"'):page.index('<section id="signin"')]
+        self.assertLess(offer.index('id="pay"'), offer.index("Sold by"), "in the offer, after the Pay button")
+        self.build(seller_name='Noor & Sons <script>alert(1)</script> "x"')
+        page = self.client.get("/pay").text
+        self.assertIn("Sold by Noor &amp; Sons &lt;script&gt;alert(1)&lt;/script&gt; &quot;x&quot;</p>", page)
+        self.assertNotIn("<script>alert", page)
+        self.build(seller_name="{price} {0} {supabase_key}")
+        self.assertIn("Sold by {price} {0} {supabase_key}</p>", self.client.get("/pay").text, "a name is text, never part of the template")
+
+    def test_the_refund_and_agreement_lines_link_the_public_site_and_lose_only_their_links_without_one(self):
+        page = self.client.get("/pay").text
+        offer = page[page.index('<section id="offer"'):page.index('<section id="signin"')]
+        for line in (f'<p class="legal">14-day refund: <a href="{SITE}/terms.html#refunds">write to us</a>.</p>',
+                     f'<p class="legal">By paying you agree to the <a href="{SITE}/terms.html">Terms</a> and <a href="{SITE}/privacy.html">Privacy policy</a>.</p>'):
+            self.assertIn(line, offer)
+            self.assertLess(offer.index('id="pay"'), offer.index(line))
+        self.assertIn('<h2 id="refunds">Refunds</h2>', (ROOT / "web" / "terms.html").read_text(encoding="utf-8"), "the section the refund line points at exists")
+        self.assertIn(f'<li><a href="{SITE}/support.html">Support</a></li>', page)
+        self.build(public_site_url="https://archive.example/site")
+        self.assertIn('href="https://archive.example/site/terms.html#refunds"', self.client.get("/pay").text)
+        self.build(public_site_url="")
+        bare = self.client.get("/pay")
+        self.assertEqual(bare.status_code, 200, "the page is still served")
+        for line in ('<p class="legal">14-day refund: write to us.</p>', '<p class="legal">By paying you agree to the Terms and Privacy policy.</p>', "Pay 2.500 KWD"):
+            self.assertIn(line, bare.text)
+        self.assertEqual(re.findall(r'href="([^"]+)"', bare.text), ["/pay/pay.css", "#main"], "no link without an address to point it at")
+        self.assertNotIn("<footer", bare.text)
 
     def test_the_policy_allows_no_inline_code_and_connections_only_here_and_to_the_sign_in_project(self):
         page = self.client.get("/pay")
@@ -113,9 +181,15 @@ class PayPageTests(PayCase):
         charge = self.tap.created[0]["id"]
         waiting = self.client.get("/api/purchases/tap/return", params={"tap_id": charge})
         self.assertIn('<link rel="stylesheet" href="/pay/pay.css">', waiting.text)
-        self.assertIn('<a href="/pay">Back to the pay page</a>', waiting.text)
+        self.assertIn('<a class="btn primary lg" href="/pay">Back to the pay page</a>', waiting.text)
+        self.assertIn('<p class="notice petal">Your payment is still being confirmed.', waiting.text)
         self.tap.change(charge, status="DECLINED")
-        self.assertIn('<a href="/pay">Start again on the pay page</a>', self.client.get("/api/purchases/tap/return", params={"tap_id": charge}).text)
+        declined = self.client.get("/api/purchases/tap/return", params={"tap_id": charge}).text
+        self.assertIn('<a class="btn primary lg" href="/pay">Start again on the pay page</a>', declined)
+        self.assertIn('<p class="notice err">The payment was not completed, so nothing was unlocked.</p>', declined)
+        style = self.client.get("/pay/pay.css").text
+        for rule in ("main.returned", ".notice.petal", ".notice.err", ".notice.sage", ".whisper"):
+            self.assertIn(rule, style, "the return page is styled by this stylesheet")
         self.build(supabase_publishable_key="")
         plain = self.client.get("/api/purchases/tap/return", params={"tap_id": "chg_TS" + "a" * 32})
         self.assertNotIn("/pay", plain.text, "with the pay page off, nothing points at it")
@@ -206,10 +280,14 @@ class PaySettingsTests(unittest.TestCase):
     def test_the_defaults_and_what_is_read(self):
         config = Config.from_env(self.values())
         config.validate()
-        self.assertEqual((config.supabase_publishable_key, config.public_site_url, config.tap_allow_test_purchases), ("", SITE, False))
-        config = Config.from_env(self.values(LA_SUPABASE_PUBLISHABLE_KEY=PUBLISHABLE, LA_PUBLIC_SITE_URL="https://archive.example/site/", LA_TAP_ALLOW_TEST_PURCHASES="true"))
+        self.assertEqual((config.supabase_publishable_key, config.public_site_url, config.tap_allow_test_purchases, config.seller_name), ("", SITE, False, ""))
+        config = Config.from_env(self.values(LA_SUPABASE_PUBLISHABLE_KEY=PUBLISHABLE, LA_PUBLIC_SITE_URL="https://archive.example/site/", LA_TAP_ALLOW_TEST_PURCHASES="true", LA_SELLER_NAME="  Example Trading Co. W.L.L. "))
         config.validate()
-        self.assertEqual((config.supabase_publishable_key, config.public_site_url, config.tap_allow_test_purchases), (PUBLISHABLE, "https://archive.example/site", True))
+        self.assertEqual((config.supabase_publishable_key, config.public_site_url, config.tap_allow_test_purchases, config.seller_name), (PUBLISHABLE, "https://archive.example/site", True, "Example Trading Co. W.L.L."))
+        Config.from_env(self.values(LA_SELLER_NAME="شركة مثال للتجارة")).validate()
+        for bad in ("Two\nlines", "x" * 121, "Bell\x07"):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                Config.from_env(self.values(LA_SELLER_NAME=bad)).validate()
         Config.from_env(self.values(LA_SUPABASE_PUBLISHABLE_KEY=self.legacy("anon"))).validate()
 
     def test_a_key_that_could_be_a_secret_is_refused_because_the_page_shows_it(self):

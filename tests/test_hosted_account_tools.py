@@ -175,7 +175,7 @@ class DeleteAccountCommandTests(unittest.TestCase):
 class WrittenDownTests(unittest.TestCase):
     def test_every_setting_added_for_payments_and_apple_sign_in_is_in_the_example_file_with_no_value(self):
         example = (ROOT / ".env.example").read_text(encoding="utf-8")
-        names = ["LA_TAP_SECRET_KEY", "LA_TAP_PRICE", "LA_TAP_CURRENCY", "LA_TAP_RETURN_URL", "LA_TAP_MERCHANT_ID", "LA_TAP_ALLOW_TEST_PURCHASES", "LA_SUPABASE_PUBLISHABLE_KEY", "LA_PUBLIC_SITE_URL",
+        names = ["LA_TAP_SECRET_KEY", "LA_TAP_PRICE", "LA_TAP_CURRENCY", "LA_TAP_RETURN_URL", "LA_TAP_MERCHANT_ID", "LA_TAP_ALLOW_TEST_PURCHASES", "LA_SUPABASE_PUBLISHABLE_KEY", "LA_PUBLIC_SITE_URL", "LA_SELLER_NAME",
                  "LA_APPLE_SIGNIN_TEAM_ID", "LA_APPLE_SIGNIN_KEY_ID", "LA_APPLE_SIGNIN_CLIENT_ID", "LA_APPLE_SIGNIN_PRIVATE_KEY", "LA_APPLE_SIGNIN_PRIVATE_KEY_FILE"]
         config = (ROOT / "server" / "config.py").read_text(encoding="utf-8")
         for name in names:

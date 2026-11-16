@@ -14,67 +14,97 @@
 <div class="wrap">
 <header class="site-header"><span class="brand">Little Archive</span></header>
 <main id="main" data-supabase-url="{supabase_url}" data-supabase-key="{supabase_key}">
+<noscript><p class="notice">This page needs JavaScript to sign you in and start the payment.</p></noscript>
+
+<section id="offer" aria-labelledby="offer-title">
 <p class="whisper">a one-time unlock</p>
-<h1>Pay once, keep it.</h1>
+<h1 id="offer-title" tabindex="-1">Pay once, keep it.</h1>
 <p class="lede">Saving, searching, importing and exporting are free. A few extras open with a single payment: no subscription, nothing to cancel.</p>
-<section class="adds" aria-labelledby="adds-title">
-<p class="whisper" id="adds-title">the unlock adds</p>
+<div class="cols">
+<section class="col" aria-labelledby="free-title">
+<p class="whisper" id="free-title">free, forever</p>
 <ul>
-<li>Recipe cards and cook mode</li>
-<li>Places on a map</li>
-<li>Ask your archive</li>
-<li>Transcripts of saved videos, within a fair-use limit</li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>Saving, search, collections, notes</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>Guided Instagram and TikTok import</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>Export everything, any time</span></li>
 </ul>
 </section>
-<p id="status" role="status" aria-live="polite"></p>
-<p id="error" role="alert"></p>
-<noscript><p>This page needs JavaScript to sign you in and start the payment.</p></noscript>
+<section class="col add" aria-labelledby="adds-title">
+<p class="whisper" id="adds-title">the unlock adds</p>
+<ul>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zM2 11h20M9 7V4M15 7V4"/></svg><span>Recipe cards and cook mode</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Places on a map</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span>Ask your archive</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 10h14M5 15h9"/></svg><span>Video transcripts, within a fair-use limit</span></li>
+</ul>
+</section>
+</div>
+<section class="pay" aria-label="Unlock">
+<div class="pay-price">
+<p class="price"><bdi><small>{currency}</small> {price}</bdi></p>
+<p class="mono">one payment · once · no subscription</p>
+</div>
+<div class="pay-act">
+<p class="signed" id="signed" hidden>Signed in as <b id="who"></b>. The unlock is attached to this account, on the web and in the app. <button type="button" class="link" id="signout">Sign out</button></p>
+<button type="button" class="btn primary lg" id="begin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/></svg>Unlock once</button>
+<button type="button" class="btn primary lg" id="pay" hidden>Pay {price} {currency}</button>
+<ul class="marks" aria-label="Ways to pay on the next page">
+<li>KNET</li>
+<li>Apple Pay</li>
+<li>Card</li>
+</ul>
+<div class="legals">
+{legal}
+</div>
+</div>
+</section>
+<p class="small fine">You pay on the page of Tap Payments, which shows the ways to pay it supports, such as KNET, Apple Pay or a card. Little Archive never sees your card. Nothing is charged until you confirm there.</p>
+</section>
 
 <section id="signin" aria-labelledby="signin-title" hidden>
-<h2 id="signin-title" tabindex="-1">Sign in to pay</h2>
-<p>Use your Little Archive account, the same one as in the app. The unlock is attached to that account.</p>
+<p><button type="button" class="link back" id="back"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Back</button></p>
+<h1 id="signin-title" tabindex="-1">Sign in to pay</h1>
+<p class="soft">Use your Little Archive account, the same one as in the app. The unlock is attached to that account.</p>
 <form id="signin-form" method="post" action="/pay" novalidate>
 <label for="email">Email</label>
 <input id="email" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required>
 <label for="password">Password</label>
 <input id="password" name="password" type="password" autocomplete="current-password" required>
-<button type="submit" class="btn primary">Sign in</button>
+<button type="submit" class="btn primary lg">Sign in</button>
 </form>
-<button type="button" class="btn" id="google" hidden>Continue with Google</button>
+<button type="button" class="btn lg" id="google" hidden>Continue with Google</button>
 <p class="small">Sign in with Apple is not offered on this page yet.</p>
 </section>
 
-<section id="offer" aria-labelledby="offer-title" hidden>
-<h2 id="offer-title" tabindex="-1">One payment, once</h2>
-<div class="panel">
-<p class="price">{price} <small>{currency}</small></p>
-<p class="mono">one payment · once · no subscription</p>
-</div>
-<p>Signed in as <b id="who"></b>. The unlock is attached to this account, on the web and in the app.</p>
-<button type="button" class="btn primary" id="pay">Pay {price} {currency}</button>
-<p class="small">You pay on the page of Tap Payments, which shows the ways to pay it supports, such as KNET, Apple Pay or a card. Little Archive never sees your card. Nothing is charged until you confirm there.</p>
-</section>
-
 <section id="open" aria-labelledby="open-title" hidden>
-<h2 id="open-title" tabindex="-1">A payment is already open</h2>
+<p class="whisper">a one-time unlock</p>
+<h1 id="open-title" tabindex="-1">A payment is already open</h1>
+<div class="notice petal">
+<p><b>Still waiting on the bank?</b></p>
 <p>A payment for this account is still being confirmed. If you paid, the unlock arrives by itself; you do not need to pay twice.</p>
 <button type="button" class="btn" id="check">Check again</button>
+</div>
 </section>
 
 <section id="done" aria-labelledby="done-title" hidden>
-<h2 id="done-title" tabindex="-1">Everything is open</h2>
-<p>This account has the unlock. You can close this page and go back to Little Archive.</p>
+<p class="whisper">a one-time unlock</p>
+<h1 id="done-title" tabindex="-1">Everything is open</h1>
+<p class="soft">This account has the unlock. Thank you for keeping the lights on.</p>
+<div class="notice sage with-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><p><b>Unlocked for <span id="who-done"></span>.</b> It applies on the web and in the app when you sign in with this account.</p></div>
+<ul class="opened">
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zM2 11h20M9 7V4M15 7V4"/></svg><span>Recipe cards and cook mode</span><span class="mono">open</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Places on a map</span><span class="mono">open</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span>Ask your archive</span><span class="mono">open</span></li>
+<li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 10h14M5 15h9"/></svg><span>Video transcripts</span><span class="mono">open</span></li>
+</ul>
+<p>You can close this page and go back to Little Archive.</p>
+<p class="small center">There is nothing to renew and nothing to cancel. <button type="button" class="link" id="signout-done">Sign out</button></p>
 </section>
 
-<p><button type="button" class="link" id="signout" hidden>Sign out</button></p>
+<p id="status" role="status" aria-live="polite"></p>
+<p id="error" role="alert"></p>
 </main>
-<footer class="site-footer">
-<ul>
-<li><a href="{site}/privacy.html">Privacy</a></li>
-<li><a href="{site}/terms.html">Terms</a></li>
-<li><a href="{site}/support.html">Support</a></li>
-</ul>
-</footer>
+{footer}
 </div>
 </body>
 </html>

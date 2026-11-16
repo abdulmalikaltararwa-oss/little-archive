@@ -63,10 +63,11 @@ RETURN_PAGE = """<!doctype html>
 </head>
 <body>
 <div class="wrap">
-<main>
+<main class="returned">
+<p class="whisper">a one-time unlock</p>
 <h1>{title}</h1>
-<p>{text}</p>{more}
-<p>You can close this page and go back to Little Archive.</p>
+<p class="notice {tone}">{text}</p>{more}
+<p class="soft">You can close this page and go back to Little Archive.</p>
 </main>
 </div>
 </body>
@@ -81,6 +82,7 @@ RETURN_PAGES = {
 }
 RETURN_STYLE = '\n<link rel="stylesheet" href="/pay/pay.css">'
 RETURN_LINKS = {"unpaid": "Start again on the pay page", "pending": "Back to the pay page", "later": "Back to the pay page"}
+RETURN_TONES = {"paid": "sage", "pending": "petal", "unpaid": "err", "later": "petal", "unknown": "err"}  # class names in pay.css
 
 
 def install_routes(app, *, owner, service, hosted_route, entitlements):
@@ -131,8 +133,8 @@ def install_routes(app, *, owner, service, hosted_route, entitlements):
             kind = {"purchase_not_paid": "unpaid", "purchases_unavailable": "later"}.get(refusal.code, "unknown")
         status, title, text = RETURN_PAGES[kind]
         pay = service.pay_page
-        more = f'\n<p><a href="/pay">{RETURN_LINKS[kind]}</a></p>' if pay and kind in RETURN_LINKS else ""
-        return HTMLResponse(RETURN_PAGE.format(title=title, text=text, style=RETURN_STYLE if pay else "", more=more), status_code=status)
+        more = f'\n<p><a class="btn primary lg" href="/pay">{RETURN_LINKS[kind]}</a></p>' if pay and kind in RETURN_LINKS else ""
+        return HTMLResponse(RETURN_PAGE.format(title=title, text=text, tone=RETURN_TONES[kind], style=RETURN_STYLE if pay else "", more=more), status_code=status)
 
     @app.post("/api/purchases/tap/notifications", dependencies=hosted_route)
     async def tap_notification(request: Request):

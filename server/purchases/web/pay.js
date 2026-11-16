@@ -1,5 +1,8 @@
 // The pay page of a hosted server: sign in to the Little Archive account, then start the one-time payment at Tap.
 //
+// The page opens on the offer (what is free, what the unlock adds, the price). Its button leads to the sign-in view; once signed
+// in, the same offer shows who is signed in and the Pay button instead.
+//
 // Sign-in goes straight to the operator's Supabase project with its publishable key (public by design), exactly as the phone app
 // does: POST /auth/v1/token?grant_type=password, or Google through the browser with PKCE (GET /auth/v1/authorize, then
 // POST /auth/v1/token?grant_type=pkce). The access token is kept in this script's memory only: closing or reloading the page
@@ -24,13 +27,22 @@
   // `quiet` leaves the keyboard's focus where it is (the first view, when the page has only just loaded).
   function show(name, quiet) {
     VIEWS.forEach(function (view) { $(view).hidden = view !== name; });
-    $('signout').hidden = !token;
+    $('signed').hidden = !token;
+    $('begin').hidden = !!token;
+    $('pay').hidden = !token;
     $('who').textContent = email;
+    $('who-done').textContent = email || 'this account';
     if (!quiet) $(name + '-title').focus();
   }
 
-  function say(text) { $('status').textContent = text || ''; }
-  function fail(text) { say(''); $('error').textContent = text || ''; }
+  // The two messages sit under the views, so on a small screen each is brought into sight when it says something.
+  function tell(id, text) {
+    $(id).textContent = text || '';
+    if (text) $(id).scrollIntoView({ block: 'nearest' });
+  }
+
+  function say(text) { tell('status', text); }
+  function fail(text) { say(''); tell('error', text); }
 
   function busy(on) {
     main.setAttribute('aria-busy', on ? 'true' : 'false');
@@ -72,10 +84,11 @@
     return 'Sign-in did not work just now. Try again in a moment.';
   }
 
+  // With a message (a sign-in that failed or is no longer valid) the sign-in view; without one (Sign out) the offer again.
   function signedOut(message) {
     token = null;
     email = '';
-    show('signin');
+    show(message ? 'signin' : 'offer');
     fail(message || '');
   }
 
@@ -184,7 +197,10 @@
   $('pay').addEventListener('click', pay);
   $('check').addEventListener('click', function () { account(true); });
   $('signout').addEventListener('click', function () { signedOut(''); });
+  $('signout-done').addEventListener('click', function () { signedOut(''); });
+  $('begin').addEventListener('click', function () { fail(''); show('signin'); });
+  $('back').addEventListener('click', function () { fail(''); show('offer'); });
 
-  comeBack().then(function (handled) { if (!handled) show('signin', true); });
+  comeBack().then(function (handled) { if (!handled) show('offer', true); });
   offerGoogle();
 })();
