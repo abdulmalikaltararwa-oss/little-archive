@@ -85,8 +85,9 @@ export function Modal({ open, onClose, title, description, children, footer, siz
                   'data-[state=closed]:slide-out-to-right-8 data-[state=open]:slide-in-from-right-8 max-sm:data-[state=closed]:slide-out-to-bottom-8 max-sm:data-[state=open]:slide-in-from-bottom-8',
                 ]
               : [
-                  // Phone: a sheet on the bottom edge. Wide: a centred card.
-                  'inset-x-0 bottom-0 max-h-[94dvh] w-full rounded-t-xl border border-line',
+                  // Phone: a sheet on the bottom edge, never taller than the room under the status bar (in the phone app
+                  // the page is short while the keyboard is up; where there is no inset this is 94dvh). Wide: a centred card.
+                  'inset-x-0 bottom-0 max-h-[min(94dvh,calc(100dvh-var(--safe-top)-8px))] w-full rounded-t-xl border border-line',
                   'max-sm:data-[state=closed]:slide-out-to-bottom-10 max-sm:data-[state=open]:slide-in-from-bottom-10',
                   'sm:inset-auto sm:top-1/2 sm:left-1/2 sm:max-h-[min(88dvh,860px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
                   SIZES[size],
