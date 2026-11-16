@@ -21,7 +21,7 @@ For every type below: **Linked to the person: Yes. Used for tracking: No. Purpos
 | Apple's data type | Declare | What it is here | Source |
 | --- | --- | --- | --- |
 | Contact Info: Email Address | Yes | The account's email address, held by the sign-in service (Supabase). | `mobile/src/supabase.js`; `docs/privacy.md`, "If someone else hosts your library". The server itself stores no email (`server/identity.py`). |
-| Contact Info: Name | Yes | With Continue with Google, Google gives the Supabase project a name and a picture address. With Continue with Apple, the app asks for the name scope (`requestedScopes = [.fullName, .email]`) but does not read or send the name. | `mobile/ios/App/App/SocialSignInPlugin.swift` line 121; `docs/mobile-app.md`, "App Store Connect and Play Console" and risk 12. |
+| Contact Info: Name | Yes | With Continue with Google, Google gives the Supabase project a name and a picture address. Continue with Apple asks for the email only. | `mobile/ios/App/App/SocialSignInPlugin.swift` (`requestedScopes = [.email]`); `docs/mobile-app.md`, "App Store Connect and Play Console" and risk 12. |
 | Identifiers: User ID | Yes | The account id (a random identifier from Supabase). It selects the library, and a purchase is tagged with it. | `server/identity.py`; `server/tenancy.py`; `mobile/src/purchases.js` (`accountTag`). |
 | Purchases: Purchase History | Yes | The App Store's signed transaction for the one-time unlock is sent to the server, which keeps Apple's transaction id. | `mobile/ios/App/App/StorePurchasesPlugin.swift`; `server/purchases/apple.py`; `server/purchases/store.py`. |
 | User Content: Other User Content | Yes | Saved links, titles, captions, notes, tags, collections, and the question typed into "ask your archive". Text from saves is also sent to Google Gemini and Groq when the person uses an AI feature. | `server/storage.py`; `server/enrich/understanding.py`; `server/enrich/ask.py`; `server/enrich/transcribe.py`. |
@@ -44,30 +44,12 @@ For every type below: **Linked to the person: Yes. Used for tracking: No. Purpos
 | Diagnostics: Crash Data, Performance Data, Other | No crash or diagnostics software is in the app. |
 | Surroundings, Body | None. |
 
-## What must be added to the privacy manifest
+## The privacy manifest
 
-`mobile/ios/App/App/PrivacyInfo.xcprivacy` declares three collected types today: email address, purchase history
-and other user content. To match the answers above it needs four more entries in `NSPrivacyCollectedDataTypes`,
-each with `NSPrivacyCollectedDataTypeLinked` true, `NSPrivacyCollectedDataTypeTracking` false and the single
-purpose `NSPrivacyCollectedDataTypePurposeAppFunctionality`:
-
-| Add this value for `NSPrivacyCollectedDataType` | For |
-| --- | --- |
-| `NSPrivacyCollectedDataTypeUserID` | The account id. |
-| `NSPrivacyCollectedDataTypeName` | The name Google or Apple may give at sign-in. Drop this one if the `.fullName` scope is removed and Google sign-in is not offered. |
-| `NSPrivacyCollectedDataTypePhotosorVideos` | Preview images the person uploads. |
-| `NSPrivacyCollectedDataTypeProductInteraction` | The usage counts. |
-
-The four names follow Apple's published list of collected data types as recalled here; they were not checked
-against Apple's page in this work. **Confirm each spelling in Apple's privacy manifest documentation before
-editing the file**, since Xcode rejects an unknown value only at upload.
-
-Nothing else in the manifest needs to change: `NSPrivacyTracking` stays `false`, the tracking-domain list stays
-empty, and the one required-reason API entry (user defaults, reason `1C8F.1`) is unchanged. The share extension's
-own manifest (`mobile/ios/App/ShareExtension/PrivacyInfo.xcprivacy`) collects nothing and is correct as it is: the
-extension only hands a link to the app.
-
-This file was not edited here. The `mobile/` folder belongs to another builder.
+`mobile/ios/App/App/PrivacyInfo.xcprivacy` declares the seven collected types above (email address, name, user
+id, purchase history, other user content, photos or videos, product interaction), each linked to the person, not
+used for tracking, for app functionality. The spellings were checked against Apple's reference pages when they
+were added. Keep the manifest and these answers the same.
 
 ## Things the owner must confirm before answering
 

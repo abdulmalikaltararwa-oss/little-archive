@@ -23,49 +23,55 @@ in the linked docs, not here. Last updated: 2026-11-16.
 - Server: single-owner and hosted modes, understanding layer, recipes, places, ask, guided import, purchases
   for Apple and Google.
 - React interface, synthetic demo, Chrome extension, Mac app build, container image.
-- Phone app (iOS and Android shell): first-launch server choice, hosted and own-server sign-in, share sheet,
-  native purchase sheet.
-- Google and Apple sign-in code. Release validation is green on main at `038f7e7`.
+- Phone app (iOS and Android shell): first-launch server choice with own-server guidance, hosted and
+  own-server sign-in, Google and Apple sign-in, password reset for hosted accounts, share sheet, native
+  purchase sheet. iPhone only in version 1.
+- A permission step before saved content is sent to an AI service (kept per account, switch in Settings).
+  The interface enforces it; the server does not refuse AI routes without it.
+- Privacy policy and terms links in Settings and on the unlock screen; privacy, terms, support and account
+  deletion pages on the public site; the store listing pack in `docs/store/`.
+- Revoking a Sign in with Apple when an account is deleted (off until the Apple key is set).
+- Release validation was last green on main at `038f7e7`.
 
 ## Sign-in, proven and not
 
 - Google: proven end to end on 2026-11-16 from the iOS simulator against staging and the real Supabase
-  project (Continue with Google, Google's page, back into an empty library). The Google setup is in testing
-  mode: only listed test users can sign in until it is published.
-- Apple: switched on in Supabase and the app id is registered with Apple (Sign in with Apple ticked). The
-  sheet has never run: it needs a signed build on a real device.
+  project. The Google setup is in testing mode: only listed test users can sign in until it is published.
+- Apple: switched on in Supabase and the app id is registered with Apple. The sheet has never run: it needs
+  a signed build on a real device. Revoking on deletion has never met Apple.
+- Password reset: proven only in tests against a stand-in. The link must be opened within about five minutes
+  on the same phone. Never run on a simulator or against the real project.
 - Known fault: Google's page names the Supabase address, not Little Archive.
-- Fixed on iOS: the keyboard no longer slides the page under the status bar (the web view ends at the
-  keyboard). Proven on the iOS 26.5 simulator only; iOS 15 to 18, an iPad and a physical device are not run.
+- The keyboard no longer slides the page under the status bar on iOS. Proven on the iOS 26.5 simulator only.
 
 ## Running
 
 - A staging copy of the hosted service, pinned to the image built from `4cd0fae`. Proven from the iOS
   simulator: create an account, confirm by email, sign in, save a link, data survives a restart.
-  Daily backup; restore proven only with an empty library.
-- The committed phone app still points at a placeholder address (`mobile/app.config.json`).
+- The phone app names the production address the hosting operator chose, `https://little-archive.altararwah.com`.
+  That server does not exist yet.
 
 ## Not built
 
-- Tap payment on the server and a pay page.
-- Browser sign-in for hosted accounts (hosted mode serves the API only).
-- Password reset for hosted accounts.
-- Revoking an Apple sign-in when an account is deleted.
-- Own-server setup guidance inside the app.
+- A scheduled refund follow-up for web payments; Arabic.
+- Browser sign-in for hosted accounts beyond the pay page (hosted mode serves the API only).
 
 ## Never run for real
 
-- Store purchases (need sandbox accounts), an Android device, the Mac app window, AI features against a paid
-  provider, physical phones, VoiceOver and TalkBack.
+- Store purchases (need sandbox accounts), a Tap payment (test or live key), an Android device, the Mac app
+  window, AI features against a paid provider, physical phones, VoiceOver and TalkBack, the AI permission
+  dialog on a phone.
 
 ## Waiting on the owner
 
+- The unlock price (stores and KWD), the Tap secret key (test first), Apple Pay domain verification in Tap.
+- A public contact address: the four site pages show `support@[owner to set]`.
 - Publish the Google sign-in setup before real users. Register the share extension id and the app group
-  with Apple.
-- The unlock price, and whether the store apps sell the unlock through Tap or through the stores.
-- The production address for the hosted service.
-- Arabic: the interface is English only today. Decide before a store listing or a payment page.
-- Apple and Google developer setup for sandbox purchases and store listings.
+  with Apple; create a Sign in with Apple key for revocation.
+- An Android upload keystore kept outside the repository, and Play App Signing.
+- Check the Supabase reset-password email template and try one reset against staging.
+- Arabic: the interface is English only today.
+- Store accounts: agreements, tax and banking, sandbox testers, listings (text is in `docs/store/`).
 
 ## Rules of the road
 

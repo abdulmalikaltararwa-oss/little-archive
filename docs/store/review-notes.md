@@ -85,9 +85,9 @@ AI features are optional. Before the first one the app asks permission ("Allow" 
 
 Each line names where the requirement is written.
 
-1. **A production address exists and the app is built against it.** `mobile/app.config.json` still holds the
-   placeholder `https://app.little-archive.example` (`docs/mobile-app.md`, "The hosted service's address and keys").
-   With the placeholder the first screen cannot connect, and review fails at once.
+1. **A production address exists and the app is built against it.** `mobile/app.config.json` names
+   `https://little-archive.altararwah.com` (`docs/mobile-app.md`, "The hosted service's address and keys"). That
+   server does not exist yet; until it does the first screen cannot connect, and review fails at once.
 2. **The server is up, in hosted mode, with the Supabase secret key set** (`LA_SUPABASE_SERVICE_KEY`), so that
    deleting an account also removes the sign-in (`docs/hosted-mode.md`, "Configure" and "Account deletion").
 3. **Apple purchases accept the sandbox:** `LA_APPLE_ENVIRONMENTS=Production,Sandbox`, with the real
