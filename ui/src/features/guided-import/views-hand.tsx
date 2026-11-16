@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { formatDate } from '@web/utils.js';
 import { ArrowLeft, ArrowRight, Play, Upload, X } from 'lucide-react';
+import { useServerWords } from '@/app/archive-context';
 import { Field, Notice } from '@/components/field';
 import { Ascii, AsciiProgress } from '@/components/fx/ascii';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import type { Guide, GuidedImport } from './api';
 import { chunkCount, expandRanges, pieceMap } from './chunks';
 import { canResumeWith, checkFile, findResumable, listAccepts, type Choice } from './flow';
-import { Chevron, DropZone, FileLine, Panel, Problem, StepHeading } from './parts';
+import { Chevron, DropZone, FileLine, Panel, Problem, ServerName, StepHeading } from './parts';
 import { bytesPerSecond, doneBytes, secondsLeft, type UploadState } from './upload-state';
 import { formatBytes, formatRate, formatRemaining } from './words';
 
@@ -65,7 +66,7 @@ export function AddView({ choice, guide, limits, imports, state, onBack, onSend 
             {resume ? (
               <Notice tone="sage">
                 <strong className="font-semibold">You started this one before.</strong>
-                <span className="mt-1 block text-ink-soft">{resume.upload.received_count.toLocaleString()} of {resume.upload.chunks_total.toLocaleString()} pieces are already on your server, so only the rest are sent.</span>
+                <span className="mt-1 block text-ink-soft">{resume.upload.received_count.toLocaleString()} of {resume.upload.chunks_total.toLocaleString()} pieces are already on <ServerName />, so only the rest are sent.</span>
               </Notice>
             ) : null}
             <details className="group/d rounded-md border border-line px-4">
@@ -107,7 +108,8 @@ export function SendingView({ state, onContinue, onCancel }: { state: UploadStat
   const bytes = doneBytes(state);
   const percent = state.size ? Math.round((bytes / state.size) * 100) : 0;
   // Screen readers hear every tenth, not every piece.
-  const spoken = finishing ? 'All pieces are on your server. Reading the file.' : paused ? 'The upload is paused.' : `${Math.floor(percent / 10) * 10} percent of the file is on your server.`;
+  const w = useServerWords();
+  const spoken = w(finishing ? 'All pieces are on your server. Reading the file.' : paused ? 'The upload is paused.' : `${Math.floor(percent / 10) * 10} percent of the file is on your server.`);
   const rate = bytesPerSecond(state);
   const left = formatRemaining(secondsLeft(state));
 
@@ -156,6 +158,7 @@ export function SendingView({ state, onContinue, onCancel }: { state: UploadStat
 /* Picking an interrupted upload up again ------------------------------------------------------------------------ */
 
 export function ResumeView({ view, accept, onFile, onCancel }: { view: GuidedImport; accept: string; onFile(file: File): void; onCancel(): void }) {
+  const w = useServerWords();
   const [problem, setProblem] = useState('');
   const have = new Set(expandRanges(view.upload.received, view.upload.chunks_total));
   const missing = Math.max(0, view.upload.chunks_total - view.upload.received_count);
@@ -171,11 +174,11 @@ export function ResumeView({ view, accept, onFile, onCancel }: { view: GuidedImp
     <>
       <StepHeading
         title="Pick up where you left off"
-        lede={<>{view.upload.received_count.toLocaleString()} of {view.upload.chunks_total.toLocaleString()} pieces of <span dir="auto" className="font-semibold text-ink">{view.filename}</span> are already on your server. Add the same file again and only the other {missing.toLocaleString()} are sent.</>}
+        lede={<>{view.upload.received_count.toLocaleString()} of {view.upload.chunks_total.toLocaleString()} pieces of <span dir="auto" className="font-semibold text-ink">{view.filename}</span> are already on <ServerName />. Add the same file again and only the other {missing.toLocaleString()} are sent.</>}
       />
       <Panel className="flex max-w-3xl flex-col gap-5">
         <div className="flex flex-col gap-2.5">
-          <AsciiProgress label="Pieces already on your server" value={view.upload.received_count} max={Math.max(1, view.upload.chunks_total)} />
+          <AsciiProgress label={w('Pieces already on your server')} value={view.upload.received_count} max={Math.max(1, view.upload.chunks_total)} />
           <PieceMap total={view.upload.chunks_total} done={have} inflight={EMPTY} />
           <p className="num text-xs text-ink-soft">{formatBytes(view.size_bytes)} in all · started {formatDate(view.created_at)}</p>
         </div>

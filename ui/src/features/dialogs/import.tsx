@@ -5,6 +5,7 @@ import { countLabel, errorMessage } from '@web/utils.js';
 import { cn } from 'cn';
 import { ArrowRight, Link2, Plus, Route, Sparkles, Upload } from 'lucide-react';
 import { useArchive } from '@/app/archive-context';
+import { serverWords } from '@/lib/server-words';
 import { openDialog, toast } from '@/app/ui-state';
 import { FormError, Notice, Section } from '@/components/field';
 import { Ascii, AsciiProgress } from '@/components/fx/ascii';
@@ -99,7 +100,7 @@ export function ImportDialog({ spec, close }: DialogProps<'import'>) {
       onClose={close}
       canClose={canClose}
       title="Bring your saves home"
-      description="Import an account export, bookmarks, or a previous Little Archive export. Files are processed by your own server."
+      description={serverWords('Import an account export, bookmarks, or a previous Little Archive export. Files are processed by your own server.', archive.backend.mode)}
       opener={spec.opener}
     >
       <form noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-4">

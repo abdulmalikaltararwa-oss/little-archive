@@ -8,7 +8,7 @@ import { Ascii, AsciiProgress } from '@/components/fx/ascii';
 import { Button } from '@/components/ui/button';
 import type { GuidedImport, PlatformId } from './api';
 import type { Choice } from './flow';
-import { Chevron, FileLine, Panel, Problem, Stat, StepHeading } from './parts';
+import { Chevron, FileLine, Panel, Problem, ServerName, Stat, StepHeading } from './parts';
 import { coverageSentence, explainRejection } from './words';
 
 /* Importing ------------------------------------------------------------------------------------------------- */
@@ -40,7 +40,7 @@ export function ImportingView({ view, slow, busy, onNudge, onCancel, onLibrary }
         {slow ? (
           <Notice tone="petal" role="status">
             <strong className="font-semibold">This is taking longer than usual.</strong>
-            <span className="mt-1 block text-ink-soft">Your server may have been restarted. Asking it to continue is safe: it picks up from where it stopped and repeats nothing.</span>
+            <span className="mt-1 block text-ink-soft"><ServerName capital /> may have been restarted. Asking it to continue is safe: it picks up from where it stopped and repeats nothing.</span>
             <Button variant="outline" size="sm" className="mt-3" disabled={busy} aria-busy={busy || undefined} onClick={onNudge}><RotateCw />Continue</Button>
           </Notice>
         ) : null}
@@ -141,7 +141,7 @@ export function AgainView({ view, code, onAdd, onChoose }: { view: GuidedImport;
       <Panel className="flex max-w-3xl flex-col gap-5">
         <FileLine name={view.filename} size={view.size_bytes} />
         <Problem title="What happened" what={words.what} next={words.next}>
-          {view.error && view.error !== words.what ? <p dir="auto" className="num mt-2.5 border-t border-danger/20 pt-2 text-xs text-ink-soft">Your server said: {view.error}</p> : null}
+          {view.error && view.error !== words.what ? <p dir="auto" className="num mt-2.5 border-t border-danger/20 pt-2 text-xs text-ink-soft"><ServerName capital /> said: {view.error}</p> : null}
         </Problem>
         <div className="flex flex-wrap items-center gap-2">
           {code === 'wrong_platform' && other ? (

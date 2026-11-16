@@ -16,7 +16,8 @@ import type { FeatureScreenProps } from '../screens';
 import { guidedApi, type Guide, type GuidedImport } from './api';
 import { nextFor, parseRoute, STEPS, stepOf, type Choice } from './flow';
 import { useGuides, useImportList, useImportView, useUpload } from './hooks';
-import { Rail } from './parts';
+import { serverWords } from '@/lib/server-words';
+import { Rail, ServerName } from './parts';
 import { ChooseView } from './views-choose';
 import { GuideView } from './views-guide';
 import { AddView, ReadView, ResumeView, SendingView } from './views-hand';
@@ -170,7 +171,7 @@ function Flow({ demo, rest }: FeatureScreenProps) {
   const step = stepOf(route, view);
 
   const guidesWaiting = (): [string, ReactNode] | null => {
-    if (guides.status === 'loading') return ['loading', <Waiting key="w">Asking your server for the guides…</Waiting>];
+    if (guides.status === 'loading') return ['loading', <Waiting key="w">{serverWords('Asking your server for the guides…', archive.backend.mode)}</Waiting>];
     if (guides.status === 'error') {
       return ['guides-error', (
         <StateCard key="g" art="cloud" title="The guides did not load" actions={<Button variant="primary" onClick={retryGuides}><RotateCw />Try again</Button>}>
@@ -232,7 +233,7 @@ function Flow({ demo, rest }: FeatureScreenProps) {
     if (!view) {
       return ['load-error', (
         <StateCard key="e" art="cloud" title="This import did not load" actions={<Button variant="primary" onClick={held.refresh}><RotateCw />Try again</Button>}>
-          {held.error || 'Your server did not answer.'}
+          {held.error || <><ServerName capital /> did not answer.</>}
         </StateCard>
       )];
     }

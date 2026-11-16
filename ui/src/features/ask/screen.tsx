@@ -9,6 +9,7 @@ import { openDialog } from '@/app/ui-state';
 import { Whisper } from '@/components/field';
 import { Button } from '@/components/ui/button';
 import { VIEW_TITLE_ID } from '@/lib/focus';
+import { serverWords } from '@/lib/server-words';
 import { FeatureGate, FeatureHeader, LockedCard } from '../feature-kit';
 import type { FeatureScreenProps } from '../screens';
 import { Composer } from './composer';
@@ -116,7 +117,7 @@ function AskPage({ demo }: { demo: boolean }) {
           <Composer session={session} />
           <p className="mt-3 flex gap-2 text-xs leading-relaxed text-ink-soft">
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            <span>{aiNote(capability, settings)}</span>
+            <span>{serverWords(aiNote(capability, settings), archive.backend.mode)}</span>
           </p>
 
           <History {...history} variant="chips" className="mt-6 xl:hidden" />

@@ -55,10 +55,11 @@ describe('the permission step before an AI action', () => {
   it('asks first, names the service, and on "Not now" allows nothing and keeps nothing', async () => {
     const { archive, patchSettings } = rig({ settings: GEMINI });
     const answer = allowAi(archive, 'suggest');
-    const dialog = await screen.findByRole('dialog', { name: 'Send this to an AI service?' });
-    expect(dialog).toHaveTextContent('Nothing is sent unless you allow it.');
+    const dialog = await screen.findByRole('dialog', { name: 'Allow sending saves to an AI service?' });
+    expect(dialog).toHaveTextContent('Nothing is sent unless you allow it. One answer covers every action listed here.');
+    expect(dialog).toHaveTextContent('what you just asked for');
     expect(dialog).toHaveTextContent('For each save you choose: its title, caption, creator name, image descriptions and any transcript.');
-    expect(dialog).toHaveTextContent('This service sends it to Google’s Gemini service.');
+    expect(dialog).toHaveTextContent('This service sends the text to Google’s Gemini service.');
     expect(dialog).toHaveTextContent('Your own notes and the names of your collections are not sent.');
     expect(screen.getByRole('link', { name: /Privacy policy/ })).toHaveAttribute('href', PRIVACY_URL);
     expect(screen.getByRole('link', { name: /Privacy policy/ })).toHaveAttribute('target', '_blank');
@@ -106,7 +107,7 @@ describe('the permission step before an AI action', () => {
     const { archive } = rig({ settings: { ...GEMINI, ai_provider: 'unheard-of' }, status: async () => { throw new Error('offline'); } });
     const answer = allowAi(archive, 'places');
     const dialog = await screen.findByRole('dialog');
-    expect(dialog).toHaveTextContent('This service sends it to a hosted AI service.');
+    expect(dialog).toHaveTextContent('This service sends the text to a hosted AI service.');
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     await expect(answer).resolves.toBe(false);
   });
@@ -127,8 +128,21 @@ describe('the permission step before an AI action', () => {
     await screen.findByRole('dialog');
     const second = allowAi(archive, 'ask');
     await expect(first).resolves.toBe(false);
-    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('The question you type'));
+    await waitFor(() => expect(screen.getByRole('dialog').querySelector('li')).toHaveTextContent('Ask your archive'));
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     await expect(second).resolves.toBe(false);
+  });
+
+  it('a yes given for a question has already named the transcription service a later closer read uses', async () => {
+    const settings = { ...GEMINI, transcription_available: true };
+    const { archive } = rig({ settings, status: async () => ({ analysis: { provider: 'gemini', hosted: true, evidence_mode: 'public' }, transcription: { provider: 'groq', auto: false } }) });
+    const answer = allowAi(archive, 'ask');
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('A closer read');
+    expect(dialog).toHaveTextContent('The post’s media file (sound and picture), to be written out as a transcript.');
+    expect(dialog).toHaveTextContent('This service sends text to Google’s Gemini service and media files to Groq’s transcription service.');
+    await userEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    await expect(answer).resolves.toBe(true);
+    await expect(allowAi(archive, 'closer-read')).resolves.toBe(true);
   });
 });

@@ -17,7 +17,7 @@ import { FeatureHeader } from '../feature-kit';
 import { RefusalBody } from '../refusals/refusal';
 import { describeRefusal } from '../refusals/refusals';
 import type { FeatureScreenProps } from '../screens';
-import { buy, restore, settle, unlockView, VIA, type PurchaseOutcome } from './purchase';
+import { buy, PURCHASE_NAMES, restore, settle, unlockView, VIA, type PurchaseOutcome } from './purchase';
 
 const ROWS: [FeatureName, string, string][] = [
   ['recipes', 'Recipe cards and cook mode', 'A saved dish, laid out to cook from.'],
@@ -142,7 +142,7 @@ export default function UnlockScreen({ demo }: FeatureScreenProps) {
             <p className="font-semibold">Unlocked{via && VIA[via] ? ` through ${VIA[via]}` : ''}.</p>
             {purchases?.purchases.length ? (
               <ul className="mt-1 text-xs text-ink-soft">
-                {purchases.purchases.map(entry => <li key={`${entry.provider}-${entry.product_id}`} className="num">{VIA[entry.provider]} · {entry.status}</li>)}
+                {purchases.purchases.map(entry => <li key={`${entry.provider}-${entry.product_id}`} className="num">{PURCHASE_NAMES[entry.provider] ?? 'A purchase'} · {entry.status}</li>)}
               </ul>
             ) : null}
           </div>

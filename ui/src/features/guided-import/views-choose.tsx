@@ -2,6 +2,7 @@
 // earlier imports (some of which are waiting to be picked up again).
 import { formatDate } from '@web/utils.js';
 import { ArrowRight, ChevronRight, X } from 'lucide-react';
+import { useServerWords } from '@/app/archive-context';
 import { Notice, Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { PlatformIcon } from '@/components/icons';
@@ -43,6 +44,7 @@ const OPEN_LABEL: Record<string, string> = { uploading: 'Continue', previewed: '
 
 /** An import that is still going: a card, with what can be done with it. */
 function OpenRow({ entry, onOpen, onCancel }: { entry: GuidedImport; onOpen(id: string): void; onCancel(entry: GuidedImport): void }) {
+  const w = useServerWords();
   return (
     <li data-import={entry.id} data-state={entry.state} className="rounded-md border border-line border-s-[5px] border-s-butter bg-card px-4 py-3.5">
       <div className="flex items-start justify-between gap-3">
@@ -55,7 +57,7 @@ function OpenRow({ entry, onOpen, onCancel }: { entry: GuidedImport; onOpen(id: 
         </div>
         <StateChip state={entry.state} />
       </div>
-      <p dir="auto" className="mt-2 text-xs leading-relaxed text-ink-soft">{summaryOf(entry)}</p>
+      <p dir="auto" className="mt-2 text-xs leading-relaxed text-ink-soft">{w(summaryOf(entry))}</p>
       {entry.error && entry.state === 'failed' ? <p dir="auto" className="mt-1 text-xs leading-relaxed text-ink-soft">{entry.error}</p> : null}
       <div className="mt-2.5 flex flex-wrap items-center gap-1">
         <Button variant="soft" size="sm" onClick={() => onOpen(entry.id)}>{OPEN_LABEL[entry.state] ?? 'Open'}<ArrowRight /></Button>
@@ -67,13 +69,14 @@ function OpenRow({ entry, onOpen, onCancel }: { entry: GuidedImport; onOpen(id: 
 
 /** One that is over, as a single quiet line: what it was, how it ended, and (for a finished one) a way to see the result. */
 function DoneRow({ entry, onOpen }: { entry: GuidedImport; onOpen(id: string): void }) {
+  const w = useServerWords();
   return (
     <li data-import={entry.id} data-state={entry.state} className="flex items-center gap-3 rounded-md border border-line bg-card/60 px-4 py-2.5">
       <PlatformIcon platform={entry.platform} className="size-4.5 shrink-0 text-ink-soft" />
       <div className="min-w-0 flex-1">
         <p dir="auto" className="truncate text-sm font-semibold text-ink">{entry.filename}</p>
         <p dir="auto" className="line-clamp-2 text-xs leading-relaxed text-ink-soft">
-          <span className="num">{formatDate(entry.updated_at)}</span> · {entry.state === 'completed' ? summaryOf(entry) : entry.error || summaryOf(entry)}
+          <span className="num">{formatDate(entry.updated_at)}</span> · {entry.state === 'completed' ? summaryOf(entry) : entry.error || w(summaryOf(entry))}
         </p>
       </div>
       <StateChip state={entry.state} />

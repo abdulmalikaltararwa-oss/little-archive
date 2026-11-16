@@ -4,6 +4,7 @@ import { useStore } from 'zustand';
 import type { Archive, ArchiveState } from '@/data/archive';
 import { ApiError } from '@/data/client';
 import { isRefusal } from '@/features/refusals/refusals';
+import { serverWords } from '@/lib/server-words';
 import { openDialog, toast } from './ui-state';
 
 const ArchiveContext = createContext<Archive | null>(null);
@@ -17,6 +18,15 @@ export function useArchive(): Archive {
   const archive = useContext(ArchiveContext);
   if (!archive) throw new Error('useArchive must be used inside <ArchiveProvider>.');
   return archive;
+}
+
+/**
+ * Says "the service" where a sentence written for a self-hosted library says "your server", when this is a hosted
+ * account. Outside a provider (a component rendered alone) the sentence is left as written.
+ */
+export function useServerWords(): (text: string) => string {
+  const mode = useContext(ArchiveContext)?.backend?.mode;
+  return useCallback((text: string) => serverWords(text, mode), [mode]);
 }
 
 /** Subscribes to one slice of the library's state. */

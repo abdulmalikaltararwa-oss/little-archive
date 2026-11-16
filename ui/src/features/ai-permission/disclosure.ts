@@ -22,12 +22,24 @@ export interface SharingContext {
   status: EnrichmentStatus | null;
 }
 
+/** One kind of action, and what it sends. */
+export interface SharingLine {
+  key: 'suggest' | 'cards' | 'ask' | 'closer-read';
+  name: string;
+  text: string;
+  /** True for the action that brought the question up; it is listed first. */
+  current: boolean;
+}
+
+/**
+ * The whole of what one "Allow" covers: every kind of action this server could send something for, not only
+ * the one that brought the question up, because the answer is kept for all of them.
+ */
 export interface Disclosure {
   action: AiAction;
   title: string;
-  /** What is sent, one sentence each. */
-  sent: string[];
-  /** Who receives it. */
+  lines: SharingLine[];
+  /** Who receives it: every service the server reports. */
   recipients: string;
   /** What happens to the person's own notes and collection names. Empty when no text is sent. */
   notes: string;
@@ -52,11 +64,12 @@ function askWritesAnswers(features: Features | null, settings: Partial<Settings>
   return Boolean(settings.ai_enabled);
 }
 
-const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const MEDIA = 'the post’s media file (sound and picture)';
 
 /**
  * The words for the permission step, or null when this action sends nothing beyond the person's own server
- * (a self-hosted server with a local model, or no model at all).
+ * (a self-hosted server with a local model, or no model at all). When there is something to ask, the words
+ * cover every kind of action, with the one that was asked for first.
  */
 export function describeSharing(action: AiAction, { settings, features, hostedAccount, status }: SharingContext): Disclosure | null {
   const modelSet = Boolean(settings.ai_enabled);
@@ -66,66 +79,65 @@ export function describeSharing(action: AiAction, { settings, features, hostedAc
   const textLeaves = thirdPartyModel || operatorModel;
   const canTranscribe = Boolean(settings.transcription_available);
   // Without the status the server's rule for thin captions is unknown, so it is taken to be on.
-  const transcribesAlone = canTranscribe && (status ? Boolean(status.transcription?.auto) : true);
+  const transcribesAlone = modelSet && canTranscribe && (status ? Boolean(status.transcription?.auto) : true);
+  const cardsUseAi = (featureUsesAi(features, 'recipes', settings) || featureUsesAi(features, 'places', settings)) && textLeaves;
+  const askUsesAi = askWritesAnswers(features, settings) && textLeaves;
 
-  const textFor = {
-    suggest: textLeaves,
-    'closer-read': textLeaves,
+  // Whether this one action would send anything. A closer read is always a transcription, and a transcription
+  // is always made by a service outside the server, which is given the whole fetched media file.
+  const asks = {
+    suggest: textLeaves || transcribesAlone,
+    'closer-read': true,
     recipe: featureUsesAi(features, 'recipes', settings) && textLeaves,
     places: featureUsesAi(features, 'places', settings) && textLeaves,
-    ask: askWritesAnswers(features, settings) && textLeaves,
-    settings: textLeaves,
+    ask: askUsesAi,
+    settings: textLeaves || canTranscribe,
   }[action];
-  // A closer read is always a transcription, and a transcription is always made by a service outside the server.
-  const audioFor = { suggest: modelSet && transcribesAlone, 'closer-read': true, recipe: false, places: false, ask: false, settings: canTranscribe }[action];
-  if (!textFor && !audioFor) return null;
+  if (!asks) return null;
 
-  const audioName = status?.transcription?.provider ?? '';
-  // Gemini is given the post's whole media file; a speech service is given the sound.
-  const media = audioName === 'gemini' ? 'the post’s media file (sound and picture)' : 'the post’s audio';
-  const sent: string[] = [];
-  if (action === 'suggest') {
-    if (textFor) sent.push(`For each save you choose: its ${SAVE_TEXT}.`);
-    if (audioFor) sent.push(`When a video’s caption says too little, ${media} is sent first, to be written out as a transcript.`);
-  } else if (action === 'closer-read') {
-    sent.push(`${capital(media)}, to be written out as a transcript.`);
-    if (textFor) sent.push(`Then the save’s ${SAVE_TEXT.replace('any transcript', 'that transcript')}, so it can be read again.`);
-  } else if (action === 'ask') {
-    sent.push('The question you type, and short passages from the saves that match it. The rest of your library is not sent.');
-  } else if (action === 'settings') {
-    if (textFor) sent.push(`For suggestions, recipe cards and places: a save’s ${SAVE_TEXT}.`);
-    if (audioFor) sent.push(`For a closer read: ${media}.`);
-    if (textFor && askWritesAnswers(features, settings)) sent.push('For a question you ask: the question, and short passages from the saves that match it.');
-  } else {
-    sent.push(`This save’s ${SAVE_TEXT}. Its link is not sent.`);
+  const mediaLeaves = canTranscribe || action === 'closer-read';
+  const current = action === 'recipe' || action === 'places' ? 'cards' : action;
+  const lines: SharingLine[] = [];
+  if (textLeaves || transcribesAlone) {
+    const thin = transcribesAlone ? ` When a video’s caption says too little, ${MEDIA} ${status ? 'is' : 'may be'} sent first, to be written out as a transcript.` : '';
+    lines.push({ key: 'suggest', name: 'Suggestions', text: `${textLeaves ? `For each save you choose: its ${SAVE_TEXT}.` : ''}${thin}`.trim(), current: false });
   }
+  if (cardsUseAi) lines.push({ key: 'cards', name: 'Recipe cards and places', text: `The save’s ${SAVE_TEXT}. Its link is not sent.`, current: false });
+  if (askUsesAi) lines.push({ key: 'ask', name: 'Ask your archive', text: 'The question you type, and short passages from the saves that match it. The rest of your library is not sent.', current: false });
+  if (mediaLeaves) {
+    const then = textLeaves ? ` Then the save’s ${SAVE_TEXT.replace('any transcript', 'that transcript')}, so it can be read again.` : '';
+    lines.push({ key: 'closer-read', name: 'A closer read', text: `${capital(MEDIA)}, to be written out as a transcript.${then}`, current: false });
+  }
+  for (const line of lines) line.current = line.key === current;
+  lines.sort((first, second) => Number(second.current) - Number(first.current));
 
   const sender = hostedAccount ? 'This service' : 'Your server';
   const textTo = thirdPartyModel
     ? TEXT_SERVICES[settings.ai_provider ?? ''] ?? TEXT_SERVICES[status?.analysis?.provider ?? ''] ?? 'a hosted AI service'
     : 'an AI model run by whoever runs this service';
-  const audioTo = AUDIO_SERVICES[audioName] ?? 'a hosted transcription service';
-  const outside = (textFor && thirdPartyModel) || audioFor;
-  const where = textFor && audioFor
-    ? textTo === audioTo ? `${sender} sends both to ${textTo}.` : `${sender} sends the ${audioName === 'gemini' ? 'media file' : 'audio'} to ${audioTo} and the text to ${textTo}.`
-    : `${sender} sends it to ${textFor ? textTo : audioTo}.`;
-  const after = outside ? 'What a service receives is handled under that service’s own terms, and cannot be taken back once it is sent.' : 'It cannot be taken back once it is sent.';
+  const mediaTo = AUDIO_SERVICES[status?.transcription?.provider ?? ''] ?? 'a hosted transcription service';
+  const where = textLeaves && mediaLeaves
+    ? textTo === mediaTo ? `${sender} sends text and media files to ${textTo}.` : `${sender} sends text to ${textTo} and media files to ${mediaTo}.`
+    : textLeaves ? `${sender} sends the text to ${textTo}.` : `${sender} sends the media file to ${mediaTo}.`;
+  const after = thirdPartyModel || mediaLeaves ? 'What a service receives is handled under that service’s own terms, and cannot be taken back once it is sent.' : 'It cannot be taken back once it is sent.';
 
   const mode = status?.analysis?.evidence_mode;
-  const notes = !textFor
+  const notes = !textLeaves
     ? ''
     : mode === 'public'
       ? 'Your own notes and the names of your collections are not sent.'
       : mode === 'full'
-        ? 'Your own notes and the names of your collections are sent with it.'
+        ? 'Your own notes and the names of your collections are sent with the text.'
         : `Your own notes and the names of your collections are held back unless whoever runs ${hostedAccount ? 'this service' : 'your server'} has chosen to send them.`;
 
   return {
     action,
-    title: action === 'settings' ? 'Allow sending saves to an AI service?' : 'Send this to an AI service?',
-    sent,
+    title: 'Allow sending saves to an AI service?',
+    lines,
     recipients: `${where} ${after}`,
     notes,
-    remembered: `Your answer is kept with this ${hostedAccount ? 'account' : 'library'}. You can change it in Settings.`,
+    remembered: `One answer covers all of these, and is kept with this ${hostedAccount ? 'account' : 'library'}. You can change it in Settings.`,
   };
 }
+
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
