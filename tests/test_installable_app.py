@@ -18,6 +18,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -346,9 +347,11 @@ class DemoBoundaryTests(unittest.TestCase):
         for source in ("flag", "file"):
             with self.subTest(source=source):
                 site = self.make_site_at(f"site-{source}")
-                address = CONTACT if source == "flag" else "hello@archive-pages.org"
+                address = CONTACT if source == "flag" else "hello@pages-check.example"
                 self.set_contact(site, "" if source == "flag" else address)
-                self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + (WITH_CONTACT if source == "flag" else []))
+                # The tracked file may not hold an address at an example name; for this check alone that rule is lifted.
+                with mock.patch.object(self.build, "RESERVED_DOMAIN", re.compile(r"(?!)")):
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + (WITH_CONTACT if source == "flag" else []))
                 self.assertLessEqual(SITE_FILES, self.published())
                 self.assertNotIn("site.json", self.published())
                 self.assertEqual({str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_dir()}, {"assets", "fonts"})
@@ -365,15 +368,18 @@ class DemoBoundaryTests(unittest.TestCase):
 
     def test_a_contact_address_that_is_not_one_stops_the_build(self):
         self.make_dist()
-        bad = ("support@[owner to set]", "support", "a b@pages.org", "a@b", "<b>@pages.org", "a@pages.org\nb@pages.org", "a..b@pages.org", "{{CONTACT_EMAIL}}",
-               "x@example.com", "x@mail.example", "x@host.test", "x@thing.invalid")
-        for number, address in enumerate(bad):
+        shapes = ("support@[owner to set]", "support", "a b@pages-check.example", "a@b", "<b>@pages-check.example", "a@pages-check.example\nb@pages-check.example",
+                  "a..b@pages-check.example", "{{CONTACT_EMAIL}}")
+        reserved = ("x@example.com", "x@mail.example", "x@host.test", "x@thing.invalid", CONTACT)
+        for number, address in enumerate(shapes + reserved):
             with self.subTest(address=address):
                 site = self.make_site_at(f"bad-{number}")
                 self.set_contact(site, address)
-                with self.assertRaises(SystemExit) as stopped:
+                # A badly shaped address is refused for its shape, so the rule about example names is lifted while those are tried.
+                lifted = re.compile(r"(?!)") if address in shapes else self.build.RESERVED_DOMAIN
+                with mock.patch.object(self.build, "RESERVED_DOMAIN", lifted), self.assertRaises(SystemExit) as stopped:
                     self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
-                self.assertIn("contact_email", str(stopped.exception))
+                self.assertIn("is not an email address" if address in shapes else "reserved for examples", str(stopped.exception))
         for number, text in enumerate(("", "[]", '{"contact_email": 5}', '{"contact_email": "", "other": 1}', "{}")):
             with self.subTest(text=text):
                 site = self.make_site_at(f"shape-{number}")
