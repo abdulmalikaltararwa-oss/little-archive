@@ -7,6 +7,7 @@ build the server actually serves (ui/dist, or webui in an image). Run `npm ci &&
 Fixtures are synthetic; every instance lives in a temporary directory.
 """
 from html.parser import HTMLParser
+import contextlib
 import io
 import json
 from pathlib import Path
@@ -32,6 +33,11 @@ PUBLIC = UI / "public"
 PASSWORD = "test-owner-password-2026"
 # The plain pages published beside the demo, and the only other files they load.
 SITE_FILES = {"privacy.html", "terms.html", "support.html", "delete-account.html", "pages.css", "fonts/fraunces-soft.woff2"}
+DEMO_ONLY = {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build"}
+# An address for these checks only, at a name set aside for examples. The tracked web/site.json may not hold one like it.
+CONTACT = "help@pages-check.example"
+WITH_CONTACT = ["--contact-email", CONTACT]
+TOKEN = "{{CONTACT_EMAIL}}"
 ORIGIN = {"Origin": "http://testserver"}
 
 
@@ -231,7 +237,8 @@ class DemoBoundaryTests(unittest.TestCase):
 
     scripts/build_demo.py works out the demo's files from the page and the build's manifest. The logic is tested on a
     small synthetic build; the last tests run it on the real one. The same site carries the plain pages from web/
-    (privacy, terms, support, account deletion): fixed names, copied as they are."""
+    (privacy, terms, support, account deletion): fixed names, with the contact address from web/site.json written in.
+    While that address is empty the pages are not published at all."""
 
     def setUp(self):
         from scripts import build_demo
@@ -277,13 +284,19 @@ class DemoBoundaryTests(unittest.TestCase):
     def make_site_at(self, folder):
         """A copy of the plain pages that a test may spoil."""
         site = self.root / folder
-        for name in SITE_FILES:
+        for name in SITE_FILES | {"site.json"}:
             (site / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / "web" / name, site / name)
         return site
 
-    def workflow_check(self, folder):
-        """Run the publishing workflow's own check of the artifact, as written in the workflow, on `folder`."""
+    def set_contact(self, site, address):
+        (site / "site.json").write_text(json.dumps({"contact_email": address}), encoding="utf-8")
+
+    def workflow_check(self, folder, contact=""):
+        """Run the publishing workflow's own check of the artifact, as written in the workflow, on `folder`, beside a
+        web/site.json that holds `contact` (the workflow reads the tracked one from the repository's root)."""
+        (folder.parent / "web").mkdir(exist_ok=True)
+        self.set_contact(folder.parent / "web", contact)
         workflow = (ROOT / ".github" / "workflows" / "demo-pages.yml").read_text(encoding="utf-8")
         script = re.search(r"python - <<'PY'\n(.*?)\n\s*PY\n", workflow, re.S).group(1)
         self.assertEqual(folder.name, "dist-demo", "the workflow checks a folder of this name")
@@ -296,13 +309,102 @@ class DemoBoundaryTests(unittest.TestCase):
             "index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build",
             "assets/main-AAAAAAAA.js", "assets/shared-BBBBBBBB.js", "assets/screen-CCCCCCCC.js", "assets/demo-DDDDDDDD.js",
             "assets/main-EEEEEEEE.css", "assets/face-FFFFFFFF.woff2", "assets/001-GGGGGGGG.webp",
-        } | SITE_FILES)
+        } | (SITE_FILES if self.build.site_contact(ROOT / "web") else set()))
         self.assertEqual((self.out / "index.html").read_bytes(), (self.dist / "demo.html").read_bytes())
-        for name in SITE_FILES:
-            self.assertEqual((self.out / name).read_bytes(), (ROOT / "web" / name).read_bytes(), name)
-        self.assertEqual({str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_dir()}, {"assets", "fonts"})
         self.assertEqual((self.out / "LICENSE").read_bytes(), (ROOT / "LICENSE").read_bytes())
         self.assertFalse(any(path.is_symlink() for path in self.out.rglob("*")))
+
+    def test_the_tracked_contact_address_is_unset_or_real_and_the_pages_hold_only_the_token(self):
+        settings = json.loads((ROOT / "web" / "site.json").read_text(encoding="utf-8"))
+        self.assertEqual(list(settings), ["contact_email"])
+        self.assertEqual(self.build.site_contact(ROOT / "web"), settings["contact_email"].strip(), "empty, or an address the build accepts")
+        for name in self.build.SITE_PAGES:
+            text = (ROOT / "web" / name).read_text(encoding="utf-8")
+            self.assertEqual(text.count(TOKEN), 1, name)
+            self.assertNotIn("[owner to set]", text, name)
+            self.assertNotRegex(text.replace(TOKEN, ""), r"\{\{|\}\}|[\w.+-]+@[\w-]+\.[\w.-]+", f"{name} names no address of its own")
+
+    def test_with_no_contact_address_the_pages_are_not_published_and_the_demo_still_builds(self):
+        self.make_dist()
+        site = self.make_site()
+        self.set_contact(site, "")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+        self.assertFalse(SITE_FILES & self.published())
+        self.assertEqual({str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_dir()}, {"assets"})
+        self.assertEqual({name for name in self.published() if not name.startswith("assets/")}, DEMO_ONLY)
+        self.assertEqual(output.getvalue().count("NOT published"), 1)
+        self.assertIn("contact_email in site/site.json is empty", output.getvalue())
+        # Without the address the pages are not read at all, so a fault in one cannot stop the demo.
+        (site / "privacy.html").unlink()
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+        self.assertIn("index.html", self.published())
+
+    def test_with_a_contact_address_the_pages_are_published_with_it_written_in(self):
+        self.make_dist()
+        for source in ("flag", "file"):
+            with self.subTest(source=source):
+                site = self.make_site_at(f"site-{source}")
+                address = CONTACT if source == "flag" else "hello@archive-pages.org"
+                self.set_contact(site, "" if source == "flag" else address)
+                self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + (WITH_CONTACT if source == "flag" else []))
+                self.assertLessEqual(SITE_FILES, self.published())
+                self.assertNotIn("site.json", self.published())
+                self.assertEqual({str(path.relative_to(self.out)) for path in self.out.rglob("*") if path.is_dir()}, {"assets", "fonts"})
+                for name in SITE_FILES:
+                    written, original = (self.out / name).read_bytes(), (ROOT / "web" / name).read_bytes()
+                    if not name.endswith(".html"):
+                        self.assertEqual(written, original, name)
+                        continue
+                    self.assertEqual(written, original.replace(TOKEN.encode(), address.encode()), name)
+                    text = written.decode()
+                    self.assertEqual(text.count(address), 1, name)
+                    for left in ("{{", "}}", "[owner to set]"):
+                        self.assertNotIn(left, text, name)
+
+    def test_a_contact_address_that_is_not_one_stops_the_build(self):
+        self.make_dist()
+        bad = ("support@[owner to set]", "support", "a b@pages.org", "a@b", "<b>@pages.org", "a@pages.org\nb@pages.org", "a..b@pages.org", "{{CONTACT_EMAIL}}",
+               "x@example.com", "x@mail.example", "x@host.test", "x@thing.invalid")
+        for number, address in enumerate(bad):
+            with self.subTest(address=address):
+                site = self.make_site_at(f"bad-{number}")
+                self.set_contact(site, address)
+                with self.assertRaises(SystemExit) as stopped:
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+                self.assertIn("contact_email", str(stopped.exception))
+        for number, text in enumerate(("", "[]", '{"contact_email": 5}', '{"contact_email": "", "other": 1}', "{}")):
+            with self.subTest(text=text):
+                site = self.make_site_at(f"shape-{number}")
+                (site / "site.json").write_text(text)
+                with self.assertRaises(SystemExit) as stopped:
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+                self.assertIn("site.json", str(stopped.exception))
+        site = self.make_site_at("no-settings")
+        (site / "site.json").unlink()
+        with self.assertRaises(SystemExit):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+        (site / "site.json").symlink_to(ROOT / "web" / "site.json")
+        with self.assertRaises(SystemExit):
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+        self.assertFalse(self.out.exists())
+
+    def test_a_page_that_would_ship_something_unfilled_stops_the_build(self):
+        self.make_dist()
+        cases = (("privacy.html", TOKEN, "support@[owner to set]"), ("terms.html", TOKEN, "the address"), ("support.html", "<h1>", "<h1>{{SITE_NAME}} "),
+                 ("delete-account.html", "<h1>", "<h1>[owner to set] "))
+        for name, old, new in cases:
+            with self.subTest(name=name, new=new):
+                site = self.make_site()
+                text = (site / name).read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                (site / name).write_text(text.replace(old, new, 1), encoding="utf-8")
+                with self.assertRaises(SystemExit) as stopped:
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + WITH_CONTACT)
+                self.assertIn(name, str(stopped.exception))
+                shutil.rmtree(site)
+        self.assertFalse(self.out.exists())
 
     def test_files_the_page_does_not_load_stay_behind(self):
         self.make_dist()
@@ -347,13 +449,14 @@ class DemoBoundaryTests(unittest.TestCase):
         self.assertEqual(set(self.build.SITE_FILES), SITE_FILES)
         self.assertEqual(set(self.build.SITE_PAGES), {name for name in SITE_FILES if name.endswith(".html")})
         self.assertLessEqual(SITE_FILES, self.build.FIXED)
+        self.assertEqual(self.build.DEMO_FIXED, DEMO_ONLY)
+        self.assertNotIn("site.json", self.build.FIXED)
         self.make_dist()
         site = self.make_site()
         for name in ("notes.html", "fonts/Fraunces-OFL.txt", "fonts/other.woff2", "demo-data.js", "manifest.webmanifest"):
             (site / name).write_text("x")
-        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
-        self.assertEqual({name for name in self.published() if not name.startswith("assets/")},
-                         {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build"} | SITE_FILES)
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + WITH_CONTACT)
+        self.assertEqual({name for name in self.published() if not name.startswith("assets/")}, DEMO_ONLY | SITE_FILES)
 
     def test_a_plain_page_that_is_missing_or_a_link_stops_the_build(self):
         self.make_dist()
@@ -367,7 +470,7 @@ class DemoBoundaryTests(unittest.TestCase):
                     if spoil == "link":
                         (site / name).symlink_to(elsewhere)
                     with self.assertRaises(SystemExit) as stopped:
-                        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+                        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + WITH_CONTACT)
                     self.assertIn(name, str(stopped.exception))
                     shutil.rmtree(site)
         # A folder that is a link is refused too, whether it is the font folder or the pages' folder itself.
@@ -375,11 +478,12 @@ class DemoBoundaryTests(unittest.TestCase):
         (site / "fonts").rename(self.root / "real-fonts")
         (site / "fonts").symlink_to(self.root / "real-fonts", target_is_directory=True)
         with self.assertRaises(SystemExit):
-            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + WITH_CONTACT)
         (self.root / "linked-site").symlink_to(self.make_site_at("real-site"), target_is_directory=True)
-        with self.assertRaises(SystemExit):
-            self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(self.root / "linked-site")])
-        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(self.root / "real-site")])
+        for flags in (WITH_CONTACT, []):  # refused when the address would come from the linked folder's own site.json too
+            with self.assertRaises(SystemExit):
+                self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(self.root / "linked-site")] + flags)
+        self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(self.root / "real-site")] + WITH_CONTACT)
         self.assertLessEqual(SITE_FILES, self.published())
 
     def test_a_plain_page_that_names_a_file_the_site_does_not_publish_stops_the_build(self):
@@ -401,7 +505,7 @@ class DemoBoundaryTests(unittest.TestCase):
                 self.assertIn(old, text)
                 (site / name).write_text(text.replace(old, new), encoding="utf-8")
                 with self.assertRaises(SystemExit) as stopped:
-                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)])
+                    self.build.main(["--dist", str(self.dist), "--output", str(self.out), "--site", str(site)] + WITH_CONTACT)
                 self.assertIn(name, str(stopped.exception))
                 shutil.rmtree(site)
         self.assertFalse(self.out.exists())
@@ -440,7 +544,12 @@ class DemoBoundaryTests(unittest.TestCase):
         build = webui.find_build()
         self.assertIsNotNone(build, webui.MISSING)
         self.assertTrue((build / "demo.html").is_file() and (build / ".vite" / "manifest.json").is_file(), "ui/dist must be a full build, not the packaged copy")
+        # As the repository stands (whatever web/site.json holds), then with an address, which publishes the pages.
         self.build.main(["--dist", str(build), "--output", str(self.out)])
+        if not self.build.site_contact(ROOT / "web"):
+            self.assertEqual({name for name in self.published() if not name.startswith("assets/")}, DEMO_ONLY)
+            self.assertEqual(sum(name.endswith(".webp") for name in self.published()), 60)
+        self.build.main(["--dist", str(build), "--output", str(self.out)] + WITH_CONTACT)
         names = self.published()
         self.assertEqual(sum(name.endswith(".webp") for name in names), 60)
         self.assertFalse([name for name in names if re.search(r"(?:^|/)(?:manifest[.-]|apple-touch|icons/|share[.-])|\.map$|\.json$", name, re.I)])
@@ -452,11 +561,12 @@ class DemoBoundaryTests(unittest.TestCase):
             self.assertIn(reference, names)
         # The plain pages are there under the names the apps link to, with everything they load or link to.
         self.assertLessEqual(SITE_FILES, names)
-        self.assertEqual({name for name in names if "/" not in name},
-                         {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", ".little-archive-demo-build"} | {name for name in SITE_FILES if "/" not in name})
+        self.assertEqual({name for name in names if "/" not in name}, DEMO_ONLY | {name for name in SITE_FILES if "/" not in name})
         self.assertEqual({name for name in names if name.startswith("fonts/")}, {"fonts/fraunces-soft.woff2"})
         for name in sorted(name for name in SITE_FILES if name.endswith(".html")):
             text = (self.out / name).read_text(encoding="utf-8")
+            self.assertEqual(text.count(CONTACT), 1, name)
+            self.assertNotRegex(text, r"\{\{|\}\}|\[owner to set\]", name)
             for reference in re.findall(r'(?:src|href)="(\.?/?[^"#:]*)(?:#[^"]*)?"', text):
                 if reference in ("", "./"):
                     continue
@@ -468,16 +578,25 @@ class DemoBoundaryTests(unittest.TestCase):
         build = webui.find_build()
         self.assertIsNotNone(build, webui.MISSING)
         self.out = self.root / "dist-demo"
-        self.build.main(["--dist", str(build), "--output", str(self.out)])
+        site = self.make_site()
+        self.set_contact(site, "")
+        with_pages = self.root / "with-pages" / "dist-demo"
+        with_pages.parent.mkdir()
+        self.build.main(["--dist", str(build), "--output", str(with_pages), "--site", str(site)] + WITH_CONTACT)
+
+        # No address: the artifact is the demo alone, and the pages may not be in it in any form.
+        self.build.main(["--dist", str(build), "--output", str(self.out), "--site", str(site)])
         passed = self.workflow_check(self.out)
         self.assertEqual(passed.returncode, 0, passed.stderr)
         self.assertIn("Verified the synthetic demo artifact", passed.stdout)
+        self.assertIn("are not published: contact_email in web/site.json is empty", passed.stdout)
+        state = {"contact": ""}
 
         def refused(spoil, expected):
             copy = self.root / "spoiled" / "dist-demo"
             shutil.copytree(self.out, copy)
             spoil(copy)
-            result = self.workflow_check(copy)
+            result = self.workflow_check(copy, state["contact"])
             self.assertNotEqual(result.returncode, 0, expected)
             self.assertIn(expected, result.stderr)
             shutil.rmtree(copy.parent)
@@ -492,6 +611,29 @@ class DemoBoundaryTests(unittest.TestCase):
                 (copy / name).write_text(text.replace(old, new), encoding="utf-8")
             return spoil
 
+        for name in sorted(name for name in SITE_FILES if "/" not in name):
+            refused(lambda copy, name=name: shutil.copy2(with_pages / name, copy / name), "Unexpected demo artifact files")
+        refused(lambda copy: shutil.copytree(with_pages / "fonts", copy / "fonts"), "Unexpected demo artifact folders")
+        refused(lambda copy: (copy / "site.json").write_text("{}"), "Unexpected demo artifact files")
+        unset_but_published = self.workflow_check(with_pages, "")
+        self.assertNotEqual(unset_but_published.returncode, 0, "pages in the artifact while no address is set")
+        for address in ("support@[owner to set]", "not an address"):
+            self.assertIn("is not an email address", self.workflow_check(with_pages, address).stderr)
+
+        # An address: the artifact is the demo and the pages, each naming that address once and nothing unfilled.
+        set_but_absent = self.workflow_check(self.out, CONTACT)
+        self.assertIn("Unexpected demo artifact folders", set_but_absent.stderr)
+        shutil.rmtree(self.out)
+        shutil.copytree(with_pages, self.out)
+        state["contact"] = CONTACT
+        passed = self.workflow_check(self.out, CONTACT)
+        self.assertEqual(passed.returncode, 0, passed.stderr)
+        self.assertNotIn("not published", passed.stdout)
+        self.assertIn("must name the contact address once", self.workflow_check(self.out, "someone-else@pages-check.example").stderr)
+        for name in ("privacy.html", "terms.html", "support.html", "delete-account.html"):
+            refused(replace(name, CONTACT, TOKEN), "must name the contact address once")
+            refused(replace(name, CONTACT, "support@[owner to set]"), "must name the contact address once")
+            refused(append(name, f"<p>{CONTACT}</p>"), "must name the contact address once")
         refused(lambda copy: shutil.copy2(ROOT / "web" / "fonts" / "Fraunces-OFL.txt", copy / "fonts" / "Fraunces-OFL.txt"), "Unexpected demo artifact files")
         refused(lambda copy: (copy / "notes.html").write_text("x"), "Unexpected demo artifact files")
         refused(lambda copy: (copy / "pages").mkdir(), "Unexpected demo artifact folders")

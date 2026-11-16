@@ -59,8 +59,13 @@
             </tr>
             <tr>
               <th scope="row">Purchase record</th>
-              <td>Whether your account is unlocked and where it was bought. For an App Store purchase, Apple's transaction id. For a Google Play purchase, a scrambled form (a hash) of Google's purchase token. We never receive your card number.</td>
+              <td>Whether your account is unlocked and where it was bought. For an App Store purchase, Apple's transaction id. For a Google Play purchase, a scrambled form (a hash) of Google's purchase token. For a payment on the web, Tap's charge id, the amount and whether it was paid. We never receive your card or KNET details, and we do not keep the name or email address you give Tap for the receipt.</td>
               <td>To unlock your account, restore a purchase and act on a refund.</td>
+            </tr>
+            <tr>
+              <th scope="row">Apple sign-in token</th>
+              <td>Only if you use Continue with Apple, and only once we have switched on the removal of Apple sign-ins: one token that Apple gives our server for your account. It cannot be used to read anything about you.</td>
+              <td>So that, when you delete your account, our server can tell Apple to end the sign-in. It is deleted at that moment.</td>
             </tr>
             <tr>
               <th scope="row">Usage counters</th>
@@ -115,7 +120,7 @@
             </tr>
             <tr>
               <th scope="row">Tap Payments</th>
-              <td>If you buy the unlock on the web, Tap Payments (Kuwait) takes the payment by KNET, Apple Pay or card, and tells us whether it succeeded. Your payment details go to Tap, not to us.</td>
+              <td>If you buy the unlock on the web, our server sends Tap Payments (Kuwait) the price, your account id, and the name and email address you give for the receipt, then sends your browser to Tap's own page. You pay there by KNET, Apple Pay or card. Your card or KNET details go to Tap and never reach our server. Tap tells us whether the payment succeeded.</td>
               <td>Payment.</td>
             </tr>
             <tr>
@@ -129,6 +134,7 @@
       <p>More about the AI features:</p>
       <ul>
         <li>They run only when you start them. Nothing in your library is sent to an AI company in the background.</li>
+        <li>Before the first one, the app shows what would be sent and to which service, and asks you to allow it. Nothing is sent unless you allow it. Your answer is kept with your account, and you can change it in Settings.</li>
         <li>Your own notes and the names of your collections are not sent to Google or Groq.</li>
         <li>The media file for a closer read is fetched by our server from the public post, held in memory while it is transcribed, and then discarded. We keep the transcript, not the video or audio.</li>
         <li>Once text or media has been sent to Google or Groq, their own terms decide how long they keep it. We cannot take it back.</li>
@@ -154,7 +160,7 @@
       <p>We keep your library for as long as your account exists. You can delete a single save at any time, and you can export your library or download a full backup from Settings.</p>
       <p>You can delete your account in the app: Settings, "This device", "Delete my account…". The <a href="./delete-account.html">account deletion page</a> has the steps and a way to ask by email. Deleting your account:</p>
       <ul>
-        <li>removes your library, your preview images, any import file still waiting, and your unlock and purchase record from our server straight away;</li>
+        <li>removes your library, your preview images, any import file still waiting, and your unlock, your purchase record and any Apple sign-in token from our server straight away;</li>
         <li>then removes your sign-in from Supabase. If Supabase cannot be reached at that moment, the server keeps trying until it is gone, and holds your account id for that purpose until it is.</li>
       </ul>
       <p>What stays for a limited time, none of it with your content, your email address or your account id in readable form:</p>
@@ -169,7 +175,7 @@
         <li>backups of the server that we made before you deleted your account, until those backups are replaced;</li>
         <li>text or media already sent to Google or Groq for an AI feature;</li>
         <li>records Apple, Google or Tap keep about your payment;</li>
-        <li>if you used Continue with Apple, the entry for Little Archive in your Apple Account. You can remove it on your iPhone under Settings, your name, Sign in with Apple.</li>
+        <li>if you used Continue with Apple, the entry for Little Archive in your Apple Account may remain. Where we hold an Apple sign-in token for your account, our server asks Apple to end the sign-in when you delete the account; it cannot confirm that Apple did. You can always remove the entry yourself on your iPhone, under Settings, Apple Account, Sign in with Apple.</li>
       </ul>
 
       <h2 id="children">Children</h2>
@@ -179,7 +185,7 @@
       <p>If we change what we collect or who receives it, we will update this page and the date at the top before the change takes effect.</p>
 
       <h2 id="contact">Contact</h2>
-      <p>Questions about your data, or a request to see, correct or delete it: <span class="contact-address">support@[owner to set]</span></p>
+      <p>Questions about your data, or a request to see, correct or delete it: <span class="contact-address">{{CONTACT_EMAIL}}</span></p>
     </main>
     <footer class="site-footer wrap">
       <nav aria-label="Legal and help">
