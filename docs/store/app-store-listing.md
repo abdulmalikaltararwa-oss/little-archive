@@ -71,10 +71,10 @@ saved posts,bookmarks,links,read later,recipes,collections,organize,notes,archiv
 
 ## URLs
 
-These addresses are where the four pages in `web/` would be if they were published beside the public demo. **They
-are not live.** The demo site publishes only the demo today (`scripts/build_demo.py` and
-`.github/workflows/demo-pages.yml` refuse any other file), so nothing below has been opened in a browser.
-**Owner:** decide where the pages are hosted, publish them, then check each address before pasting it.
+These are the addresses of the four pages in `web/` on the public site, beside the demo. **They do not exist
+until the owner sets the contact address** (`contact_email` in `web/site.json`): the site is built without the pages
+while it is empty, and publishes them on the next push to `main` after it is set (`scripts/build_demo.py`). None has
+been opened in a browser. **Owner:** set the address, push, then open each one before pasting it.
 
 | Field | Value |
 | --- | --- |
@@ -91,7 +91,7 @@ are not live.** The demo site publishes only the demo today (`scripts/build_demo
 | Secondary category | Utilities | Lifestyle is the alternative if recipes and places are the main pitch. |
 | Primary language | English | The interface is English only today (`docs/STATUS.md`). |
 | Price | Free, with one in-app purchase | The non-consumable `unlock_full`. **Owner:** the price is not set. |
-| iPad | The build runs on iPad (`TARGETED_DEVICE_FAMILY = "1,2"`) | Either supply iPad screenshots or make the app iPhone only. See `screenshots.md`. |
+| Devices | iPhone only | Version 1 is built for iPhone only (`TARGETED_DEVICE_FAMILY = 1`), so no iPad screenshots are needed. |
 
 ## Age rating questionnaire
 
@@ -126,5 +126,7 @@ supplies, and nobody else can see it.
 - The text fields were searched for other platform names, store names, payment-provider names and prices. None
   appear. "Google Gemini" appears once, as the name of the AI service that receives text, which Apple's guideline
   5.1.2(i) asks an app to name.
-- The sentence "The app asks for your permission first" describes a dialog that is being built and is not in this
-  branch. **Do not submit this description until that dialog is in the build.**
+- "The app asks for your permission first" is the permission step in the app: one screen with "Allow" and "Not now"
+  that shows what would be sent and to which service, kept with the account, with a switch in Settings
+  (`ui/src/features/ai-permission/`). It has not yet been run on a phone (`docs/STATUS.md`, "Never run for real").
+- The text does not mention that the unlock can also be bought on the web.

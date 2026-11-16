@@ -64,7 +64,7 @@ GOOD TO KNOW
 | Tags | Productivity; Bookmarks and read-later if offered | Pick from the console's list. |
 | Contact email | **Owner** | Google shows it publicly. No address exists in the project yet. |
 | Website | `https://abdulmalikaltararwa-oss.github.io/little-archive/` | The public demo (`docs/publishing.md` records it as verified; not opened again for this file). |
-| Privacy policy | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` | **Not live.** See the note under "URLs" in `app-store-listing.md`. |
+| Privacy policy | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` | Does not exist until the contact address is set. See the note under "URLs" in `app-store-listing.md`. |
 | Default language | English (United States) | The interface is English only today. |
 | Price | Free, with one in-app product | The one-time product `unlock_full`. **Owner:** the price is not set. |
 
@@ -119,7 +119,7 @@ Top-level answers:
 | Does the app collect or share any required user data types? | Yes | See the table. |
 | Is all collected data encrypted in transit? | Yes | The app accepts only `https` server addresses; release builds allow no cleartext traffic (`mobile/src/server-url.js`, Android network security config). |
 | Can users request that their data is deleted? | Yes | In the app, and by email. |
-| Account deletion URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/delete-account.html` | **Not live**, and the page has no real contact address yet. Both must be fixed before this is submitted. |
+| Account deletion URL | `https://abdulmalikaltararwa-oss.github.io/little-archive/delete-account.html` | Does not exist until the contact address is set in `web/site.json`; the page then shows that address. Open it before submitting. |
 
 Data types. Every row: purpose **App functionality** (and **Account management** where noted), not used for
 advertising or analytics, not processed ephemerally unless noted.
@@ -159,5 +159,7 @@ the owner should know which service is used.
 
 - Lengths: App name 27/30, Short description 80/80, Full description 2,010/4,000.
 - The text names no other store and no other phone platform.
-- The sentence "The app asks for your permission first" describes a dialog that is being built and is not in this
-  branch. Do not submit until it is in the build.
+- "The app asks for your permission first" is the permission step in the app: one screen with "Allow" and "Not now"
+  that shows what would be sent and to which service, kept with the account, with a switch in Settings. It has not
+  yet been run on a phone.
+- The text does not mention that the unlock can also be bought on the web.

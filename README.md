@@ -91,9 +91,9 @@ python3 scripts/build_demo.py
 python3 -m http.server 8090 --bind 127.0.0.1 --directory dist-demo
 ```
 
-Open **http://localhost:8090/**. The builder copies the demo page and exactly the files it can load (worked out from the build, since their names are hashed) into `dist-demo`; it does not include the Python server or any private library. It also copies the site's four plain pages from `web/` (privacy, terms, support, account deletion) with their stylesheet and font. The demo's assets use relative paths, so it can also run at a GitHub Pages project subpath such as `/little-archive/`.
+Open **http://localhost:8090/**. The builder copies the demo page and exactly the files it can load (worked out from the build, since their names are hashed) into `dist-demo`; it does not include the Python server or any private library. It also copies the site's four plain pages from `web/` (privacy, terms, support, account deletion) with their stylesheet and font, once a contact address is set: set `contact_email` in [`web/site.json`](web/site.json), then the pages publish on the next push to `main`. While it is empty the pages are left out and the demo is built without them. The demo's assets use relative paths, so it can also run at a GitHub Pages project subpath such as `/little-archive/`.
 
-See [publishing the source and demo](docs/publishing.md) for repository creation and the included manual Pages workflow. Publish only `dist-demo` as the demo artifact. GitHub Pages hosts this static preview; a working private instance needs the self-hosted server described above.
+See [publishing the source and demo](docs/publishing.md) for repository creation and the included Pages workflow, which runs by hand and on pushes to `main` that change the interface or the site's pages. Publish only `dist-demo` as the demo artifact. GitHub Pages hosts this static preview; a working private instance needs the self-hosted server described above.
 
 ## Install the companion extension
 

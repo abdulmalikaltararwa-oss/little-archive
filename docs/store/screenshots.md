@@ -8,8 +8,7 @@ email address may appear.
 
 | Store | Asset | Size in pixels | How many | Format |
 | --- | --- | --- | --- | --- |
-| App Store | iPhone 6.9-inch screenshots | 1320 x 2868 (portrait) | 1 to 10; use the 6 below | PNG or JPEG, no transparency |
-| App Store | iPad 13-inch screenshots | 2064 x 2752 (portrait) | 1 to 10 | Needed only if the app stays available on iPad. The build runs on iPad today (`TARGETED_DEVICE_FAMILY = "1,2"`), and the app has never been run on one (`docs/STATUS.md`). **Owner:** supply iPad shots or make the app iPhone only. |
+| App Store | iPhone 6.9-inch screenshots | 1320 x 2868 (portrait) | 1 to 10; use the 6 below | PNG or JPEG, no transparency. Version 1 is iPhone only, so no iPad set is needed. |
 | Google Play | Phone screenshots | 1080 x 1920 (portrait) | 2 to 8; use the 6 below | PNG or JPEG |
 | Google Play | Feature graphic | 1024 x 500 | 1 | JPEG or 24-bit PNG, no transparency |
 | Google Play | App icon | 512 x 512 | 1 | 32-bit PNG, at most 1 MB |

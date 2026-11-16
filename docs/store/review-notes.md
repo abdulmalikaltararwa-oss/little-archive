@@ -18,7 +18,7 @@ Use made-up content only. Do not use a real person's account.
 
 ## Note for Apple (App Review Information, Notes, 4000)
 
-The text below is 2,632 of the 4,000 characters Apple allows.
+The text below is 3,036 of the 4,000 characters Apple allows.
 
 ```text
 WHAT THE APP IS
@@ -31,7 +31,7 @@ On first launch choose "Little Archive account", then sign in with the demo emai
 The other choice on the first screen is for people who run the open-source Little Archive server themselves. The app then talks only to that server, and there is no account with us and nothing to buy. You do not need it for review. Without a server address it has nothing to connect to.
 
 THE IN-APP PURCHASE
-One non-consumable, product id unlock_full. Open a locked feature (Recipes, Places or Ask) and tap "About the unlock", or open Settings and tap "About the one-time unlock". The unlock screen has "Unlock once" and "Restore a purchase". The purchase is checked on our server and unlocks the signed-in account. Restore is the second button on the same screen. Our server accepts sandbox purchases during review.
+One non-consumable, product id unlock_full. Open a locked feature (Recipes, Places or Ask) and tap "About the unlock", or open Settings and tap "About the one-time unlock". The unlock screen has "Unlock once" and "Restore a purchase". The purchase is checked on our server and unlocks the signed-in account. The same unlock is also sold on our website; an account unlocked there is unlocked in the app when the person signs in, and the app shows no link to it. Restore is the second button on the same screen. Our server accepts sandbox purchases during review.
 
 DELETING THE ACCOUNT
 Settings, section "This device", "Delete my account…", type DELETE, then "Delete my account". This removes the library from our server and then the sign-in. The result screen says what was removed. Please use a spare account if you test this, since the demo account will stop working.
@@ -40,7 +40,7 @@ THE SHARE EXTENSION
 In Safari or another app, tap Share and choose Little Archive. The app opens on its save screen with the link filled in. Nothing is saved until the person taps Save. The extension reads only the shared link or text.
 
 AI FEATURES AND PERMISSION
-AI features are optional and start only when the person asks: suggestions for titles and folders, a "closer read" that makes a transcript of a saved video's speech, recipe cards, places, and "Ask your archive". The first time, the app shows a dialog that names the services that will receive the text (Google Gemini, and Groq for transcripts) with "Allow" and "Not now". Nothing is sent before "Allow". What is sent is the text of the chosen saves (title, creator, caption, transcript), for a closer read the public post's media file, and for Ask the typed question and short passages from matching saves. The person's notes are not sent. This is described in the privacy policy.
+AI features are optional and start only when the person asks: suggestions for titles and folders, a "closer read" that makes a transcript of a saved video's speech, recipe cards, places, and "Ask your archive". Before the first one the app shows one step, "Send this to an AI service?", which lists what would be sent and names the service that receives it (Google's Gemini service, and Groq's transcription service for a closer read), with "Allow" and "Not now". Nothing is sent unless the person chooses "Allow". The answer is kept with the account and can be changed in Settings ("Allow sending saves to the AI service"). What is sent is the text of the chosen saves (title, creator, caption, image descriptions, transcript), for a closer read the public post's audio or media file, and for Ask the typed question and short passages from matching saves. The person's notes are not sent. This is described in the privacy policy.
 
 CONTENT
 Everything in the demo account is made up for review. The app shows only what its owner saved. It has no feed, no public content and no way to contact other users.
@@ -51,7 +51,7 @@ CONTACT
 
 ## Note for Google (App access instructions, and the note to the reviewer)
 
-Google's limit for this box was not looked up for this file (**unverified**). The text below is 1,121 characters;
+Google's limit for this box was not looked up for this file (**unverified**). The text below is 1,323 characters;
 if the console refuses it, cut the sharing and AI paragraphs first.
 
 ```text
@@ -67,7 +67,9 @@ Delete account: Settings, "This device", "Delete my account…", type DELETE. Th
 
 Sharing: share a link from any app to Little Archive; the app opens its save screen with the link filled in and saves only when the person taps Save.
 
-AI features are optional. Before the first one the app asks permission ("Allow" / "Not now") and names the services that receive the text of the chosen saves (Google Gemini; Groq for transcripts).
+AI features are optional. Before the first one the app shows what would be sent and which service receives it (Google's Gemini service; Groq's transcription service for a closer read) and asks "Allow" or "Not now". Nothing is sent unless the person allows it, and the answer can be changed in Settings.
+
+The same unlock is also sold on our website; an account unlocked there is unlocked in the app.
 ```
 
 ## What each note depends on
@@ -77,8 +79,9 @@ AI features are optional. Before the first one the app asks permission ("Allow" 
 | First-launch choice, sign-in, share sheet, account screen | Yes (`docs/mobile-app.md`, "What it does"). |
 | "Unlock once", "Restore a purchase" | Yes, these are the button labels (`ui/src/features/unlock/screen.tsx`). No real store purchase has ever been run (`docs/STATUS.md`, "Never run for real"). |
 | Delete path and the word DELETE | Yes (`ui/src/features/dialogs/settings.tsx`, `ui/src/features/dialogs/basic.tsx`). |
-| Sign in with Apple is offered | The button exists. It has never run against Apple, because the app is not registered with Apple yet (`docs/STATUS.md`). |
-| The Allow / Not now dialog | **Not in this branch.** It is being built. Read the finished dialog and correct the notes to match its exact words before pasting. |
+| Sign in with Apple is offered | The button exists and the app id is registered with Apple. The sheet has never run: it needs a signed build on a real device (`docs/STATUS.md`). |
+| The permission step and its words | Yes (`ui/src/features/ai-permission/host.tsx`, `disclosure.ts`; the switch is in `ui/src/features/dialogs/settings.tsx`). The service names come from what the server reports, so they read as written only on a server set up as below. Never run on a phone. Another builder is changing the step so that it always shows the full list; read it once more before pasting. |
+| "The same unlock is also sold on our website" | The pay page and the Tap payment exist on the hosted server and are off until a key and a price are set (`docs/hosted-mode.md`). If web payment is not switched on at launch, delete the sentence. |
 | "Our server accepts sandbox purchases during review" | Only if the server is set as below. |
 
 ## The server on review day
@@ -106,7 +109,9 @@ Each line names where the requirement is written.
    not"; `docs/mobile-app.md`, the owner checklist).
 7. **The demo account exists, its email is confirmed, and it holds made-up saves.** New accounts must confirm by
    email (`docs/STATUS.md`, "Running"), and a reviewer cannot read the demo inbox.
-8. **The privacy, support and deletion pages are live** at the addresses given in the listing, with a real contact
-   address in place of the placeholder.
-9. **Keep it that way until both reviews finish.** After approval, set `LA_APPLE_ENVIRONMENTS` back to `Production`
+8. **The privacy, support and deletion pages are live** at the addresses given in the listing. They are published
+   only once the contact address is set in `web/site.json`.
+9. **The Sign in with Apple key is set on the server** (the four `LA_APPLE_SIGNIN_*` values), so that deleting an
+   account also ends its Apple sign-in (`server/apple_signin.py`). Without it that step is off.
+10. **Keep it that way until both reviews finish.** After approval, set `LA_APPLE_ENVIRONMENTS` back to `Production`
    (sandbox purchases cost nothing to make).

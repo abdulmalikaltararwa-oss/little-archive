@@ -46,13 +46,14 @@
         <li>Put "Delete my account" in the subject.</li>
         <li>If you signed up with Continue with Apple and hid your email address, say so. We may ask you to confirm the request from inside your account.</li>
       </ul>
-      <p>We will delete the account within 30 days and reply to tell you it is done.</p>
+      <p>We will delete the account within 30 days of receiving your message, and reply to tell you when it is done.</p>
 
       <h2 id="deleted">What is deleted</h2>
       <ul>
         <li>Your whole library: every save, collection, tag, note, transcript, recipe card, place and AI suggestion.</li>
         <li>Preview images you added, and any import file still waiting.</li>
-        <li>Your unlock and the record of your purchase on our server.</li>
+        <li>Your unlock and the record of your purchase on our server, including the record of a payment made on the web.</li>
+        <li>The Apple sign-in token, if our server holds one for your account.</li>
         <li>Your sign-in (your email address and password) at Supabase, the sign-in service we use. If Supabase cannot be reached at that moment, our server keeps trying until it is removed, and holds your account id for that purpose until it is.</li>
       </ul>
 
@@ -93,13 +94,13 @@
         <li>Exports and backups you downloaded stay on your own devices.</li>
         <li>Text or media that was already sent to an AI company for a feature you used cannot be recalled.</li>
         <li>Apple, Google or Tap keep their own record of your payment. Deleting your account does not refund a purchase.</li>
-        <li>If you used Continue with Apple, Little Archive stays listed in your Apple Account until you remove it: on your iPhone, Settings, your name, Sign in with Apple.</li>
+        <li>If you used Continue with Apple, Little Archive may stay listed in your Apple Account. Where our server holds an Apple sign-in token for your account, it asks Apple to end the sign-in as part of the deletion; it cannot confirm that Apple did. You can always remove the entry yourself on your iPhone, under Settings, Apple Account, Sign in with Apple.</li>
         <li>If you used your own server, there is no hosted account to delete. Your library is on that server.</li>
       </ul>
       <p>The <a href="./privacy.html">privacy policy</a> has the full picture.</p>
 
       <h2 id="contact">Contact</h2>
-      <p>To ask for your account to be deleted, write to <span class="contact-address">support@[owner to set]</span></p>
+      <p>To ask for your account to be deleted, write to <span class="contact-address">{{CONTACT_EMAIL}}</span></p>
     </main>
     <footer class="site-footer wrap">
       <nav aria-label="Legal and help">

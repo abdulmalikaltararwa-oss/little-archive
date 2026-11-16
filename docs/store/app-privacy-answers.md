@@ -64,10 +64,18 @@ were added. Keep the manifest and these answers the same.
 - **Places.** Place names from saved posts can go to a place-lookup service, and the map can load tiles from a map
   service (`server/enrich/places.py`; `VITE_LA_TILE_URL`). Both are off unless configured. Neither is the person's
   location, so Location stays undeclared; the privacy policy mentions both.
-- **The AI providers' terms.** Apple's guideline 5.1.2(i) asks an app to say clearly when personal data goes to a
-  third-party AI service and to get permission first. The permission dialog (Allow / Not now before the first AI
-  action) is being built and is not in this branch. Check that it names Google Gemini and Groq, as the privacy
-  policy does.
-- **Sign in with Apple and deletion.** Deleting an account does not yet revoke the Apple sign-in at Apple
-  (`docs/STATUS.md`, "Not built"; `docs/mobile-app.md`, risk 9). The privacy policy and the deletion page tell the
-  person how to remove it themselves. A reviewer may still raise it under guideline 5.1.1(v).
+- **The AI permission step.** Apple's guideline 5.1.2(i) asks an app to say clearly when personal data goes to a
+  third-party AI service and to get permission first. The app does this in one step with "Allow" and "Not now"
+  that shows what would be sent and to which service; the answer is kept with the account and can be changed in
+  Settings (`ui/src/features/ai-permission/`). The service names on that screen come from what the server reports,
+  so check on the production server that it names Google's Gemini service and Groq's transcription service, as the
+  privacy policy does. The interface enforces the step; the server does not refuse an AI request made without it
+  (`docs/STATUS.md`). It has not been run on a phone.
+- **Sign in with Apple and deletion.** Deleting an account ends its Apple sign-in at Apple only once the operator
+  has set the Sign in with Apple key on the server; until then that step is off (`server/apple_signin.py`). With
+  the key set, the server keeps one Apple token per account that used Continue with Apple, until the account is
+  deleted. A sign-in token is not one of Apple's listed data types, so no answer above changes; the privacy policy
+  has a row for it. This has never met Apple (`docs/STATUS.md`). Set the key before review: a reviewer may check
+  guideline 5.1.1(v).
+- **Paying on the web.** The unlock can also be bought on the hosted server's pay page through Tap Payments. That
+  happens in a browser, not in the app, so it is not part of the app's privacy label; the privacy policy covers it.

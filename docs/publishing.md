@@ -79,7 +79,9 @@ Open `http://localhost:8090/`. Inspect the gallery, a collection filter, a searc
 
 ## Publish the demo with GitHub Pages
 
-The included [demo Pages workflow](../.github/workflows/demo-pages.yml) runs only when a maintainer starts it. It builds the default branch and uploads **only `dist-demo`**, with an exact file allowlist checked before upload. Pushes and pull requests do not deploy the demo.
+The included [demo Pages workflow](../.github/workflows/demo-pages.yml) runs when a maintainer starts it, and on every push to `main` that changes `ui/`, `web/`, `LICENSE`, `scripts/build_demo.py` or the workflow itself. It builds the default branch and uploads **only `dist-demo`**, with an exact file allowlist checked before upload. Pushes to other branches and pull requests do not deploy the demo.
+
+The same site carries four plain pages from `web/` (privacy, terms, support, account deletion). They name one contact address, which is `contact_email` in [`web/site.json`](../web/site.json). **While that value is empty the pages are not published**: the build leaves them out, says so in one line, and the demo is published without them. Set the address in that file and the pages publish on the next push to `main`. To see them locally before an address is chosen, build with `python3 scripts/build_demo.py --contact-email you@your-domain`; that flag changes nothing that is committed.
 
 1. Ensure the workflow file is committed to the repository's default branch.
 2. In the repository, open **Settings → Pages**. Under **Build and deployment**, set **Source** to **GitHub Actions**. Use the included workflow; no additional starter workflow is needed.

@@ -1,5 +1,5 @@
 // The plain pages of the public site (privacy, terms, support, account deletion): every link lands somewhere,
-// nothing is loaded from another site, no script runs, and the contact address is written once per page.
+// nothing is loaded from another site, no script runs, and the contact address is one token per page, filled in from site.json when the site is built.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -60,12 +60,22 @@ for (const name of PAGES) {
     for (const other of PAGES) assert.ok(footer.includes(`href="./${other}"`), `the footer links to ${other}`);
   });
 
-  test(`${name} writes the contact address once, as text`, () => {
-    assert.equal(html.split('support@').length - 1, 1);
+  test(`${name} holds the contact address as one token and names no address of its own`, () => {
+    // The address is set once, in site.json, and written in when the site is built (scripts/build_demo.py).
+    assert.equal(html.split('{{CONTACT_EMAIL}}').length - 1, 1);
+    assert.equal(html.replaceAll('{{CONTACT_EMAIL}}', '').match(/\{\{|\}\}|\[owner to set\]/), null);
+    assert.equal(html.match(/[A-Za-z0-9._+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+/), null, 'no address is written into a page');
     assert.doesNotMatch(html, /mailto:/);
     assert.ok(ids(html).has('contact'));
   });
 }
+
+test('the contact address is one value in site.json: empty, or one plain address', () => {
+  const settings = JSON.parse(read('site.json'));
+  assert.deepEqual(Object.keys(settings), ['contact_email']);
+  assert.equal(typeof settings.contact_email, 'string');
+  if (settings.contact_email) assert.match(settings.contact_email, /^[A-Za-z0-9][A-Za-z0-9._+-]*@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}$/);
+});
 
 test('the stylesheet uses only its own font file and both themes', () => {
   const css = read('pages.css');

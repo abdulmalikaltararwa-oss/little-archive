@@ -60,6 +60,7 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import json
           import re
           from pathlib import Path
 
@@ -67,8 +68,14 @@ jobs:
           root = Path('dist-demo')
           # The plain pages the apps link to, their stylesheet and its one font: fixed names, nothing else.
           pages = {'privacy.html', 'terms.html', 'support.html', 'delete-account.html'}
-          fixed = {'index.html', 'theme-init.js', 'icon.svg', 'LICENSE', '.nojekyll', '.little-archive-demo-build',
-                   'pages.css', 'fonts/fraunces-soft.woff2'} | pages
+          # They are published only once the owner has set the contact address they name, in web/site.json.
+          # Unset: none of them, nor their stylesheet or font, may be in the artifact. Set: all of them, with it.
+          contact = json.loads(Path('web/site.json').read_text(encoding='utf-8'))['contact_email'].strip()
+          if contact and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}', contact):
+              raise SystemExit('contact_email in web/site.json is not an email address.')
+          site = pages | {'pages.css', 'fonts/fraunces-soft.woff2'} if contact else set()
+          folders = {'assets', 'fonts'} if contact else {'assets'}
+          fixed = {'index.html', 'theme-init.js', 'icon.svg', 'LICENSE', '.nojekyll', '.little-archive-demo-build'} | site
           hashed = re.compile(r'assets/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?|webp)')
           paths = list(root.rglob('*'))
           if any(path.is_symlink() for path in paths):
@@ -76,8 +83,8 @@ jobs:
           dirs = {str(path.relative_to(root)) for path in paths if path.is_dir()}
           files = [path for path in paths if not path.is_dir()]
           names = {str(path.relative_to(root)) for path in files}
-          if dirs != {'assets', 'fonts'}:
-              raise SystemExit(f'Unexpected demo artifact folders: {sorted(dirs ^ {"assets", "fonts"})}')
+          if dirs != folders:
+              raise SystemExit(f'Unexpected demo artifact folders: {sorted(dirs ^ folders)}')
           unexpected = sorted(name for name in names if name not in fixed and not hashed.fullmatch(name))
           if unexpected:
               raise SystemExit(f'Unexpected demo artifact files: {unexpected}')
@@ -96,8 +103,10 @@ jobs:
           if "connect-src 'none'" not in page or re.search(r'rel="(?:manifest|apple-touch-icon)"', page):
               raise SystemExit('The demo page must forbid every connection and must not link the installable app.')
           # The plain pages run no script and load only the stylesheet and the icon beside them.
-          for name in sorted(pages):
+          for name in sorted(pages & site):
               text = (root / name).read_text(encoding='utf-8')
+              if '{{' in text or '}}' in text or '[owner to set]' in text or text.count(contact) != 1:
+                  raise SystemExit(f'{name} must name the contact address once, with nothing left to fill in.')
               if "default-src 'none'" not in text or re.search(r'<script\b|<iframe\b|<form\b', text, re.I):
                   raise SystemExit(f'{name} must be a plain page: no script, frame or form, and nothing loaded by default.')
               loaded = set(re.findall(r'<(?:link|img)\b[^>]*\s(?:href|src)="([^"]*)"', text))
@@ -109,7 +118,7 @@ jobs:
                       continue
                   if not target.startswith('./') or target[2:] not in pages:
                       raise SystemExit(f'{name} links to {link}, which is not published.')
-          styles = (root / 'pages.css').read_text(encoding='utf-8')
+          styles = (root / 'pages.css').read_text(encoding='utf-8') if site else "url('./fonts/fraunces-soft.woff2')"
           if '@import' in styles or re.findall(r'url\(([^)]*)\)', styles) != ["'./fonts/fraunces-soft.woff2'"]:
               raise SystemExit('pages.css must load only its own font file.')
           # No credential-shaped text in anything published.
@@ -119,6 +128,8 @@ jobs:
                   for needle in ('LA_ADMIN_PASSWORD', 'BEGIN PRIVATE KEY', 'secrets.env'):
                       if needle in text:
                           raise SystemExit(f'{path} mentions {needle}.')
+          if not site:
+              print('The privacy, terms, support and account deletion pages are not published: contact_email in web/site.json is empty.')
           print(f'Verified the synthetic demo artifact ({len(names)} files). No server or runtime data is included.')
           PY
       - name: Upload only the synthetic demo

@@ -13,7 +13,11 @@ Vite's manifest (`ui/dist/.vite/manifest.json`), and take the stylesheets, fonts
 else in `ui/dist` stays behind. The result is then held to a fixed rule about what may be published at all.
 
 The same site also carries the plain pages the apps link to (privacy, terms, support, account deletion). Those are
-listed by hand: four pages, their stylesheet and its one font, copied from `web/` to the same names beside the demo.
+listed by hand: four pages, their stylesheet and its one font, from `web/` to the same names beside the demo.
+
+The pages name one contact address. It is written once, in `web/site.json` (`contact_email`), and put into the pages
+here; the pages themselves hold only a token. While that address is empty the pages are not published at all, and
+the demo is built without them: a page that tells people to write to an address nobody has chosen must not go public.
 """
 from __future__ import annotations
 
@@ -34,7 +38,16 @@ ASSET = re.compile(r"assets/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(?:js|css|woff2?|w
 SITE_PAGES = ("privacy.html", "terms.html", "support.html", "delete-account.html")
 SITE_FONT = "fonts/fraunces-soft.woff2"
 SITE_FILES = SITE_PAGES + ("pages.css", SITE_FONT)
-FIXED = {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", MARKER, *SITE_FILES}
+SITE_SETTINGS = "site.json"
+# What the pages hold where the contact address goes, and what must never be published in its place.
+CONTACT_TOKEN = "{{CONTACT_EMAIL}}"
+UNSET_MARKS = ("{{", "}}", "[owner to set]")
+# One mailbox at a domain: no spaces, no markup, nothing that could change the page it is written into.
+CONTACT_SHAPE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}")
+# Names set aside for examples and tests. An address there reaches nobody, so the tracked file may not hold one.
+RESERVED_DOMAIN = re.compile(r"(?:^|\.)(?:example|invalid|test|localhost|local)$|(?:^|\.)example\.(?:com|net|org)$", re.I)
+DEMO_FIXED = {"index.html", "theme-init.js", "icon.svg", "LICENSE", ".nojekyll", MARKER}
+FIXED = DEMO_FIXED | set(SITE_FILES)
 # The demo has no backend, so it must not advertise or depend on the installable app.
 NEVER = re.compile(r"(?:^|/)(?:manifest[.-]|apple-touch|icons/|share[.-])", re.I)
 MAX_BYTES = 24 * 1024 * 1024
@@ -104,14 +117,42 @@ def demo_files(dist: Path) -> list[str]:
     return sorted(wanted)
 
 
-def check_published(names: list[str], dist: Path) -> None:
+def valid_contact(address: str, *, reserved_allowed: bool = False) -> str:
+    """The address as it will be printed, or a stop that says what is wrong with it."""
+    if not isinstance(address, str):
+        raise SystemExit(f"contact_email in {SITE_SETTINGS} must be text.")
+    address = address.strip()
+    if not address:
+        return ""
+    if len(address) > 254 or ".." in address or not CONTACT_SHAPE.fullmatch(address):
+        raise SystemExit(f"contact_email in {SITE_SETTINGS} is not an email address: {address!r}.")
+    if not reserved_allowed and RESERVED_DOMAIN.search(address.rsplit("@", 1)[1]):
+        raise SystemExit(f"contact_email in {SITE_SETTINGS} is at a domain reserved for examples, so nobody would receive it: {address!r}.")
+    return address
+
+
+def site_contact(site: Path) -> str:
+    """The contact address the owner set in `web/site.json`, or the empty string while none is set."""
+    path = site / SITE_SETTINGS
+    if path.is_symlink() or site.is_symlink() or not path.is_file():
+        raise SystemExit(f"{SITE_SETTINGS} is not a regular file in {site.name}/; it holds the pages' contact address.")
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        raise SystemExit(f"{SITE_SETTINGS} in {site.name}/ is not valid JSON.") from None
+    if not isinstance(settings, dict) or set(settings) != {"contact_email"}:
+        raise SystemExit(f"{SITE_SETTINGS} in {site.name}/ must hold exactly one value, contact_email.")
+    return valid_contact(settings["contact_email"])
+
+
+def check_published(names: list[str], dist: Path, allowed=FIXED) -> None:
     """The fixed rule: only these kinds of file, only regular files, nothing about installation, a size ceiling."""
     total = 0
     for name in names:
         path = dist / name
         if path.is_symlink() or not path.is_file():
             raise SystemExit(f"{name} is not a regular file in the build.")
-        if name not in FIXED and not ASSET.fullmatch(name):
+        if name not in allowed and not ASSET.fullmatch(name):
             raise SystemExit(f"{name} is not a file the public demo may publish.")
         if NEVER.search(name):
             raise SystemExit(f"{name} belongs to the installable app, not to the demo.")
@@ -120,9 +161,9 @@ def check_published(names: list[str], dist: Path) -> None:
         raise SystemExit(f"The demo is {total / 1e6:.1f} MB, over the {MAX_BYTES / 1e6:.0f} MB it is expected to stay under.")
 
 
-def copy_site(site: Path, stage: Path) -> None:
-    """Copy the plain pages, their stylesheet and its font. Each must be a regular file, checked before the copy
-    because a copy would follow a link and publish whatever it points at."""
+def copy_site(site: Path, stage: Path, contact: str) -> None:
+    """Copy the plain pages, their stylesheet and its font, writing the contact address into the pages. Each must be
+    a regular file, checked before the copy because a copy would follow a link and publish whatever it points at."""
     for name in SITE_FILES:
         source = site / name
         chain = [source, *source.parents][: len(Path(name).parts) + 1]  # the file, its folders, and `site` itself
@@ -132,7 +173,17 @@ def copy_site(site: Path, stage: Path) -> None:
         if target.exists():
             raise SystemExit(f"{name} is already one of the demo's own files.")
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+        if name not in SITE_PAGES:
+            shutil.copy2(source, target)
+            continue
+        text = source.read_text(encoding="utf-8")
+        if CONTACT_TOKEN not in text:
+            raise SystemExit(f"{name} does not hold {CONTACT_TOKEN}, where the contact address goes.")
+        text = text.replace(CONTACT_TOKEN, contact)
+        for mark in UNSET_MARKS:
+            if mark in text:
+                raise SystemExit(f"{name} would be published with {mark!r} in it; the contact address or another value was not filled in.")
+        target.write_text(text, encoding="utf-8")
 
 
 def check_site(stage: Path) -> None:
@@ -163,11 +214,15 @@ def main(argv=None):
     parser.add_argument("--dist", type=Path, default=ROOT / "ui" / "dist", help="the built interface (default: ui/dist)")
     parser.add_argument("--output", type=Path, default=ROOT / "dist-demo", help="where to write the demo (default: dist-demo)")
     parser.add_argument("--site", type=Path, default=ROOT / "web", help="where the plain pages are (default: web)")
+    parser.add_argument("--contact-email", default=None,
+                        help="for a local check only: build the pages with this address instead of the one in the pages' site.json")
     args = parser.parse_args(argv)
     # The pages' folder is made absolute but not resolved: a link standing in for it or for a page must be seen.
     dist, output, site = args.dist.resolve(), args.output.resolve(), args.site.absolute()
+    contact = site_contact(site) if args.contact_email is None else valid_contact(args.contact_email, reserved_allowed=True)
+    allowed = FIXED if contact else DEMO_FIXED
     files = demo_files(dist)
-    check_published(files, dist)
+    check_published(files, dist, allowed)
     if output.exists() and not (output / MARKER).is_file() and any(output.iterdir()):
         raise SystemExit(f"{output.name} contains unrecognized files; move it aside before building the demo.")
     with tempfile.TemporaryDirectory(prefix=".demo-build-", dir=output.parent) as temporary:
@@ -179,16 +234,21 @@ def main(argv=None):
         # The page is published as the site's front page. Its own references are relative, so they still resolve.
         shutil.copy2(dist / "demo.html", stage / "index.html")
         shutil.copy2(ROOT / "LICENSE", stage / "LICENSE")
-        copy_site(site, stage)
-        check_site(stage)
+        if contact:
+            copy_site(site, stage, contact)
+            check_site(stage)
         (stage / ".nojekyll").write_text("")
         (stage / MARKER).write_text("Synthetic standalone demo. Generated by scripts/build_demo.py.\n")
         published = sorted(str(path.relative_to(stage)) for path in stage.rglob("*") if path.is_file())
-        check_published(published, stage)
+        check_published(published, stage, allowed)
         if output.exists():
             shutil.rmtree(output)
         shutil.copytree(stage, output)
-    print(f"Built {output} ({len(published)} files). Synthetic demo and the plain pages only; no backend or credentials.")
+    if contact:
+        print(f"Built {output} ({len(published)} files). Synthetic demo and the plain pages only; no backend or credentials.")
+    else:
+        print(f"The privacy, terms, support and account deletion pages were NOT published: contact_email in {site.name}/{SITE_SETTINGS} is empty. Set it and build again.")
+        print(f"Built {output} ({len(published)} files). Synthetic demo only; no backend or credentials.")
 
 
 if __name__ == "__main__":
