@@ -79,9 +79,12 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
 .native-screen .native-tabs .btn[aria-pressed="true"] { background: var(--sage-pale); border-color: transparent; color: var(--sage); }
 :root[data-theme='dark'] .native-screen .native-tabs .btn[aria-pressed="true"] { color: var(--sage-deep); }
 
-/* "Continue with Apple" and "Continue with Google" (ui.js, the account screen), above the email form. Each follows its own
-   brand's button rules, so the colours and the logos are theirs, not the app's. Finger sized (48px), and drawn as pills like the
-   app's other buttons, which both brands allow. The words are the brands' own wording for a button that signs in or signs up. */
+/* "Continue with Apple" and "Continue with Google" (ui.js, the account screen), above the email form. They are drawn here,
+   modelled on each brand's button guidelines: the brands' colours and wording ("Continue with …"), finger sized (48px), and pills
+   like the app's other buttons. They are not the brands' own components. Known differences, not yet fixed: the Apple logo is an
+   Apple mark as an SVG path, not the artwork Apple supplies for this button; the title is 16px in a 48px button, below the
+   proportion Apple suggests (about 43% of the height); and the Google button uses the system font where the phone has no Roboto.
+   The Apple button is a small App Review risk for those reasons (docs/mobile-app.md, the risks). */
 .native-socials { display: flex; flex-direction: column; gap: 12px; margin-bottom: 4px; }
 .native-social { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid transparent; font-family: inherit; font-size: 1rem; font-weight: 500; line-height: 1.25; -webkit-tap-highlight-color: transparent; transition: transform var(--dur-1, 120ms) ease, opacity var(--dur-2, 200ms) ease; }
 .native-social svg { flex: none; }
@@ -93,7 +96,7 @@ body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
    notice that takes focus when its view appears is not a control and never draws one. */
 .native-screen .native-quiet:focus, .native-screen .native-quiet:focus-visible { outline: none; }
 .native-screen h1:focus, .native-screen .notice:focus { outline: none; }
-/* Apple: black with a white logo; white with a black logo where the background is dark. System font, as Apple asks. */
+/* Apple: black with a white logo; white with a black logo where the background is dark. The system font. */
 .native-social-apple { background: #000; color: #fff; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; }
 :root[data-theme='dark'] .native-social-apple { background: #fff; color: #000; }
 /* Google: white with a 1px #747775 stroke and #1F1F1F text; #131314 with an #8E918F stroke and #E3E3E3 text on dark. The G keeps its colours. */
