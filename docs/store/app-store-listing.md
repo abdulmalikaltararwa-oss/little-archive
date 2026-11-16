@@ -59,7 +59,7 @@ GOOD TO KNOW
 • With a Little Archive account, your library is stored on our server. It is kept separate from other accounts. It is not end-to-end encrypted.
 • AI features are optional and run only when you start them. They send the text of the saves you choose (title, creator, caption and transcript) to Google Gemini, and for a closer read the post's media file to Groq, to be processed. The app asks for your permission first.
 • AI works from a post's text. It has not watched the video, and its suggestions can be wrong.
-• You can delete your account and everything in it from Settings at any time.
+• You can delete your account and your library from Settings at any time.
 • Little Archive is not affiliated with any social platform.
 ```
 
@@ -89,7 +89,7 @@ published because the contact address is set (`contact_email` in `web/site.json`
 | Primary category | Productivity | The app organises things a person saved. |
 | Secondary category | Utilities | Lifestyle is the alternative if recipes and places are the main pitch. |
 | Primary language | English | The interface is English only today (`docs/STATUS.md`). |
-| Price | Free, with one in-app purchase | The non-consumable `unlock_full`. **Owner:** the price is not set. |
+| Price | Free, with one in-app purchase | The non-consumable `unlock_full`. Owner chose USD 9.99 (KWD 3.000 on the web) on 16 November 2026. |
 | Devices | iPhone only | Version 1 is built for iPhone only (`TARGETED_DEVICE_FAMILY = 1`), so no iPad screenshots are needed. |
 
 ## Age rating questionnaire

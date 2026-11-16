@@ -51,7 +51,7 @@ GOOD TO KNOW
 • With a Little Archive account, your library is stored on our server. It is kept separate from other accounts. It is not end-to-end encrypted.
 • AI features are optional and run only when you start them. They send the text of the saves you choose (title, creator, caption and transcript) to Google Gemini, and for a closer read the post's media file to Groq, to be processed. The app asks for your permission first.
 • AI works from a post's text. It has not watched the video, and its suggestions can be wrong.
-• You can delete your account and everything in it from Settings at any time.
+• You can delete your account and your library from Settings at any time.
 • Little Archive is not affiliated with any social platform.
 ```
 
@@ -66,7 +66,7 @@ GOOD TO KNOW
 | Website | `https://abdulmalikaltararwa-oss.github.io/little-archive/` | The public demo (`docs/publishing.md` records it as verified; not opened again for this file). |
 | Privacy policy | `https://abdulmalikaltararwa-oss.github.io/little-archive/privacy.html` | See the note under "URLs" in `app-store-listing.md`. Open it before submitting. |
 | Default language | English (United States) | The interface is English only today. |
-| Price | Free, with one in-app product | The one-time product `unlock_full`. **Owner:** the price is not set. |
+| Price | Free, with one in-app product | The one-time product `unlock_full`. Owner chose USD 9.99 (KWD 3.000 on the web) on 16 November 2026. |
 
 ## App content
 

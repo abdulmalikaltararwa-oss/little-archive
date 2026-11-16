@@ -9,7 +9,7 @@ in the linked docs, not here. Last updated: 2026-11-16.
   or an account on the hosted service: the same server in [hosted mode](hosted-mode.md), Supabase for sign-in only.
 - **Pricing.** Free: unlimited saving, import, titles, folders and search. One one-time unlock for transcripts,
   recipe cards and cook mode, the places map and "ask your archive", with a fair-use cap. No subscription, no
-  ads, no credit packs. The price is not set.
+  ads, no credit packs. The price is 3.000 KWD on the web and USD 9.99 in the stores (owner, 16 November 2026); not yet set in Tap or the stores.
 - **Payments.** Tap Payments (Kuwait) on the web. The store apps sell the same unlock through Apple and Google
   in-app purchase and never point at the web purchase (store rules); one account is unlocked everywhere.
 - **Sign-in.** Email and password, plus Continue with Google and Continue with Apple.
@@ -65,7 +65,7 @@ in the linked docs, not here. Last updated: 2026-11-16.
 
 ## Waiting on the owner
 
-- The unlock price (stores and KWD), the Tap secret key (test first), Apple Pay domain verification in Tap.
+- The Tap secret key (test first), Apple Pay domain verification in Tap.
 - Setting the password for the `hello@littlearchive.me` mailbox at Migadu (an invitation went to the owner).
 - On the hosted server for the pay page: the Supabase publishable key and `/pay` as a redirect address.
 - Publish the Google sign-in setup before real users. Register the share extension id and the app group
