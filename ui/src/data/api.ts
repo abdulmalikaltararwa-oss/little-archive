@@ -19,7 +19,7 @@ export function createApi(client: Client) {
     collections: () => request<{ collections: Collection[] }>('/collections'),
     tags: () => request<{ tags: Tag[] }>('/tags'),
     settings: () => request<Settings>('/settings'),
-    patchSettings: (patch: Partial<Pick<Settings, 'remote_previews'>>) => request<Settings>('/settings', { method: 'PATCH', body: patch }),
+    patchSettings: (patch: Partial<Pick<Settings, 'remote_previews' | 'ai_sharing_allowed'>>) => request<Settings>('/settings', { method: 'PATCH', body: patch }),
 
     items: (filters: Partial<Filters> | Scope, offset = 0, limit = 60, signal?: AbortSignal) => request<ItemList>(`/items?${createQuery(filters, offset, limit)}`, { signal }),
     item: (id: string) => request<Item>(`/items/${encodeURIComponent(id)}`),

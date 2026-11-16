@@ -7,6 +7,7 @@ import { errorMessage } from '@web/utils.js';
 import { Check, Compass, MapPinned, Pencil, ScanSearch, Trash2, Undo2, X } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { confirm, toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { Whisper } from '@/components/field';
 import { AsciiSpinner } from '@/components/fx/ascii';
 import { Button } from '@/components/ui/button';
@@ -145,11 +146,14 @@ export function PlacesEntry({ item, allowLeave }: { item: Item; /** Asked before
     }
   };
 
-  const look = () => runLook(() => guarded(async () => {
-    const result = await api.extract(item.id, { method: 'auto' });
-    apply(result);
-    setReport({ id: item.id, ...describeExtraction(result) });
-  }));
+  const look = async () => {
+    if (!(await allowAi(archive, 'places'))) return;
+    await runLook(() => guarded(async () => {
+      const result = await api.extract(item.id, { method: 'auto' });
+      apply(result);
+      setReport({ id: item.id, ...describeExtraction(result) });
+    }));
+  };
 
   const find = () => runGeocode(() => guarded(async () => {
     try {
@@ -210,7 +214,7 @@ export function PlacesEntry({ item, allowLeave }: { item: Item; /** Asked before
     ? ''
     : data.available.ai
       ? aiHosted
-        ? 'Reads the page’s data and the pin lines and map links in the text first. If those find nothing, the caption and creator are sent to your server’s hosted AI service.'
+        ? 'Reads the page’s data and the pin lines and map links in the text first. If those find nothing, the caption and creator are sent to a hosted AI service.'
         : 'Reads the page’s data and the pin lines and map links in the text first. If those find nothing, your local AI model reads the text.'
       : 'Reads the page’s data and the pin lines and map links in the text. No AI is set up on this server, and nothing is guessed.';
 

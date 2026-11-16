@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { AccountDeletion } from '@/data/types';
-import { deletionWords } from './words';
+import { APPLE_SIGN_IN_NOTE, deletionWords } from './words';
 
 export interface DialogProps<K extends OpenDialog['kind']> {
   spec: Extract<OpenDialog, { kind: K }>;
@@ -290,6 +290,7 @@ export function DeleteAccountDialog({ spec, close }: DialogProps<'delete-account
       <Modal open={spec.open} onClose={leave} size="sm" title={words.title} opener={spec.opener} footer={<Button variant="primary" onClick={leave}>Done</Button>}>
         <p role="status" className="text-sm leading-relaxed text-ink-soft">{words.body}</p>
         <p className="mt-3 text-sm leading-relaxed text-ink-soft">Copies you exported or backed up are yours and are not affected.</p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">{APPLE_SIGN_IN_NOTE}</p>
       </Modal>
     );
   }
@@ -314,6 +315,7 @@ export function DeleteAccountDialog({ spec, close }: DialogProps<'delete-account
       <form id="delete-account-form" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-4">
         <FormError message={error} />
         <Field label="Type DELETE to confirm"><Input ref={input} autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="DELETE" value={typed} onChange={event => setTyped(event.target.value)} /></Field>
+        <p className="text-xs leading-relaxed text-ink-soft">{APPLE_SIGN_IN_NOTE}</p>
       </form>
     </Modal>
   );

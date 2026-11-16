@@ -5,6 +5,7 @@ import { countLabel, errorMessage, libraryScope } from '@web/utils.js';
 import { Activity, Check, CircleCheck, FolderPlus, Plus, Sparkles } from 'lucide-react';
 import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { openDialog, toast } from '@/app/ui-state';
+import { allowAi } from '@/features/ai-permission/gate';
 import { Field, FormError, Section } from '@/components/field';
 import { Modal } from '@/components/modal';
 import { Pick } from '@/components/pick';
@@ -60,12 +61,15 @@ export function OrganizeDialog({ spec, close }: DialogProps<'organize'>) {
     }
   };
 
-  const queue = () => runQueue(async () => {
-    const result = await archive.api.queueAi({ filters: currentScope() });
-    toast(`${result.queued} queued · ${result.unchanged} already current · ${result.matched} matched.${result.skipped ? ` ${result.skipped} left for later: ${skippedWhy(result.limit?.scope)}.` : ''}`);
-    close();
-    openDialog({ kind: 'activity', tab: 'ai' });
-  });
+  const queue = async () => {
+    if (!(await allowAi(archive, 'suggest'))) return;
+    await runQueue(async () => {
+      const result = await archive.api.queueAi({ filters: currentScope() });
+      toast(`${result.queued} queued · ${result.unchanged} already current · ${result.matched} matched.${result.skipped ? ` ${result.skipped} left for later: ${skippedWhy(result.limit?.scope)}.` : ''}`);
+      close();
+      openDialog({ kind: 'activity', tab: 'ai' });
+    });
+  };
 
   return (
     <Modal

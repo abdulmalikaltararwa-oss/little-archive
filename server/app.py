@@ -920,7 +920,8 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
             return {"ok": True, "created": run["created"], "updated": run["updated"], "skipped": run["skipped"], "coverage": coverage}
 
     def current_settings(store):
-        return {"remote_previews": store.meta("remote_previews") == "true", **store.enrichment.public_settings()}
+        return {"remote_previews": store.meta("remote_previews") == "true", "ai_sharing_allowed": store.meta("ai_sharing_allowed") == "true",
+                **store.enrichment.public_settings()}
 
     @app.get("/api/settings")
     def settings(auth=Depends(owner)):
@@ -930,7 +931,11 @@ def create_app(config: Config | None = None, *, identity=None, entitlements=None
     @app.patch("/api/settings")
     def edit_settings(data: SettingsPatch, auth=Depends(owner)):
         store = auth.store
-        store.set_meta("remote_previews", "true" if data.remote_previews else "false")
+        # Only what the request names is written: allowing AI must not switch remote previews off, nor the reverse.
+        for key in ("remote_previews", "ai_sharing_allowed"):
+            value = getattr(data, key)
+            if value is not None:
+                store.set_meta(key, "true" if value else "false")
         return current_settings(store)
 
     def ai_ready(store):

@@ -7,6 +7,7 @@ import { useArchive, useArchiveState, useBusy } from '@/app/archive-context';
 import { useTheme, type Theme } from '@/app/theme';
 import { confirm, openDialog, toast } from '@/app/ui-state';
 import { Field, FormError, Notice, Section } from '@/components/field';
+import { LegalLinks } from '@/components/legal-links';
 import { AsciiProgress } from '@/components/fx/ascii';
 import { Modal } from '@/components/modal';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { Account, ExtensionToken } from '@/data/types';
+import { allowAi, sharingApplies, withdrawAi } from '@/features/ai-permission/gate';
 import { copyText, downloadFile } from '../actions';
 import { whenText } from '../refusals/refusals';
 import type { DialogProps } from './basic';
@@ -158,6 +160,39 @@ function Allowances() {
   );
 }
 
+/**
+ * The answer to "may saved content be sent to an AI service?", where it can be changed. Shown only where the server
+ * keeps the answer and has a service that something would be sent to. Turning it on asks the same question, in the
+ * same dialog, as the first AI action does; turning it off makes the next AI action ask again.
+ */
+function AiSharing() {
+  const archive = useArchive();
+  const allowed = useArchiveState(state => state.settings.ai_sharing_allowed);
+  const id = useId();
+  const [busy, run] = useBusy();
+  if (typeof allowed !== 'boolean' || !sharingApplies(archive)) return null;
+  const change = async (next: boolean) => {
+    if (next) { await allowAi(archive, 'settings'); return; }
+    await run(async () => {
+      await withdrawAi(archive);
+      toast('Sending to the AI service is off. The next AI action will ask first.');
+    });
+  };
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4">
+        <label htmlFor={id} className="text-sm text-ink">Allow sending saves to the AI service</label>
+        <Switch id={id} checked={allowed} disabled={busy} onCheckedChange={next => void change(next)} />
+      </div>
+      <p>
+        {allowed
+          ? 'On: you allowed it. Turn it off and the next AI action asks again. Work that is already queued still runs, and what was already sent cannot be taken back.'
+          : 'Off. The first time an action would send something, you are asked first.'}
+      </p>
+    </>
+  );
+}
+
 function AccountSection() {
   const archive = useArchive();
   const account = archive.backend.account;
@@ -281,6 +316,7 @@ export function SettingsDialog({ spec, close }: DialogProps<'settings'>) {
                 : 'No model is configured. To enable suggestions, set your Ollama URL and model (or a hosted provider) in the server environment and restart the instance.'}
         </p>
         <p>A text model cannot watch a video. Imported captions, titles, transcripts of the audio, and image alternative text remain distinct evidence.</p>
+        {demo ? null : <AiSharing />}
         <div><Button size="sm" onClick={() => { close(); openDialog({ kind: 'activity', tab: 'ai' }); }}><Activity />View classification jobs</Button></div>
       </Section>
 
@@ -311,6 +347,7 @@ export function SettingsDialog({ spec, close }: DialogProps<'settings'>) {
 
       <Section title="Little Archive">
         <p>Development toward 1.0 · Open source under the MIT license. Check import activity for observed coverage.</p>
+        <LegalLinks />
         {demo ? (
           <div><Button variant="ghost" className="-ms-2" onClick={() => location.reload()}><RotateCcw />Reset demo</Button></div>
         ) : backend.account ? null : (

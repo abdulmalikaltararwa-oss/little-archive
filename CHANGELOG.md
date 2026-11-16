@@ -4,6 +4,12 @@
 
 The first v1 foundation batch passed all 12 acceptance jobs at commit `505b93b0e07ceeb801ca62e9bb5ae2bd3cac5a6d` in [run 43484644844](https://github.com/abdulmalikaltararwa-oss/little-archive/actions/runs/43484644844). Six installation/recovery reports are retained with their provenance. The broader [v1 plan](docs/v1-product-plan.md) includes additional product/project work as well as live Instagram/TikTok capture and final Mac operator acceptance. See [the verification record](docs/verification.md) for exact evidence, corrected initial failures, and boundaries.
 
+### Permission before anything is sent to an AI service
+
+- **One question, once.** Before the first action that would send saved content to a service outside the person's server (suggestions, a closer read, a recipe card, places, a question to the archive), the interface says what would be sent and to which service, as the server reports it, and offers "Allow" and "Not now". "Not now" cancels the action. A self-hosted server with only a local model is not asked.
+- **Kept with the library.** `ai_sharing_allowed` in `/api/settings` (per account on a hosted service); a switch in Settings withdraws it. `PATCH /api/settings` now writes only the fields it is given. The server does not refuse AI routes itself.
+- **Privacy policy and terms.** Linked from Settings, the unlock screen and the permission dialog, built from one site address (`ui/src/lib/site.ts`).
+
 ### The React interface is the interface (in development)
 
 The web interface is the React app in `ui/`, served by the server, the Docker image, the Mac app and the public demo. The old buildless interface in `web/` is no longer served; its files stay in the repository because the interface and the phone app import a few of them (`utils.js`, the demo data and store, the display font, `transport.js`).

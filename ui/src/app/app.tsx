@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
 import { useStore } from 'zustand';
 import { ConfirmHost } from '@/components/confirm';
+import { AiPermissionHost } from '@/features/ai-permission/host';
 import { Island } from '@/components/island';
 import type { Archive } from '@/data/archive';
 import { BootScreen, LoginScreen } from '@/features/auth/screens';
@@ -88,6 +89,7 @@ export function App({ archive }: { archive: Archive }) {
             <DialogHost />
           </>
         ) : null}
+        <AiPermissionHost />
         <ConfirmHost />
         <Island />
       </MotionConfig>

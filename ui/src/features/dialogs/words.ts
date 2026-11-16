@@ -9,3 +9,9 @@ export function deletionWords(result: AccountDeletion): { title: string; body: s
   }
   return { title: 'Your library is deleted', body: 'This service is not set up to remove sign-ins, so your sign-in is still registered with its sign-in provider. Ask whoever runs the service to remove it.' };
 }
+
+/**
+ * For people who signed in with Apple. The interface is not told how an account signed in, so this is said to
+ * everyone, as something they can do themselves; it claims nothing about what the service removes at Apple.
+ */
+export const APPLE_SIGN_IN_NOTE = 'If you signed in with Apple, you can also remove this app’s access on your iPhone, under Settings > Apple Account > Sign in with Apple.';

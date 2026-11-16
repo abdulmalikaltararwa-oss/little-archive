@@ -135,6 +135,8 @@ Use these before writing something new.
 | --- | --- |
 | A dialog, sheet or drawer | `components/modal.tsx` (`Modal`, `variant="panel"` for a drawer) |
 | A yes/no question | `confirm({...})` from `app/ui-state.ts` |
+| An action that may send saved content to an AI service | `await allowAi(archive, action)` from `features/ai-permission/gate.ts`, before the call; stop on false |
+| A link to the privacy policy or the terms | `components/legal-links.tsx` (addresses come from `lib/site.ts`) |
 | Feedback after an action | `toast(text)`, `toast(text, { error: true })`, `toast(text, { tone: 'saved' })` |
 | A button that runs something async | `useBusy()` from `app/archive-context.tsx` with `aria-busy` |
 | Buttons | `components/ui/button.tsx`: `primary`, `soft`, `outline` (default), `ghost`, `danger`, `danger-ghost` |
@@ -154,6 +156,8 @@ A new screen is a default export in `src/features/<name>/screen.tsx`, registered
 ## Honesty rules carried into the design
 
 - An AI suggestion always shows what it rests on (the evidence label) and changes nothing until accepted.
+- Before saved content is sent to a service outside the person's own server, the app asks once and says what is sent
+  and to whom, in the server's own terms (`features/ai-permission`). It never says "private" about a hosted account.
 - A transcript says it is automatic and says nothing about what is on screen.
 - An import says what the file establishes and what it does not.
 - A placeholder says it is a placeholder. A locked feature says it is locked and what stays free.
