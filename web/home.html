@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f8f3ea" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a211d" media="(prefers-color-scheme: dark)">
+    <meta name="description" content="Little Archive keeps your links to saved posts, videos, and web pages in one searchable library. Try the demo with sample saves.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+    <title>Little Archive | A little home for everything you saved</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./home.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header wrap">
+      <a class="brand" href="./" aria-label="Little Archive home">
+        <img src="./icon.svg" alt="" width="36" height="36">
+        <span>little archive</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#how-it-works">How it works</a>
+      </nav>
+    </header>
+
+    <main id="main" class="wrap" tabindex="-1">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">A little home for everything you <span>saved.</span></h1>
+          <p class="hero-lede">Keep links to Instagram posts, TikTok videos, and web pages in one searchable library. Add folders and notes to find them again.</p>
+          <a class="button primary" href="./demo.html">Try the demo <span aria-hidden="true">↗</span></a>
+          <p class="demo-note">Sample saves. No account needed.</p>
+        </div>
+
+        <figure class="preview">
+          <pre class="bookmark" aria-hidden="true"><span>  .-------.
+  |   <b>_</b>   |
+  | <b>_(_)_</b> |
+  |<b>(_)<i>@</i>(_)</b>|
+  |  <b>(_)</b>  |
+  |  / \  |
+  |/     \|</span></pre>
+          <div class="preview-frame">
+            <img src="./gallery-preview.jpg" width="1600" height="1100" fetchpriority="high" alt="The Little Archive demo gallery with collections on the left, a search bar, and cards for recipes, ideas, and other saved links.">
+          </div>
+          <figcaption>The Little Archive demo library</figcaption>
+        </figure>
+      </section>
+
+      <section class="how-it-works" id="how-it-works" aria-labelledby="how-title">
+        <h2 id="how-title">How it works</h2>
+        <ol class="steps">
+          <li class="step step-save">
+            <div class="step-heading">
+              <pre aria-hidden="true">   _
+ _(_)_
+(_)@(_)
+  (_)
+   |
+  \|/</pre>
+              <h3>Save it</h3>
+            </div>
+            <p>Paste a link to that lemon pasta video, or bring over your saves from a supported Instagram or TikTok export.</p>
+          </li>
+          <li class="step step-organize">
+            <div class="step-heading">
+              <pre aria-hidden="true"> .-------.
+ |_______|
+ |  [=]  |
+ '-------'</pre>
+              <h3>Make it yours</h3>
+            </div>
+            <p>Put it in a Recipes folder and leave yourself a note. “Double the lemon” is all you need to remember.</p>
+          </li>
+          <li class="step step-find">
+            <div class="step-heading">
+              <pre aria-hidden="true">  .---.
+ /     \
+|   ?   |
+ \     /
+  '---'\
+        \</pre>
+              <h3>Find it again</h3>
+            </div>
+            <p>When dinner rolls around, search for <kbd>lemon</kbd>. Little Archive looks in titles, notes, and any captions it has.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="open-source" aria-labelledby="source-title">
+        <div>
+          <h2 id="source-title">Run your own library</h2>
+          <p>Little Archive is open source. Follow the setup guide on GitHub to run it on your own computer or server.</p>
+        </div>
+        <a class="button secondary" href="https://github.com/abdulmalikaltararwa-oss/little-archive">View on GitHub <span aria-hidden="true">↗</span></a>
+      </section>
+
+      <div class="garden" aria-hidden="true">
+        <pre class="tulip"><span> _ _
+( V )
+ \_/</span>
+  |
+ \|/</pre>
+        <pre class="daisy"><span>   _
+ _(_)_
+(_)@(_)
+  (_)</span>
+   |
+  \|/</pre>
+        <pre class="lavender"><span>  i
+ i:i
+ :i:
+  :</span>
+  |
+ \|/</pre>
+        <pre class="sunflower"><span> .\|/.
+--(@)--
+ '/|\'</span>
+   |
+  \|/</pre>
+        <pre class="bell"><span>  o
+ oOo
+ oOo
+  o</span>
+  |
+ \|/</pre>
+      </div>
+    </main>
+
+    <footer class="site-footer wrap">
+      <a class="brand" href="./" aria-label="Little Archive home">
+        <img src="./icon.svg" alt="" width="28" height="28">
+        <span>little archive</span>
+      </a>
+      <nav aria-label="Help and policies">
+        <ul>
+          <li><a href="./privacy.html">Privacy</a></li>
+          <li><a href="./terms.html">Terms</a></li>
+          <li><a href="./support.html">Support</a></li>
+          <li><a href="./delete-account.html">Delete account</a></li>
+        </ul>
+      </nav>
+    </footer>
+  </body>
+</html>

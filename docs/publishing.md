@@ -1,6 +1,6 @@
-# Publishing the source and demo
+# Publishing the source, demo and website
 
-This guide covers source publication and synthetic demo deployment. The source repository and [synthetic Pages demo](https://abdulmalikaltararwa-oss.github.io/little-archive/) are public. A stable 1.0 release is held until the [release gates](release-gates.md) pass. Verify each new remote result before sharing its URL or reporting a successful CI run.
+This guide covers source publication, synthetic demo deployment and the static website build. The source repository and [synthetic Pages demo](https://abdulmalikaltararwa-oss.github.io/little-archive/) are public. A stable 1.0 release is held until the [release gates](release-gates.md) pass. Verify each new remote result before sharing its URL or reporting a successful CI run.
 
 The commands use `abdulmalikaltararwa-oss/little-archive` as the canonical repository. Its creation steps are already complete; use them only when creating a new repository or fork, and substitute your own owner as appropriate.
 
@@ -96,6 +96,36 @@ The build job has read access to repository contents and Pages metadata. The sep
 Follow GitHub's instructions for [configuring a Pages publishing source](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site) and [custom Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) if repository policies or permissions prevent deployment.
 
 GitHub Pages serves the public demo, not the Python application. Never change the Pages artifact path to the repository root, `web`, `server`, or a runtime data directory. Deploy a real, authenticated instance using the [self-hosting guide](self-hosting.md).
+
+## Build the official website for the VPS
+
+From the reviewed source revision, use Python 3.12 and Node 22 or newer. Set the site's public contact address in
+[`web/site.json`](../web/site.json). The website build requires that address so all four policy and support pages can be served.
+
+```sh
+(cd ui && npm ci && npm run build)
+python3 scripts/build_demo.py --website
+python3 -m http.server 8090 --bind 127.0.0.1 --directory work/dist-website
+```
+
+On the preview server, confirm these routes each return HTTP 200 and show the expected content.
+
+| Route | Expected content |
+| --- | --- |
+| `/` | Little Archive explainer and gallery preview. The demo button opens `/demo.html`. |
+| `/demo.html` | The interactive demo with synthetic saves. Search for a sample, then reload to reset any edits. |
+| `/privacy.html`, `/terms.html`, `/support.html`, `/delete-account.html` | The contact and policy pages with the configured address |
+| `/home.css`, `/gallery-preview.jpg`, `/icon.svg`, `/fonts/fraunces-soft.woff2` | The explainer's stylesheet, synthetic gallery preview, icon and font |
+
+For an approved VPS release, stage only the generated `work/dist-website/` directory in a fresh static release
+directory. Serve that directory at [littlearchive.me](https://littlearchive.me/) with `index.html` as its directory
+index. Keep the HTTPS and www redirect configuration and verify the same routes on the public domain after the switch.
+The artifact comes from the fixed home and policy inputs plus the same synthetic demo assets. It needs no API proxy,
+app credentials or library data.
+
+The Pages workflow still calls `python3 scripts/build_demo.py` and uploads `dist-demo`. The existing GitHub Pages
+project URL in the [README](../README.md) opens the demo at its root. Keep VPS website builds in the separate output
+directory.
 
 ## Prepare the release announcement
 

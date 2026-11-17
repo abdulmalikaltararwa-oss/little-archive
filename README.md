@@ -4,6 +4,8 @@
 
 **A little home for everything you saved.**
 
+[Interactive demo on GitHub Pages](https://abdulmalikaltararwa-oss.github.io/little-archive/) · [Public website](https://littlearchive.me/)
+
 [![A saved post gets lost in a phone's saved grid, then turns up again in Little Archive](docs/assets/little-archive-film.gif)](docs/assets/little-archive-film.mp4)
 
 *A 22-second look: [watch it with sound](docs/assets/little-archive-film.mp4), or [try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/). The phone app and every post in the film are made up; Little Archive is not affiliated with Instagram or TikTok.*
@@ -14,7 +16,7 @@ Run one private instance on your Mac, Linux machine, or server. There is no proj
 
 **Status:** Development toward 1.0; no stable release published · **License:** MIT · **Architecture:** Python + SQLite + a React web interface built with Vite
 
-**[Try the interactive demo](https://abdulmalikaltararwa-oss.github.io/little-archive/)** · [Mac setup and live acceptance](docs/mac-acceptance.md) · [Install your own instance](#quick-start-with-docker) · [Setup for local assistants](docs/operator-setup.md) · [Verification](docs/verification.md)
+[Mac setup and live acceptance](docs/mac-acceptance.md) · [Install your own instance](#quick-start-with-docker) · [Setup for local assistants](docs/operator-setup.md) · [Verification](docs/verification.md)
 
 The public demo uses synthetic content and temporary page memory. Your private library runs in your own instance.
 

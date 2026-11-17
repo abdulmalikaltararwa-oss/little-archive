@@ -293,6 +293,17 @@ class DemoBoundaryTests(unittest.TestCase):
     def set_contact(self, site, address):
         (site / "site.json").write_text(json.dumps({"contact_email": address}), encoding="utf-8")
 
+    def make_home(self, site):
+        (site / "home.html").write_text(
+            """<!doctype html><html><head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Synthetic home</title><link rel="icon" href="./icon.svg"><link rel="stylesheet" href="./home.css">
+</head><body><main id="main"><h1>Little Archive</h1><img src="./gallery-preview.jpg" alt="Invented saves">
+<a href="#main">Main</a><a href="./demo.html">Interactive demo</a><a href="./privacy.html">Privacy</a></main></body></html>""",
+            encoding="utf-8",
+        )
+        (site / "home.css").write_text("@font-face { src: url('./fonts/fraunces-soft.woff2'); }", encoding="utf-8")
+
     def workflow_check(self, folder, contact=""):
         """Run the publishing workflow's own check of the artifact, as written in the workflow, on `folder`, beside a
         web/site.json that holds `contact` (the workflow reads the tracked one from the repository's root)."""
@@ -314,6 +325,120 @@ class DemoBoundaryTests(unittest.TestCase):
         self.assertEqual((self.out / "index.html").read_bytes(), (self.dist / "demo.html").read_bytes())
         self.assertEqual((self.out / "LICENSE").read_bytes(), (ROOT / "LICENSE").read_bytes())
         self.assertFalse(any(path.is_symlink() for path in self.out.rglob("*")))
+
+    def test_website_adds_the_fixed_home_and_keeps_the_demo_and_policy_bytes(self):
+        self.make_dist()
+        site = self.make_site()
+        self.make_home(site)
+        (site / "private-notes.html").write_text("Synthetic file outside the allowlist.")
+        default = self.root / "dist-demo"
+        flags = ["--dist", str(self.dist), "--site", str(site)] + WITH_CONTACT
+        self.build.main(flags + ["--output", str(default)])
+        self.build.main(flags + ["--website", "--output", str(self.out)])
+
+        shared = {str(path.relative_to(default)) for path in default.rglob("*") if path.is_file()}
+        shared -= {"index.html", ".little-archive-demo-build"}
+        self.assertEqual(self.published(), shared | {
+            "index.html", "demo.html", "home.css", "gallery-preview.jpg", ".little-archive-website-build",
+        })
+        for name in sorted(shared):
+            self.assertEqual((self.out / name).read_bytes(), (default / name).read_bytes(), name)
+        self.assertEqual((self.out / "demo.html").read_bytes(), (default / "index.html").read_bytes())
+        self.assertEqual((self.out / "index.html").read_bytes(), (site / "home.html").read_bytes())
+        self.assertEqual((self.out / "home.css").read_bytes(), (site / "home.css").read_bytes())
+        self.assertEqual((self.out / "gallery-preview.jpg").read_bytes(), (ROOT / "docs/assets/gallery-current.jpg").read_bytes())
+
+        for profile, destination in ((["--website"], default), ([], self.out)):
+            with self.subTest(destination=destination), self.assertRaises(SystemExit):
+                self.build.main(flags + ["--output", str(destination)] + profile)
+        self.assertEqual((self.out / "index.html").read_bytes(), (site / "home.html").read_bytes())
+        self.assertEqual((default / "index.html").read_bytes(), (self.dist / "demo.html").read_bytes())
+
+    def test_website_rejects_unpublished_dependencies_and_broken_routes(self):
+        self.make_dist()
+        site = self.make_site()
+        flags = ["--website", "--dist", str(self.dist), "--site", str(site), "--output", str(self.out)] + WITH_CONTACT
+        cases = (
+            ("home.html", "./gallery-preview.jpg", "https://cdn.example.com/gallery.jpg"),
+            ("home.html", "alt=\"Invented saves\"", "srcset=\"./not-published.jpg 2x\" alt=\"Invented saves\""),
+            ("home.html", "./home.css", "./extra.css"),
+            ("home.html", "./demo.html", "./missing.html"),
+            ("home.html", "#main", "#missing"),
+            ("home.html", "default-src 'none'", "default-src 'self'"),
+            ("home.html", "</head>", "<script src=\"./theme-init.js\"></script></head>"),
+            ("home.html", "</head>", "<meta http-equiv=\"refresh\" content=\"0;url=/missing\"></head>"),
+            ("home.html", "</body>", "<p>secrets.env</p></body>"),
+            ("home.css", "./fonts/fraunces-soft.woff2", "./fonts/other.woff2"),
+            ("home.css", "@font-face", "@IMPORT './extra.css'; @font-face"),
+            ("home.css", "@font-face", 'body { background: image-set("./missing.jpg" 1x) } @font-face'),
+        )
+        for name, old, new in cases:
+            with self.subTest(name=name, new=new):
+                self.make_home(site)
+                path = site / name
+                text = path.read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                path.write_text(text.replace(old, new, 1), encoding="utf-8")
+                with self.assertRaises(SystemExit) as stopped:
+                    self.build.main(flags)
+                self.assertIn(name, str(stopped.exception))
+                self.assertFalse(self.out.exists())
+
+    def test_website_refuses_weaker_demo_or_policy_pages_before_replacing_the_artifact(self):
+        self.make_dist()
+        site = self.make_site()
+        self.make_home(site)
+        flags = ["--website", "--dist", str(self.dist), "--site", str(site), "--output", str(self.out)] + WITH_CONTACT
+        self.build.main(flags)
+        built_demo = (self.out / "demo.html").read_bytes()
+        built_policy = (self.out / "privacy.html").read_bytes()
+        for path, old, new in (
+            (self.dist / "demo.html", "connect-src 'none'", "connect-src 'self'"),
+            (site / "privacy.html", "default-src 'none'", "default-src 'self'"),
+            (site / "privacy.html", "</head>", "<script>void 0</script></head>"),
+        ):
+            with self.subTest(path=path, new=new):
+                source = path.read_text(encoding="utf-8")
+                self.assertIn(old, source)
+                path.write_text(source.replace(old, new, 1), encoding="utf-8")
+                with self.assertRaisesRegex(SystemExit, path.name):
+                    self.build.main(flags)
+                path.write_text(source, encoding="utf-8")
+                self.assertEqual((self.out / "demo.html").read_bytes(), built_demo)
+                self.assertEqual((self.out / "privacy.html").read_bytes(), built_policy)
+
+    def test_website_requires_a_contact_and_regular_home_inputs(self):
+        self.make_dist()
+        site = self.make_site()
+        self.make_home(site)
+        flags = ["--website", "--dist", str(self.dist), "--site", str(site), "--output", str(self.out)]
+        self.set_contact(site, "")
+        with self.assertRaisesRegex(SystemExit, "contact_email"):
+            self.build.main(flags)
+        flags += WITH_CONTACT
+        for name in ("home.html", "home.css"):
+            with self.subTest(name=name):
+                path = site / name
+                self.make_home(site)
+                elsewhere = self.root / name
+                path.rename(elsewhere)
+                with self.assertRaisesRegex(SystemExit, name):
+                    self.build.main(flags)
+                path.symlink_to(elsewhere)
+                with self.assertRaisesRegex(SystemExit, name):
+                    self.build.main(flags)
+                path.unlink()
+        self.make_home(site)
+        preview = self.root / "docs/assets/gallery-current.jpg"
+        preview.parent.mkdir(parents=True)
+        shutil.copy2(ROOT / "LICENSE", self.root / "LICENSE")
+        with mock.patch.object(self.build, "ROOT", self.root):
+            with self.assertRaisesRegex(SystemExit, "gallery-current.jpg"):
+                self.build.main(flags)
+            preview.symlink_to(ROOT / "docs/assets/gallery-current.jpg")
+            with self.assertRaisesRegex(SystemExit, "gallery-current.jpg"):
+                self.build.main(flags)
+        self.assertFalse(self.out.exists())
 
     def test_the_tracked_contact_address_is_unset_or_real_and_the_pages_hold_only_the_token(self):
         settings = json.loads((ROOT / "web" / "site.json").read_text(encoding="utf-8"))
@@ -579,6 +704,16 @@ class DemoBoundaryTests(unittest.TestCase):
                 self.assertRegex(reference, r"^\./[a-z0-9.-]+$", f"{name}: {reference} is relative, so it works under any site path")
                 self.assertIn(reference[2:], names, f"{name}: {reference}")
         self.assertIn("fonts/fraunces-soft.woff2", (self.out / "pages.css").read_text(encoding="utf-8"))
+
+    def test_the_real_website_build_links_to_its_unchanged_demo(self):
+        build = webui.find_build()
+        self.assertIsNotNone(build, webui.MISSING)
+        self.build.main(["--website", "--dist", str(build), "--output", str(self.out)] + WITH_CONTACT)
+        home = (self.out / "index.html").read_text(encoding="utf-8")
+        self.assertIn('href="./demo.html"', home)
+        self.assertEqual((self.out / "demo.html").read_bytes(), (build / "demo.html").read_bytes())
+        self.assertLessEqual(SITE_FILES, self.published())
+        self.assertFalse({"home.html", "site.json", "manifest.webmanifest"} & self.published())
 
     def test_the_publishing_workflow_accepts_the_real_demo_and_refuses_anything_added_to_it(self):
         build = webui.find_build()
