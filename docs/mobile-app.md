@@ -58,6 +58,10 @@ What the interface does differently on the native backend:
 **Styling.** The interface's own stylesheet is loaded first, then `src/native.css`, which uses its design tokens (`--paper`, `--ink`, `--sage`, … in both themes) for the screens that run before the interface (choosing a server, signing in) so nothing changes style at sign-in, and supplies the safe-area values the interface reads. It also gives the interface's top bar room for the notch: the bar is `h-16` with `padding-top: var(--safe-top)`, which leaves about 5px for its content on a phone with a dynamic island. The right fix is one line in `ui/src/features/shell/shell.tsx` (`h-[calc(4rem+var(--safe-top))]`); `native.css` compensates until then.
 
 
+**Drafts in an open save.** The full record can arrive after a save is already open. It refreshes the details
+while keeping any changes already typed in the form. When leaving a draft, Keep editing returns to that save at
+the same address with the draft intact. Discard changes closes it without saving the draft.
+
 **Android Library paper.** The Android WebView keeps the dotted page background on a separate composited layer.
 On WebView 133, clearing Library search could leave a white gap in the native frame when the flower hero returned.
 The dock and dialogs stay fixed to the viewport, and the cover transition and search navigation follow their existing paths.

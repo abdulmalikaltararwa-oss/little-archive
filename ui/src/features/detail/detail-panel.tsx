@@ -75,14 +75,15 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
   const locals = useMemo(() => allCollections.filter(collection => collection.kind === 'local'), [allCollections]);
   const [draft, setDraft] = useState<Draft>(() => draftOf(item));
   const [error, setError] = useState('');
-  // The form starts again from the record when the panel says it has a new one (the full record arriving, a save's
-  // answer). The panel stays mounted meanwhile: its recipe and places sections are not drawn again from nothing, which
-  // would shrink and regrow the page under the reader's scroll position, and the control that holds focus is not replaced.
+  // A full record can be queued while the form is clean and rendered after the next keystroke. Check the draft
+  // here, when the new version actually renders. Explicit saves reset the form in accept().
   const [startedFrom, setStartedFrom] = useState(version);
   if (startedFrom !== version) {
     setStartedFrom(version);
-    setDraft(draftOf(item));
-    setError('');
+    if (!dirty) {
+      setDraft(draftOf(item));
+      setError('');
+    }
   }
   const [saving, setSaving] = useState(false);
   const [favoriteBusy, runFavorite] = useBusy();
@@ -433,9 +434,8 @@ export function DetailPanel() {
         // Where the keyboard is, if it is already inside the form. The form starts again from the full record, and a
         // control that held focus may not survive that, so focus is put back once the new content is in the page.
         const held = panel.current?.contains(document.activeElement) ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-detail-focus]')?.dataset.detailFocus : undefined;
-        // Edits typed in the instant before the full record arrived are kept: the form is only restarted when it is clean.
         if (held && !dirtyRef.current) wantFocus.current = held;
-        setLoaded(current => { const base = current.id === id ? current.version : 0; return { id, item, error: '', version: dirtyRef.current ? base : base + 1 }; });
+        setLoaded(current => ({ id, item, error: '', version: (current.id === id ? current.version : 0) + 1 }));
       },
       error => { if (!stale) setLoaded(current => ({ id, item: current.id === id ? current.item : null, error: errorMessage(error), version: current.id === id ? current.version : 0 })); },
     );
