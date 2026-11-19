@@ -201,7 +201,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
         <span className="flex min-w-0 items-center gap-2 text-sm text-ink-soft">
           <PlatformIcon platform={item.platform} className="size-4 shrink-0" />
           <span dir="auto" className="truncate">{PLATFORM_NAMES[item.platform] || 'Web'}{item.creator ? ` · ${item.creator}` : ''}</span>
@@ -216,21 +216,21 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
           aria-label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
           title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
           onClick={() => void toggleFavorite()}
-          className={cn('hit-44 grid size-9 shrink-0 place-items-center rounded-full bg-card-2 text-ink-soft transition-transform duration-200 ease-spring hov:scale-110 active:scale-90', item.favorite && 'animate-pop bg-petal-pale text-petal-ink')}
+          className={cn('hit-44 grid size-9 shrink-0 place-items-center rounded-full text-ink-soft transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.97]', item.favorite ? 'bg-petal-pale text-petal-ink' : 'hov:bg-card-2 hov:text-ink')}
         >
           <Heart className={cn('size-[1.1rem]', item.favorite && 'fill-current')} aria-hidden="true" />
         </button>
       </div>
       <h2 dir="auto" className="display text-[1.75rem] leading-tight text-ink">{item.title || hostLabel(item.url)}</h2>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-4">
         {demo ? (
-          <span className="inline-flex h-8.5 items-center rounded-full border border-line px-3 text-xs text-ink-soft">Illustrative source link</span>
+          <span className="text-xs text-ink-soft">Illustrative source link</span>
         ) : originalURL ? (
           <Button asChild size="sm" className="flex-1">
             <a href={originalURL} target="_blank" rel="noopener noreferrer">Open original<ExternalLink /></a>
           </Button>
         ) : null}
-        <Button size="sm" className="flex-1" onClick={() => void copyText(item.url)}><Copy />Copy link</Button>
+        <Button variant="ghost" size="sm" className="flex-1 text-ink-soft hov:text-ink" onClick={() => void copyText(item.url)}><Copy />Copy link</Button>
       </div>
 
       {sourceCollections.length ? (
@@ -277,7 +277,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
       <RecipeSection item={item} state={recipe} pinned />
       <PlacesEntry item={item} allowLeave={allowLeave} />
 
-      <form id={formId} onSubmit={event => void submit(event)} className="mt-5 flex flex-col gap-4 border-t border-line pt-5">
+      <form id={formId} onSubmit={event => void submit(event)} className="mt-4 flex flex-col gap-4 border-t border-line pt-4 sm:mt-5 sm:pt-5">
         <FormError message={error} />
         <Field label="Title"><Input value={draft.title} maxLength={500} dir="auto" data-detail-focus="title" onChange={event => edit('title', event.target.value)} /></Field>
         <Field label="Summary"><Textarea value={draft.summary} maxLength={4000} rows={3} dir="auto" data-detail-focus="summary" onChange={event => edit('summary', event.target.value)} /></Field>
@@ -480,7 +480,7 @@ export function DetailPanel() {
         <>
           <span role="status" className={dirty ? 'label-mono me-auto' : 'sr-only'}>{dirty ? '· unsaved changes' : ''}</span>
           {/* One strong button at a time: Start cooking while the form is clean, Save once there is something to save. */}
-          <Button type="submit" form={formId} variant={cook && !dirty ? 'outline' : 'primary'} data-detail-focus="save" className={cook ? undefined : 'min-w-40 max-sm:flex-1'}><Check />Save changes</Button>
+          <Button type="submit" form={formId} variant={cook && !dirty ? 'outline' : 'primary'} data-detail-focus="save" className={cn('shadow-none hov:translate-y-0', !cook && 'min-w-40 max-sm:flex-1')}><Check />Save changes</Button>
           <CookBar item={item} state={recipe} quiet={dirty} />
         </>
       ) : undefined}
@@ -488,10 +488,10 @@ export function DetailPanel() {
       <div ref={panel}>
         {item ? (
           <>
-            <div className="aspect-[1.45] w-full overflow-hidden bg-card-2" style={{ viewTransitionName: id ? COVER_TRANSITION : undefined }}>
+            <div className="aspect-[1.7] w-full overflow-hidden bg-card-2 max-sm:min-h-56 sm:aspect-[1.45]" style={{ viewTransitionName: id ? COVER_TRANSITION : undefined }}>
               <Cover item={item} remotePreviews={remotePreviews} detail />
             </div>
-            <div className="px-5 pt-5 pb-8 sm:px-7">
+            <div className="px-5 pt-4 pb-8 sm:px-7 sm:pt-5">
               {error ? <div className="mb-4"><FormError message={error} /></div> : null}
               <Content key={item.id} item={item} version={version} setItem={setItem} dirty={dirty} setDirty={setDirty} formId={formId} panel={panel} recipe={recipe} />
             </div>

@@ -63,12 +63,12 @@ function SearchBox() {
         type="search"
         value={text}
         onChange={event => change(event.target.value)}
-        placeholder="Find something you saved…"
+        placeholder="Search saves"
         aria-label="Search titles, captions, tags, and notes"
         autoComplete="off"
         spellCheck={false}
         dir="auto"
-        className="h-11 w-full rounded-full border border-line-strong bg-card ps-11 pe-14 text-base text-ink shadow-xs outline-none transition-[border-color,box-shadow] placeholder:text-ink-soft/80 focus-visible:border-sage focus-visible:ring-4 focus-visible:ring-sage/15 dark:bg-card-2 [&::-webkit-search-cancel-button]:appearance-none"
+        className="h-11 w-full rounded-full border border-line-strong bg-card ps-11 pe-14 text-base text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-soft/80 focus-visible:border-sage focus-visible:ring-4 focus-visible:ring-sage/15 dark:bg-card-2 [&::-webkit-search-cancel-button]:appearance-none"
       />
       {text ? (
         <button type="button" aria-label="Clear search" onClick={() => change('')} className="hit-44 absolute end-2.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-ink-soft hov:bg-card-2 hov:text-ink">
@@ -97,7 +97,7 @@ function TopicFilter() {
           role="combobox"
           aria-expanded={open}
           aria-label="Filter by topic"
-          className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-line-strong bg-card px-4 text-sm text-ink shadow-xs outline-none transition-[border-color,box-shadow] focus-visible:border-sage focus-visible:ring-4 focus-visible:ring-sage/15 sm:w-44 sm:flex-none dark:bg-card-2"
+          className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-line-strong bg-card px-4 text-sm text-ink outline-none transition-[border-color,box-shadow] focus-visible:border-sage focus-visible:ring-4 focus-visible:ring-sage/15 sm:w-44 sm:flex-none dark:bg-card-2"
         >
           <span className="flex min-w-0 items-center gap-2">
             <TagIcon className="size-4 shrink-0 text-ink-soft" aria-hidden="true" />
@@ -258,13 +258,13 @@ function LibraryWall({ demo }: { demo: boolean }) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 id={VIEW_TITLE_ID} tabIndex={-1} dir="auto" className="display text-3xl text-ink outline-none focus-visible:underline focus-visible:decoration-sage focus-visible:decoration-2 focus-visible:underline-offset-8 sm:text-[2.1rem]">{title}</h1>
-          <span role="status" data-testid="save-count" className="num inline-flex items-center gap-1.5 rounded-full bg-card-2 px-2.5 py-0.5 text-xs text-ink-soft">
+          <span role="status" data-testid="save-count" className="num inline-flex items-center gap-1.5 text-xs text-ink-soft">
             {list === 'loading' ? <AsciiSpinner /> : null}
             {countText}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button variant="soft" size="sm" aria-label="Organize library" onClick={() => openDialog({ kind: 'organize' })}><Sparkles />Organize</Button>
+          <Button variant="outline" size="sm" aria-label="Organize library" onClick={() => openDialog({ kind: 'organize' })}><Sparkles />Organize</Button>
           <Button variant="ghost" size="sm" aria-pressed={selecting} onClick={() => archive.setSelecting(!selecting)}>
             <CircleCheck />
             {selecting ? 'Cancel selection' : 'Select'}
