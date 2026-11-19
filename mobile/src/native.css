@@ -17,6 +17,9 @@
   --safe-end: env(safe-area-inset-right, var(--safe-area-inset-right, 0px));
 }
 body { overscroll-behavior-y: none; -webkit-touch-callout: none; }
+/* Android WebView can leave a gap in the paper when clearing search brings the Library hero back.
+   Give the body a composited layer without making it the positioning container for fixed overlays. */
+:root[data-native-platform='android'] body { will-change: opacity; }
 /* The interface's top bar is h-16 with padding-top: var(--safe-top), so with a notch or a status bar the room left for the brand
    and the Import button is 64px minus the inset (about 5px on a phone with a dynamic island), and the page content runs over
    them. The bar must be as tall as its content plus the inset. The proper fix is in ui/src/features/shell/shell.tsx

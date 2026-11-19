@@ -48,6 +48,7 @@ async function main() {
   let config;
   try { config = validateConfig(rawConfig); } catch (error) { return ui.stop('This build is not set up', error.message); }
   const platform = Capacitor.getPlatform();
+  document.documentElement.dataset.nativePlatform = platform;
   const http = createNativeHttp(CapacitorHttp);
   const backend = secureBackend(SecureStorage, KeychainAccess);
   const store = createStore(backend);
