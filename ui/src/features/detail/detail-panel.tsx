@@ -280,10 +280,10 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
       <form id={formId} onSubmit={event => void submit(event)} className="mt-5 flex flex-col gap-4 border-t border-line pt-5">
         <FormError message={error} />
         <Field label="Title"><Input value={draft.title} maxLength={500} dir="auto" data-detail-focus="title" onChange={event => edit('title', event.target.value)} /></Field>
-        <Field label="Summary"><Textarea value={draft.summary} maxLength={4000} rows={3} dir="auto" placeholder="A short reminder of what this is about…" data-detail-focus="summary" onChange={event => edit('summary', event.target.value)} /></Field>
-        <Field label="Your notes"><Textarea value={draft.notes} maxLength={20000} dir="auto" placeholder="Why did you save this? What would you like to try?" data-detail-focus="notes" onChange={event => edit('notes', event.target.value)} /></Field>
-        <Field label="Topics" help={demo ? 'Separate topics with commas. Demo edits reset on reload.' : 'Separate topics with commas. Your edits are kept on refresh.'}>
-          <Input value={draft.tags} dir="auto" placeholder="Separate topics with commas" data-detail-focus="tags" onChange={event => edit('tags', event.target.value)} />
+        <Field label="Summary"><Textarea value={draft.summary} maxLength={4000} rows={3} dir="auto" data-detail-focus="summary" onChange={event => edit('summary', event.target.value)} /></Field>
+        <Field label="Your notes"><Textarea value={draft.notes} maxLength={20000} dir="auto" placeholder="Why did you save this?" data-detail-focus="notes" onChange={event => edit('notes', event.target.value)} /></Field>
+        <Field label="Topics" help={demo ? 'Separate topics with commas. Demo edits reset on reload.' : 'Separate topics with commas.'}>
+          <Input value={draft.tags} dir="auto" data-detail-focus="tags" onChange={event => edit('tags', event.target.value)} />
         </Field>
         <Field label="Progress"><Pick<Status> value={draft.status} options={STATUS_OPTIONS} focusKey="status" onChange={value => edit('status', value)} /></Field>
         {/* Its label reaches into the panel's padding, so the small box has a finger-sized area on every side. */}
@@ -303,7 +303,7 @@ function Content({ item, version, setItem, dirty, setDirty, formId, panel, recip
       </form>
 
       <section className="mt-6 border-t border-line pt-5">
-        <SectionTitle>a few useful extras</SectionTitle>
+        <SectionTitle>Preview and AI tools</SectionTitle>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" data-detail-focus="preview" disabled={demo || toolBusy} title={demo ? 'Local image uploads are available in your own instance.' : undefined} onClick={() => fileInput.current?.click()}>
             <ImagePlus />

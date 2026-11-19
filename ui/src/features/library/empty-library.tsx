@@ -5,7 +5,6 @@ import { Ellipsis, Plus, Settings, Share, Sparkles, Upload } from 'lucide-react'
 import { useArchive, useBusy } from '@/app/archive-context';
 import { openDialog, toast } from '@/app/ui-state';
 import { Mark } from '@/components/brand';
-import { Whisper } from '@/components/field';
 import { Button } from '@/components/ui/button';
 import { emptyLibraryWords } from './words';
 
@@ -42,13 +41,12 @@ export function EmptyLibrary() {
   const addDemo = () => runDemo(async () => {
     const result = await archive.api.addDemo();
     await archive.refreshLibrary();
-    toast(result.created ? `${result.created} synthetic demo saves added. Enjoy exploring.` : 'Your demo saves are already here.');
+    toast(result.created ? `${result.created} synthetic demo saves added.` : 'Your demo saves are already here.');
   });
 
   return (
     <section aria-labelledby="empty-library-title" data-testid="empty-library" className="mx-auto max-w-xl">
-      <Whisper>your library · empty for now</Whisper>
-      <h2 id="empty-library-title" className="display mt-1.5 text-2xl text-balance text-ink sm:text-3xl">{words.title}</h2>
+      <h2 id="empty-library-title" className="display text-2xl text-balance text-ink sm:text-3xl">{words.title}</h2>
       <ol className="mt-5 flex flex-col gap-2.5">
         {words.steps.map((step, index) => (
           <li key={step.title} className="flex gap-3 rounded-lg border border-line bg-card p-3.5">

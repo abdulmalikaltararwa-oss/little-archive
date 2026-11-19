@@ -282,7 +282,7 @@ function LibraryWall({ demo }: { demo: boolean }) {
       </div>
       <div className="mb-6"><SourceTabs /></div>
       {/* Only a finger swipes; with a mouse or a keyboard the same actions are in each row's menu. */}
-      {layout === 'list' && list === 'ready' && count > 0 ? <p className="-mt-2 mb-3 hidden text-xs text-ink-soft coarse:block">Swipe a row, or use the ··· button.</p> : null}
+      {layout === 'list' && list === 'ready' && count > 0 ? <p className="-mt-2 mb-3 hidden text-xs text-ink-soft coarse:block">Swipe a row or open its menu.</p> : null}
 
       {list === 'error' ? (
         <StateCard art="cloud" title="A little interruption." actions={<Button variant="primary" aria-busy={retrying || undefined} onClick={() => void runRetry(() => archive.refreshLibrary())}><ArrowRight />Try again</Button>}>
@@ -293,7 +293,7 @@ function LibraryWall({ demo }: { demo: boolean }) {
           <EmptyLibrary />
         ) : (
           <StateCard art="search" title="Nothing here just yet." actions={<Button variant="primary" onClick={() => archive.goView('all')}><X />Clear filters</Button>}>
-            Try a different search or filter. Your next rediscovery might be one collection over.
+            Try a different search or filter.
           </StateCard>
         )
       ) : (

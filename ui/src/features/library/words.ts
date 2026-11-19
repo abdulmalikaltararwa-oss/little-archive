@@ -7,10 +7,10 @@ import type { Item, Sort } from '@/data/types';
  * not their server, and it is not called private. The demo has no server and no account at all.
  */
 export function keptLine(kind: BackendKind, mode: ServerMode): string {
-  if (kind === 'demo') return 'A demo collection, to look around in.';
+  if (kind === 'demo') return 'Demo library.';
   return mode === 'hosted'
-    ? 'Your collection. Your account. A little more peace of mind.'
-    : 'Your collection. Your server. A little more peace of mind.';
+    ? 'Saved in your account.'
+    : 'Saved on your server.';
 }
 
 /**
